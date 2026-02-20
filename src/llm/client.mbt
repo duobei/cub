@@ -1,5 +1,48 @@
 /// LLM client for OpenAI-compatible chat API.
 
+/// Strip <think>...</think> reasoning blocks from model output.
+fn strip_think_tags(text : String) -> String {
+  let mut result = text
+  for {
+    let start = find_substring(result, "<think>")
+    if start < 0 {
+      break
+    }
+    let end = find_substring(result, "</think>")
+    if end < 0 {
+      // Unclosed <think> — strip from start to end
+      result = try { result[:start].to_string() } catch { _ => "" }
+      break
+    }
+    let before = try { result[:start].to_string() } catch { _ => "" }
+    let after = try { result[end + 8:].to_string() } catch { _ => "" }
+    result = before + after
+  }
+  result.trim().to_string()
+}
+
+/// Find substring position, returns -1 if not found.
+fn find_substring(haystack : String, needle : String) -> Int {
+  let hlen = haystack.length()
+  let nlen = needle.length()
+  if nlen > hlen {
+    return -1
+  }
+  for i = 0; i <= hlen - nlen; i = i + 1 {
+    let mut matched = true
+    for j = 0; j < nlen; j = j + 1 {
+      if haystack[i + j] != needle[j] {
+        matched = false
+        break
+      }
+    }
+    if matched {
+      return i
+    }
+  }
+  -1
+}
+
 /// Known provider base URLs.
 fn provider_base_url(provider : String) -> String {
   match provider {
@@ -144,9 +187,9 @@ fn parse_chat_response(response_json : Json) -> ChatResponse {
       }
     _ => Json::object(Map::new())
   }
-  // Extract text content
+  // Extract text content (strip <think> reasoning blocks)
   let text = match message {
-    { "content": String(c), .. } => c
+    { "content": String(c), .. } => strip_think_tags(c)
     _ => ""
   }
   // Extract tool calls
