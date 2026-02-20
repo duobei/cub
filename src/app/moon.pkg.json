@@ -6,6 +6,8 @@
     { "path": "duobei/cub/tools", "alias": "tools" },
     { "path": "duobei/cub/core", "alias": "core" },
     { "path": "duobei/cub/skills", "alias": "skills" },
-    "moonbitlang/core/json"
-  ]
+    "moonbitlang/core/json",
+    "moonbitlang/core/encoding/utf8"
+  ],
+  "native-stub": ["file_ffi.c"]
 }

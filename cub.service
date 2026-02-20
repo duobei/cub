@@ -1,0 +1,16 @@
+[Unit]
+Description=Cub - tape-first coding agent (Discord channel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/cub
+EnvironmentFile=/home/ubuntu/cub/.env
+ExecStart=/home/ubuntu/cub/_build/native/debug/build/main/main.exe message
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

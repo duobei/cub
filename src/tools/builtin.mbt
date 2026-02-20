@@ -1,4 +1,4 @@
-/// Built-in tools: bash, fs.read, fs.write, done.
+/// Built-in tools: bash, fs.read, fs.write, fs.edit, done.
 
 /// Default subprocess timeout in seconds.
 let subprocess_timeout_seconds : Int = 30
@@ -11,6 +11,7 @@ pub fn register_builtin_tools(
   register_bash(registry, ctx)
   register_fs_read(registry, ctx)
   register_fs_write(registry, ctx)
+  register_fs_edit(registry, ctx)
   register_done(registry, ctx)
 }
 
@@ -246,6 +247,109 @@ fn get_parent_dir(path : String) -> String {
       _ => ""
     }
   }
+}
+
+/// Register fs.edit tool.
+fn register_fs_edit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["path"] = string_prop("File path (relative to workspace or absolute)")
+  props["old_string"] = string_prop("The exact text to find and replace")
+  props["new_string"] = string_prop("The replacement text")
+  let bool_prop : Map[String, Json] = Map::new()
+  bool_prop["type"] = "boolean".to_json()
+  bool_prop["description"] = "Replace all occurrences (default: false)".to_json()
+  bool_prop["default"] = false.to_json()
+  props["replace_all"] = Json::object(bool_prop)
+  let params = make_params(props, ["path", "old_string", "new_string"])
+  registry.register(
+    "fs.edit",
+    "Edit file by replacing text",
+    detail="Find and replace exact text in a file. Use replace_all=true to replace all occurrences.",
+    parameters=params,
+    handler=async fn(args) {
+      let path = match args {
+        { "path": String(p), .. } => resolve_path(workspace, p)
+        _ => fail("fs.edit: missing 'path' argument")
+      }
+      let old_string = match args {
+        { "old_string": String(s), .. } => s
+        _ => fail("fs.edit: missing 'old_string' argument")
+      }
+      let new_string = match args {
+        { "new_string": String(s), .. } => s
+        _ => fail("fs.edit: missing 'new_string' argument")
+      }
+      let replace_all = match args {
+        { "replace_all": True, .. } => true
+        _ => false
+      }
+      edit_file_content(path, old_string, new_string, replace_all)
+    },
+  )
+}
+
+/// Edit a file by finding and replacing text.
+async fn edit_file_content(
+  path : String,
+  old_string : String,
+  new_string : String,
+  replace_all : Bool
+) -> String {
+  let content = try {
+    @fs.read_file(path).text()
+  } catch {
+    e => fail("fs.edit: " + e.to_string())
+  }
+  if not(content.contains(old_string)) {
+    fail("fs.edit: old_string not found in file")
+  }
+  let new_content = if replace_all {
+    content.replace(old=old_string, new=new_string)
+  } else {
+    // Replace first occurrence only
+    let idx = find_substring_in(content, old_string)
+    if idx < 0 {
+      fail("fs.edit: old_string not found in file")
+    }
+    let before = try { content[:idx].to_string() } catch { _ => "" }
+    let after = try {
+      content[idx + old_string.length():].to_string()
+    } catch {
+      _ => ""
+    }
+    before + new_string + after
+  }
+  try {
+    @fs.write_file(path, new_content, create=0o644)
+  } catch {
+    e => fail("fs.edit: " + e.to_string())
+  }
+  "edited: " + path
+}
+
+/// Find substring position in a string.
+fn find_substring_in(haystack : String, needle : String) -> Int {
+  if needle.length() == 0 {
+    return 0
+  }
+  if needle.length() > haystack.length() {
+    return -1
+  }
+  let limit = haystack.length() - needle.length()
+  for i = 0; i <= limit; i = i + 1 {
+    let mut matched = true
+    for j = 0; j < needle.length(); j = j + 1 {
+      if haystack[i + j] != needle[j] {
+        matched = false
+        break
+      }
+    }
+    if matched {
+      return i
+    }
+  }
+  -1
 }
 
 /// Register done tool.

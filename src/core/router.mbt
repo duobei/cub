@@ -34,7 +34,9 @@ pub async fn InputRouter::route_user(
   }
   let command = self.parse_comma_command(stripped)
   match command {
-    None =>
+    None => {
+      // Check for $hints in the text and expand matching tools
+      self.detect_hints(stripped)
       // Natural language → send to model
       {
         enter_model: true,
@@ -42,6 +44,7 @@ pub async fn InputRouter::route_user(
         immediate_output: "",
         exit_requested: false,
       }
+    }
     Some(cmd) => {
       let result = self.execute_command(cmd, origin="human")
       if result.status == "ok" {
@@ -107,6 +110,39 @@ pub async fn InputRouter::route_assistant(
   }
   let next_prompt = join_lines(command_blocks)
   { visible_text, next_prompt, exit_requested }
+}
+
+/// Detect $name hints in user input and expand matching tools.
+fn InputRouter::detect_hints(self : InputRouter, text : String) -> Unit {
+  let mut i = 0
+  while i < text.length() {
+    if text[i] == '$'.to_int().to_uint16() {
+      // Extract the name after $
+      let start = i + 1
+      let mut end = start
+      while end < text.length() {
+        let ch = text[end].to_int()
+        // Allow alphanumeric, dot, underscore, hyphen
+        if (ch >= 97 && ch <= 122) ||  // a-z
+           (ch >= 65 && ch <= 90) ||   // A-Z
+           (ch >= 48 && ch <= 57) ||   // 0-9
+           ch == 46 || ch == 95 || ch == 45 {  // . _ -
+          end += 1
+        } else {
+          break
+        }
+      }
+      if end > start {
+        let hint = try { text[start:end].to_string() } catch { _ => "" }
+        if hint.length() > 0 {
+          ignore(self.tool_view.note_hint(hint))
+        }
+      }
+      i = end
+    } else {
+      i += 1
+    }
+  }
 }
 
 /// Parse a comma-prefixed command from stripped text.

@@ -117,7 +117,7 @@ fn AppRuntime::create_session(
     self.settings.max_tokens,
     timeout,
     self.settings.system_prompt,
-    fn() { "" },
+    fn() { read_agents_md(ws) },
     llm,
     registry,
   )
@@ -189,6 +189,44 @@ fn uint_to_hex(n : UInt) -> String {
   }
   buf.to_string()
 }
+
+/// Read AGENTS.md from workspace root, returns empty string if not found.
+fn read_agents_md(workspace : String) -> String {
+  let path = workspace + "/AGENTS.md"
+  let text = read_file_sync(path)
+  if text.length() == 0 {
+    return ""
+  }
+  "<workspace_instructions>\n" + text + "\n</workspace_instructions>"
+}
+
+/// Synchronous file read via C FFI two-pass pattern.
+fn read_file_sync(path : String) -> String {
+  let path_bytes = string_to_cstr(path)
+  let len = cub_read_file(path_bytes, Bytes::new(0), 0)
+  if len <= 0 {
+    return ""
+  }
+  let buf = Bytes::new(len)
+  let actual = cub_read_file(path_bytes, buf, len)
+  if actual <= 0 {
+    return ""
+  }
+  @utf8.decode_lossy(buf[:actual])
+}
+
+/// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
+fn string_to_cstr(s : String) -> Bytes {
+  let utf8 = @utf8.encode(s)
+  let len = utf8.length()
+  Bytes::makei(len + 1, fn(i) {
+    if i < len { utf8[i] } else { b'\x00' }
+  })
+}
+
+/// FFI: read file into buffer, returns size or -1 on error.
+#borrow(path, buf)
+extern "C" fn cub_read_file(path : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_read_file"
 
 /// Register tape-related internal tools (help, tools, tape.info, etc.).
 fn register_tape_tools(

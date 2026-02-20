@@ -116,6 +116,30 @@ pub fn Settings::default() -> Settings {
   }
 }
 
+/// Create a new Settings with optional overrides applied.
+pub fn Settings::with_overrides(
+  self : Settings,
+  model~ : String? = None,
+  max_tokens~ : Int? = None,
+  system_prompt~ : String? = None
+) -> Settings {
+  {
+    ..self,
+    model: match model {
+      Some(m) => m
+      None => self.model
+    },
+    max_tokens: match max_tokens {
+      Some(t) => t
+      None => self.max_tokens
+    },
+    system_prompt: match system_prompt {
+      Some(p) => p
+      None => self.system_prompt
+    },
+  }
+}
+
 /// Resolve the API key with cascade: api_key > llm_api_key > openrouter_api_key > env vars.
 pub fn Settings::resolved_api_key(self : Settings) -> String? {
   if self.api_key is Some(k) {
