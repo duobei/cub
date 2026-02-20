@@ -1,8 +1,9 @@
 {
   "import": [
+    { "path": "moonbitlang/async", "alias": "async" },
     { "path": "moonbitlang/async/http", "alias": "http" },
     { "path": "moonbitlang/async/websocket", "alias": "websocket" },
-    { "path": "duobei/cub/config", "alias": "config" },
-    { "path": "duobei/cub/core", "alias": "core" }
+    "moonbitlang/core/json",
+    { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" }
   ]
 }

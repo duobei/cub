@@ -1,4 +1,4 @@
-/// Channel base trait and types stub.
+/// Channel base types.
 
 /// A message from a channel.
 pub struct ChannelMessage {
@@ -13,9 +13,3 @@ pub struct ChannelOutput {
   text : String
   metadata : Json
 } derive(Show)
-
-/// Channel trait: all channels implement this.
-pub(open) trait Channel {
-  name(Self) -> String
-  start(Self, async (ChannelMessage) -> ChannelOutput!Error) -> Unit!Error
-}
