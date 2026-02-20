@@ -85,8 +85,57 @@ pub async fn ModelRunner::run(
     self.tape.append_event("loop.step.start", Json::object(step_data))
     // Call the model
     let chat_result = self.chat(current_prompt)
-    // Handle error
+    // Handle error — on API 400, try handoff to truncate bad history and retry once
     if chat_result.error is Some(err) {
+      if is_api_bad_request(err) && step == 1 {
+        // Truncate tape via handoff and retry
+        let state : Map[String, Json] = {}
+        state["reason"] = "auto_recovery_api_400".to_json()
+        state["error"] = err.to_json()
+        ignore(self.tape.handoff("auto/recovery", state=Some(state)))
+        let retry_data : Map[String, Json] = Map::new()
+        retry_data["step"] = step.to_json()
+        retry_data["error"] = err.to_json()
+        self.tape.append_event("loop.step.retry_after_handoff", Json::object(retry_data))
+        // Retry with same prompt
+        let retry_result = self.chat(current_prompt)
+        if retry_result.error is Some(retry_err) {
+          error = Some(retry_err)
+          let err_data : Map[String, Json] = Map::new()
+          err_data["step"] = step.to_json()
+          err_data["error"] = retry_err.to_json()
+          self.tape.append_event("loop.step.error", Json::object(err_data))
+          break
+        }
+        // Retry succeeded — use retry_result as chat_result
+        if retry_result.followup_prompt is Some(fp) {
+          let fin_data : Map[String, Json] = Map::new()
+          fin_data["step"] = step.to_json()
+          fin_data["visible_text"] = false.to_json()
+          fin_data["followup"] = true.to_json()
+          fin_data["exit_requested"] = false.to_json()
+          self.tape.append_event("loop.step.finish", Json::object(fin_data))
+          current_prompt = fp
+          followups += 1
+          continue
+        }
+        let assistant_text = retry_result.text
+        if assistant_text.trim().to_string().length() > 0 {
+          let route = self.router.route_assistant(assistant_text)
+          if route.visible_text.length() > 0 {
+            visible_parts.push(route.visible_text)
+          }
+          if route.exit_requested {
+            exit_requested = true
+          }
+          if route.next_prompt.length() > 0 {
+            current_prompt = route.next_prompt
+            followups += 1
+            continue
+          }
+        }
+        break
+      }
       error = Some(err)
       let err_data : Map[String, Json] = Map::new()
       err_data["step"] = step.to_json()
@@ -307,6 +356,11 @@ fn ModelRunner::expand_skill_hints(self : ModelRunner, text : String) -> Unit {
       i += 1
     }
   }
+}
+
+/// Check if an error string indicates an API 400 bad request.
+fn is_api_bad_request(err : String) -> Bool {
+  err.contains("API error (400)") || err.contains("bad_request_error")
 }
 
 /// The runtime contract injected into every system prompt.

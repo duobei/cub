@@ -112,20 +112,39 @@ fn build_tool_result_message(
   Json::object(msg)
 }
 
-/// Normalize tool calls from a payload.
+/// Normalize tool calls from a payload, skipping calls with invalid arguments.
 fn normalize_tool_calls(payload : Json) -> Array[Json] {
   match payload {
     { "calls": Array(items), .. } => {
       let calls : Array[Json] = []
       for item in items {
-        match item {
-          Object(_) => calls.push(item)
-          _ => ()
+        if validate_tool_call(item) {
+          calls.push(item)
         }
       }
       calls
     }
     _ => []
+  }
+}
+
+/// Validate a tool call JSON: must have id, function.name, and parseable arguments.
+fn validate_tool_call(call : Json) -> Bool {
+  match call {
+    { "id": String(id), "function": { "name": String(name), "arguments": String(args), .. }, .. } => {
+      if id.length() == 0 || name.length() == 0 {
+        return false
+      }
+      // Arguments must be valid JSON
+      let valid = try {
+        ignore(@json.parse(args))
+        true
+      } catch {
+        _ => false
+      }
+      valid
+    }
+    _ => false
   }
 }
 
