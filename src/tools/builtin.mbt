@@ -15,7 +15,7 @@ pub fn register_builtin_tools(
 }
 
 /// Build a JSON Schema object for tool parameters.
-fn make_params(
+pub fn make_params(
   properties : Map[String, Json],
   required : Array[String]
 ) -> Json {
@@ -33,7 +33,7 @@ fn make_params(
 }
 
 /// Helper: create a string property schema.
-fn string_prop(description : String) -> Json {
+pub fn string_prop(description : String) -> Json {
   let p : Map[String, Json] = Map::new()
   p["type"] = "string".to_json()
   p["description"] = description.to_json()
@@ -80,7 +80,7 @@ fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     handler=async fn(args) {
       let cmd = match args {
         { "cmd": String(c), .. } => c
-        _ => fail!("bash: missing 'cmd' argument")
+        _ => fail("bash: missing 'cmd' argument")
       }
       let cwd = match args {
         { "cwd": String(c), .. } => c
@@ -105,7 +105,7 @@ async fn run_bash_command(cmd : String, cwd : String, timeout : Int) -> String {
       },
     )
   } catch {
-    e => fail!("bash error: " + e.to_string())
+    e => fail("bash error: " + e.to_string())
   }
   let stdout_text = try { stdout_data.text() } catch { _ => "" }
   let stderr_text = try { stderr_data.text() } catch { _ => "" }
@@ -115,7 +115,7 @@ async fn run_bash_command(cmd : String, cwd : String, timeout : Int) -> String {
     } else {
       stdout_text
     }
-    fail!("exit=\{exit_code}: " + error_output)
+    fail("exit=\{exit_code}: " + error_output)
   }
   if stdout_text.length() > 0 {
     stdout_text
@@ -140,7 +140,7 @@ fn register_fs_read(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     handler=async fn(args) {
       let path = match args {
         { "path": String(p), .. } => resolve_path(workspace, p)
-        _ => fail!("fs.read: missing 'path' argument")
+        _ => fail("fs.read: missing 'path' argument")
       }
       let offset = match args {
         { "offset": Number(n), .. } => n.to_int()
@@ -160,7 +160,7 @@ async fn read_file_content(path : String, offset : Int, limit : Int?) -> String 
   let content = try {
     @fs.read_file(path).text()
   } catch {
-    e => fail!("fs.read: " + e.to_string())
+    e => fail("fs.read: " + e.to_string())
   }
   let lines : Array[StringView] = []
   for line in content.split("\n") {
@@ -199,11 +199,11 @@ fn register_fs_write(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     handler=async fn(args) {
       let path = match args {
         { "path": String(p), .. } => resolve_path(workspace, p)
-        _ => fail!("fs.write: missing 'path' argument")
+        _ => fail("fs.write: missing 'path' argument")
       }
       let content = match args {
         { "content": String(c), .. } => c
-        _ => fail!("fs.write: missing 'content' argument")
+        _ => fail("fs.write: missing 'content' argument")
       }
       write_file_content(path, content)
     },
@@ -224,7 +224,7 @@ async fn write_file_content(path : String, content : String) -> String {
   try {
     @fs.write_file(path, content)
   } catch {
-    e => fail!("fs.write: " + e.to_string())
+    e => fail("fs.write: " + e.to_string())
   }
   "wrote: " + path
 }

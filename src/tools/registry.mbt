@@ -55,7 +55,7 @@ pub async fn ToolRegistry::execute(
   kwargs~ : Json = Json::object(Map::new())
 ) -> String {
   guard self.tools.get(name) is Some(descriptor) else {
-    fail!("unknown tool: \{name}")
+    fail("unknown tool: \{name}")
   }
   (descriptor.tool.handler)(kwargs)
 }

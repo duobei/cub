@@ -5,7 +5,7 @@ pub struct Tool {
   name : String
   description : String
   parameters : Json
-  handler : async (Json) -> String!Error
+  handler : async (Json) -> String raise Error
 }
 
 /// Implement Show for Tool.
@@ -28,4 +28,12 @@ pub struct ToolDescriptor {
 pub struct ToolContext {
   tape : @tape.TapeService
   workspace : String
+}
+
+/// Create a new ToolContext.
+pub fn ToolContext::new(
+  tape : @tape.TapeService,
+  workspace : String
+) -> ToolContext {
+  { tape, workspace }
 }

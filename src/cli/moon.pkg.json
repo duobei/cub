@@ -1,5 +1,6 @@
 {
   "import": [
-    { "path": "duobei/cub/app", "alias": "app" }
+    { "path": "duobei/cub/app", "alias": "app" },
+    { "path": "moonbitlang/async/stdio", "alias": "stdio" }
   ]
 }
