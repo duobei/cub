@@ -34,7 +34,7 @@ pub async fn ChannelManager::run(
   println("[channels] starting: " + names.join(", "))
   // Start all channels concurrently using task group
   @async.with_task_group(
-    async fn(group) {
+    fn(group) {
       for ch in self.channels {
         group.spawn_bg(async fn() { ch.start(handler) }, allow_failure=true)
       }

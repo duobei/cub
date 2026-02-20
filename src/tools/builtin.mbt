@@ -87,7 +87,7 @@ fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         _ => workspace
       }
       let timeout = match args {
-        { "timeout_seconds": Number(n), .. } => n.to_int()
+        { "timeout_seconds": Number(n, ..), .. } => n.to_int()
         _ => subprocess_timeout_seconds
       }
       run_bash_command(cmd, cwd, timeout)
@@ -143,11 +143,11 @@ fn register_fs_read(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         _ => fail("fs.read: missing 'path' argument")
       }
       let offset = match args {
-        { "offset": Number(n), .. } => n.to_int()
+        { "offset": Number(n, ..), .. } => n.to_int()
         _ => 0
       }
       let limit : Int? = match args {
-        { "limit": Number(n), .. } => Some(n.to_int())
+        { "limit": Number(n, ..), .. } => Some(n.to_int())
         _ => None
       }
       read_file_content(path, offset, limit)
@@ -240,7 +240,11 @@ fn get_parent_dir(path : String) -> String {
   if last_slash <= 0 {
     ""
   } else {
-    path.substring(end=last_slash)
+    try {
+      path[:last_slash].to_string()
+    } catch {
+      _ => ""
+    }
   }
 }
 
@@ -253,6 +257,6 @@ fn register_done(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     "Signal task completion",
     detail="Call this tool when the task is complete. Stops the agent loop.",
     parameters=params,
-    handler=async fn(_args) { "done" },
+    handler=fn(_args) { "done" },
   )
 }

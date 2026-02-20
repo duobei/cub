@@ -8,8 +8,3 @@ pub struct ChannelMessage {
   metadata : Json
 } derive(Show)
 
-/// Result to send back to a channel.
-pub struct ChannelOutput {
-  text : String
-  metadata : Json
-} derive(Show)

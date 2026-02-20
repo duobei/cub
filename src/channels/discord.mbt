@@ -13,7 +13,7 @@ let discord_message_limit : Int = 2000
 let op_dispatch : Int = 0
 let op_heartbeat : Int = 1
 let op_identify : Int = 2
-let op_hello : Int = 10
+let _op_hello : Int = 10
 let op_heartbeat_ack : Int = 11
 
 /// Discord channel implementation.
@@ -77,8 +77,7 @@ pub async fn DiscordChannel::start(
     }
   }
   let heartbeat_interval = match hello_json {
-    { "op": Number(op), "d": { "heartbeat_interval": Number(interval), .. }, .. } => {
-      ignore(op)
+    { "op": Number(_), "d": { "heartbeat_interval": Number(interval, ..), .. }, .. } => {
       interval.to_int()
     }
     _ => {
@@ -173,12 +172,12 @@ async fn DiscordChannel::event_loop(
       _ => continue
     }
     let op = match json {
-      { "op": Number(n), .. } => n.to_int()
+      { "op": Number(n, ..), .. } => n.to_int()
       _ => continue
     }
     // Update sequence
     match json {
-      { "s": Number(s), .. } => self.sequence = Some(s.to_int())
+      { "s": Number(s, ..), .. } => self.sequence = Some(s.to_int())
       _ => ()
     }
     match op {

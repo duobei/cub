@@ -221,23 +221,27 @@ fn parse_dotenv_line(line : StringView) -> (String, String)? {
     return None
   }
   let trimmed_str = trimmed.to_string()
-  let key = trimmed_str.substring(end=eq_pos).trim(chars=" \t").to_string()
-  let value_str = trimmed_str.substring(start=eq_pos + 1)
-  let value_trimmed = value_str.trim(chars=" \t")
-  // Strip surrounding quotes
-  let value = if value_trimmed.length() >= 2 {
-    let vt = value_trimmed.to_string()
-    let first = vt[0]
-    let last = vt[vt.length() - 1]
-    if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
-      vt.substring(start=1, end=vt.length() - 1)
+  try {
+    let key = trimmed_str[:eq_pos].to_string().trim(chars=" \t").to_string()
+    let value_str = trimmed_str[eq_pos + 1:].to_string()
+    let value_trimmed = value_str.trim(chars=" \t")
+    // Strip surrounding quotes
+    let value = if value_trimmed.length() >= 2 {
+      let vt = value_trimmed.to_string()
+      let first = vt[0]
+      let last = vt[vt.length() - 1]
+      if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+        vt[1:vt.length() - 1].to_string()
+      } else {
+        vt
+      }
     } else {
-      vt
+      value_trimmed.to_string()
     }
-  } else {
-    value_trimmed.to_string()
+    Some((key, value))
+  } catch {
+    _ => None
   }
-  Some((key, value))
 }
 
 /// Parse a simple .env file content into key-value pairs.
