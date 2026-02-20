@@ -203,6 +203,7 @@ fn add_builtin_skills(
     ("commit", "Git commit workflow with conventional commits"),
     ("review", "Code review checklist and structured findings"),
     ("skill-creator", "Guide for creating new SKILL.md skills"),
+    ("skill-installer", "Install community skills via npx @anthropic/skills"),
   ]
   for pair in builtins {
     let (name, desc) = pair
@@ -222,6 +223,7 @@ fn add_builtin_skills(
   // Channel skills
   let channel_builtins : Array[(String, String, String)] = [
     ("discord", "Discord bot integration: message formatting, embeds, reactions", "discord"),
+    ("telegram", "Telegram bot integration: message formatting, commands, inline keyboards", "telegram"),
   ]
   for triple in channel_builtins {
     let (name, desc, channel) = triple
@@ -399,7 +401,9 @@ fn load_builtin_skill_body(name : String) -> String {
     "commit" => commit_skill_body()
     "review" => review_skill_body()
     "skill-creator" => skill_creator_skill_body()
+    "skill-installer" => skill_installer_skill_body()
     "discord" => discord_skill_body()
+    "telegram" => telegram_skill_body()
     _ => ""
   }
 }
@@ -588,6 +592,73 @@ fn skill_creator_skill_body() -> String {
     #|3. **Builtin**: shipped with cub, lowest priority
     #|
     #|Project skills override global skills with the same name.
+  body
+}
+
+/// Body for the builtin skill-installer skill.
+fn skill_installer_skill_body() -> String {
+  let body =
+    #|# Install Community Skills
+    #|
+    #|Use `npx @anthropic/skills` to browse and install community skills.
+    #|
+    #|## Quick Install
+    #|```bash
+    #|# Browse available skills
+    #|npx @anthropic/skills list
+    #|
+    #|# Install a skill to the current project
+    #|npx @anthropic/skills install <skill-name>
+    #|
+    #|# Install globally
+    #|npx @anthropic/skills install <skill-name> --global
+    #|```
+    #|
+    #|## What It Does
+    #|- Downloads the skill's SKILL.md and supporting files
+    #|- Places them in `.agent/skills/<name>/` (project) or `~/.agent/skills/<name>/` (global)
+    #|- The skill becomes available immediately via `,skills.list`
+    #|
+    #|## Manual Install
+    #|You can also create skills manually:
+    #|1. Create `.agent/skills/<name>/SKILL.md`
+    #|2. Add frontmatter with `name` and `description`
+    #|3. Write instructions in the body
+    #|
+    #|See the `skill-creator` skill for detailed guidance.
+  body
+}
+
+/// Body for the builtin telegram channel skill.
+fn telegram_skill_body() -> String {
+  let body =
+    #|# Telegram Channel Integration
+    #|
+    #|You are operating in a Telegram channel. Follow these guidelines:
+    #|
+    #|## Message Formatting
+    #|- Telegram supports Markdown: **bold**, _italic_, `code`, ```code blocks```
+    #|- Max message length is 4096 characters
+    #|- Use code blocks with language hints: ```python, ```bash, etc.
+    #|- Mentions: @username
+    #|
+    #|## Response Style
+    #|- Keep responses concise — Telegram is a chat interface
+    #|- Use bullet points and short paragraphs
+    #|- For long output, summarize first then offer details on request
+    #|- Avoid walls of text — break into multiple messages if needed
+    #|
+    #|## Behavioral Rules
+    #|- Respond only to messages directed at the bot
+    #|- Do not tag or mention users unless explicitly asked
+    #|- Do not send empty messages
+    #|- If a tool call produces very long output, summarize it
+    #|
+    #|## Telegram Bot API Notes
+    #|- Use `sendMessage` with `parse_mode: "Markdown"` for formatted text
+    #|- For inline keyboards, use `reply_markup` with `InlineKeyboardMarkup`
+    #|- Long-polling via `getUpdates` with `timeout` parameter
+    #|- Handle `/start` and `/help` commands as standard bot commands
   body
 }
 

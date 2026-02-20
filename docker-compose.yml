@@ -1,0 +1,9 @@
+services:
+  cub:
+    build: .
+    env_file: .env
+    volumes:
+      - ./workspace:/workspace
+      - ./.cub:/workspace/.cub
+    stdin_open: true
+    tty: true

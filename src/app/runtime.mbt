@@ -296,6 +296,50 @@ fn register_tape_tools(
       rows.join("\n")
     },
   )
+  // ,tool.describe
+  let describe_registry = registry
+  let td_props : Map[String, Json] = Map::new()
+  td_props["name"] = @tools.string_prop("Tool name to describe")
+  let td_params = @tools.make_params(td_props, ["name"])
+  registry.register(
+    "tool.describe",
+    "Show tool details and parameter schema",
+    parameters=td_params,
+    handler=fn(args) {
+      let name = match args {
+        { "name": String(n), .. } => n
+        _ => return "tool.describe: missing name"
+      }
+      // Try exact match first, then model name
+      let descriptors = describe_registry.descriptors()
+      let mut found : @tools.ToolDescriptor? = None
+      for d in descriptors {
+        if d.name == name || @tools.to_model_name(d.name) == name {
+          found = Some(d)
+          break
+        }
+      }
+      match found {
+        None => "tool not found: " + name
+        Some(d) => {
+          let buf = StringBuilder::new()
+          buf.write_string("Tool: ")
+          buf.write_string(d.name)
+          buf.write_string("\nDescription: ")
+          buf.write_string(d.short_description)
+          if d.detail.length() > 0 {
+            buf.write_string("\nDetail: ")
+            buf.write_string(d.detail)
+          }
+          buf.write_string("\nSource: ")
+          buf.write_string(d.source)
+          buf.write_string("\nParameters:\n")
+          buf.write_string(d.tool.parameters.stringify())
+          buf.to_string()
+        }
+      }
+    },
+  )
   // ,tape.info
   registry.register(
     "tape.info",

@@ -1,4 +1,4 @@
-/// Built-in tools: bash, fs.read, fs.write, fs.edit, done.
+/// Built-in tools: bash, fs.read, fs.write, fs.edit, web.fetch, web.search, done.
 
 /// Default subprocess timeout in seconds.
 let subprocess_timeout_seconds : Int = 30
@@ -12,6 +12,8 @@ pub fn register_builtin_tools(
   register_fs_read(registry, ctx)
   register_fs_write(registry, ctx)
   register_fs_edit(registry, ctx)
+  register_web_fetch(registry, ctx)
+  register_web_search(registry, ctx)
   register_done(registry, ctx)
 }
 
@@ -350,6 +352,206 @@ fn find_substring_in(haystack : String, needle : String) -> Int {
     }
   }
   -1
+}
+
+/// Register web.fetch tool.
+fn register_web_fetch(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
+  let props : Map[String, Json] = Map::new()
+  props["url"] = string_prop("URL to fetch")
+  let params = make_params(props, ["url"])
+  registry.register(
+    "web.fetch",
+    "Fetch URL content",
+    detail="Fetch a URL and return its content as plain text. HTML tags are stripped.",
+    parameters=params,
+    handler=fn(args) raise {
+      let url = match args {
+        { "url": String(u), .. } => u
+        _ => fail("web.fetch: missing 'url' argument")
+      }
+      fetch_url(url)
+    },
+  )
+}
+
+/// Fetch URL content via C FFI, strip HTML tags.
+fn fetch_url(url : String) -> String raise {
+  let url_bytes = string_to_cstr(url)
+  // First pass: get content size
+  let len = cub_web_fetch(url_bytes, Bytes::new(0), 0)
+  if len <= 0 {
+    fail("web.fetch: failed to fetch URL")
+  }
+  // Second pass: read content
+  let buf = Bytes::new(len)
+  let actual = cub_web_fetch(url_bytes, buf, len)
+  if actual <= 0 {
+    fail("web.fetch: failed to read response")
+  }
+  let raw = @utf8.decode_lossy(buf[:actual])
+  // Strip HTML tags and decode basic entities
+  let stripped = strip_html_tags(raw)
+  // Truncate if very large (keep first 50K chars)
+  let max_len = 50000
+  if stripped.length() > max_len {
+    try {
+      stripped[:max_len].to_string() + "\n\n[truncated]"
+    } catch {
+      _ => stripped
+    }
+  } else {
+    stripped
+  }
+}
+
+/// Strip HTML tags from a string (regex-free scanner).
+fn strip_html_tags(html : String) -> String {
+  let buf = StringBuilder::new()
+  let mut in_tag = false
+  let mut in_script = false
+  let mut in_style = false
+  let mut last_was_space = false
+  let lt = '<'.to_int()
+  let gt = '>'.to_int()
+  for i, ch in html {
+    let c = ch.to_int()
+    if c == lt {
+      // Check for <script or <style
+      if not(in_tag) {
+        let rest = peek_tag_name(html, i + 1)
+        if rest == "script" {
+          in_script = true
+        } else if rest == "style" {
+          in_style = true
+        } else if rest == "/script" {
+          in_script = false
+        } else if rest == "/style" {
+          in_style = false
+        }
+      }
+      in_tag = true
+      continue
+    }
+    if c == gt {
+      in_tag = false
+      continue
+    }
+    if in_tag || in_script || in_style {
+      continue
+    }
+    // Collapse whitespace
+    let is_ws = c == ' '.to_int() || c == '\t'.to_int() || c == '\n'.to_int() ||
+      c == '\r'.to_int()
+    if is_ws {
+      if not(last_was_space) {
+        buf.write_char(' ')
+        last_was_space = true
+      }
+    } else {
+      buf.write_char(ch.to_int().unsafe_to_char())
+      last_was_space = false
+    }
+  }
+  let result = buf.to_string()
+  // Decode common HTML entities
+  result
+    .replace(old="&amp;", new="&")
+    .replace(old="&lt;", new="<")
+    .replace(old="&gt;", new=">")
+    .replace(old="&quot;", new="\"")
+    .replace(old="&#39;", new="'")
+    .replace(old="&nbsp;", new=" ")
+}
+
+/// Peek at the tag name starting at position i in the string.
+fn peek_tag_name(s : String, start : Int) -> String {
+  let buf = StringBuilder::new()
+  let mut i = start
+  // Skip leading /
+  if i < s.length() && s[i].to_int() == '/'.to_int() {
+    buf.write_char('/')
+    i += 1
+  }
+  while i < s.length() {
+    let c = s[i].to_int()
+    if c == ' '.to_int() || c == '>'.to_int() || c == '\t'.to_int() || c ==
+    '\n'.to_int() || c == '/'.to_int() {
+      break
+    }
+    // Lowercase
+    let ch = if c >= 'A'.to_int() && c <= 'Z'.to_int() {
+      (c + 32).unsafe_to_char()
+    } else {
+      c.unsafe_to_char()
+    }
+    buf.write_char(ch)
+    i += 1
+  }
+  buf.to_string()
+}
+
+/// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
+fn string_to_cstr(s : String) -> Bytes {
+  let utf8 = @utf8.encode(s)
+  let len = utf8.length()
+  Bytes::makei(len + 1, fn(i) {
+    if i < len { utf8[i] } else { b'\x00' }
+  })
+}
+
+/// FFI: fetch URL content into buffer, returns size or -1 on error.
+#borrow(url, buf)
+extern "C" fn cub_web_fetch(url : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_web_fetch"
+
+/// Register web.search tool.
+fn register_web_search(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
+  let props : Map[String, Json] = Map::new()
+  props["query"] = string_prop("Search query")
+  props["max_results"] = int_prop("Max results to return", default_val=Some(5))
+  let params = make_params(props, ["query"])
+  registry.register(
+    "web.search",
+    "Search the web",
+    detail="Search the web using DuckDuckGo. Returns search URL and uses web.fetch to get results.",
+    parameters=params,
+    handler=fn(args) raise {
+      let query = match args {
+        { "query": String(q), .. } => q
+        _ => fail("web.search: missing 'query' argument")
+      }
+      let encoded = url_encode(query)
+      let search_url = "https://duckduckgo.com/?q=" + encoded
+      let lite_url = "https://lite.duckduckgo.com/lite/?q=" + encoded
+      let result = StringBuilder::new()
+      result.write_string("Search URL: ")
+      result.write_string(search_url)
+      result.write_string("\n\nTo get results, use web.fetch with: ")
+      result.write_string(lite_url)
+      result.to_string()
+    },
+  )
+}
+
+/// URL-encode a string (percent-encoding).
+fn url_encode(s : String) -> String {
+  let buf = StringBuilder::new()
+  let hex = "0123456789ABCDEF"
+  let utf8 = @utf8.encode(s)
+  for i = 0; i < utf8.length(); i = i + 1 {
+    let b = utf8[i].to_int()
+    if (b >= 'A'.to_int() && b <= 'Z'.to_int()) || (b >= 'a'.to_int() && b <=
+    'z'.to_int()) || (b >= '0'.to_int() && b <= '9'.to_int()) || b ==
+    '-'.to_int() || b == '_'.to_int() || b == '.'.to_int() || b == '~'.to_int() {
+      buf.write_char(b.unsafe_to_char())
+    } else if b == ' '.to_int() {
+      buf.write_char('+')
+    } else {
+      buf.write_char('%')
+      buf.write_char(hex[(b >> 4) & 0xF].to_int().unsafe_to_char())
+      buf.write_char(hex[b & 0xF].to_int().unsafe_to_char())
+    }
+  }
+  buf.to_string()
 }
 
 /// Register done tool.
