@@ -34,12 +34,104 @@ OPENROUTER_API_KEY=your_key_here
 ## Usage
 
 ```
-cub              interactive chat (default)
-cub chat         interactive chat
-cub message      run Discord channel
-cub run <msg>    run single message
-cub version      show version
+cub [options]              interactive chat (default)
+cub chat [session_id]      interactive chat
+cub message                run Discord channel
+cub run <msg>              run single message
+cub version                show version
 ```
+
+### CLI Options
+
+```
+--model <provider:model>   override model (e.g. minimax:MiniMax-M2.5)
+--workspace <path>         override workspace directory
+--max-tokens <n>           override max tokens
+--system-prompt <text>     override system prompt
+```
+
+### Built-in Commands
+
+| Command | Description |
+|---------|-------------|
+| `,help` | Show available commands |
+| `,tools` | List available tools |
+| `,tape.info` | Show tape status |
+| `,handoff` | Create a tape handoff (stage transition) |
+| `,anchors` | List anchor points |
+| `,tape.search <query>` | Search tape entries |
+| `,tape.reset` | Reset the tape |
+| `,skills.list` | List available skills |
+| `,skills.describe <name>` | Show skill details |
+| `,quit` | Exit the session |
+
+### Built-in Tools
+
+| Tool | Description |
+|------|-------------|
+| `bash` | Execute shell commands with timeout |
+| `fs.read` | Read file content (with offset/limit) |
+| `fs.write` | Write file content (creates parent dirs) |
+| `fs.edit` | Find and replace text in files |
+| `done` | Signal task completion |
+
+## Skills
+
+Cub supports a three-level skill discovery system:
+
+| Priority | Location | Scope |
+|----------|----------|-------|
+| 1 (highest) | `.agent/skills/` | Project-specific |
+| 2 | `~/.agent/skills/` | User-global |
+| 3 (lowest) | Built-in | Ships with cub |
+
+### Creating a Skill
+
+```
+.agent/skills/my-skill/
+  SKILL.md          # Required: frontmatter + instructions
+```
+
+SKILL.md format:
+
+```markdown
+---
+name: my-skill
+description: What the skill does and when to use it.
+---
+
+Instructions for the agent when this skill is activated.
+```
+
+Skills are activated via `$name` hint syntax in user input (e.g., `$review check this code`).
+
+### Built-in Skills
+
+| Skill | Description |
+|-------|-------------|
+| `cub` | Delegate sub-tasks to a child cub process |
+| `gh` | GitHub CLI operations: PRs, issues, repos |
+| `commit` | Git commit workflow with conventional commits |
+| `review` | Code review checklist and structured findings |
+| `skill-creator` | Guide for creating new skills |
+
+## AGENTS.md
+
+Place an `AGENTS.md` file in your workspace root to inject custom instructions into the system prompt. This is useful for project-specific coding conventions, tool preferences, or domain knowledge.
+
+## Discord Bot
+
+```bash
+# Add to .env:
+BUB_DISCORD_ENABLED=true
+BUB_DISCORD_TOKEN=your_bot_token
+BUB_DISCORD_ALLOW_CHANNELS=["channel_id"]
+
+# Run:
+cub message
+```
+
+A systemd service file (`cub.service`) is included for persistent deployment.
 
 ## Build
 
@@ -47,6 +139,8 @@ cub version      show version
 moon check --target native   # type check
 moon build --target native   # build binary
 ```
+
+Binary: `_build/native/debug/build/main/main.exe`
 
 ## Acknowledgments
 
