@@ -156,11 +156,11 @@ cub/
 
 ## MVP 验收标准
 
-- [ ] `cub message` 启动后连接 Discord Gateway
-- [ ] 收到 Discord 消息后触发 agent loop
-- [ ] agent 能调用 LLM（OpenRouter）获取响应
-- [ ] agent 能执行 bash / fs.read / fs.write 工具
-- [ ] agent 回复发送回 Discord channel
-- [ ] tape 正确记录所有交互（JSONL 文件）
-- [ ] 支持 `done` 工具停止 agent loop
-- [ ] 支持逗号命令（`,help`, `,tools`, `,tape.info`）
+- [x] agent 能调用 LLM 获取响应（MiniMax-M2.5 验证通过）
+- [x] agent 能执行 bash / fs.read / fs.write 工具
+- [x] tape 正确记录所有交互（JSONL 文件）
+- [x] 支持 `done` 工具停止 agent loop
+- [x] 支持逗号命令（`,help`, `,tools`, `,tape.info`）
+- [ ] `cub message` 启动后连接 Discord Gateway（需要 token 验证）
+- [ ] 收到 Discord 消息后触发 agent loop（需要 token 验证）
+- [ ] agent 回复发送回 Discord channel（需要 token 验证）

@@ -1,3 +1,5 @@
 _build/
 .mooncakes/
 .bub/
+.cub/
+.env
