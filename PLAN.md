@@ -4,6 +4,16 @@
 
 用 MoonBit 重写 bub，MVP 里程碑：**Discord channel 能收发消息，LLM agent loop 能跑，带基础工具**。
 
+## 设计哲学
+
+参考 [被缚的普罗米修斯](https://psiace.me/zh/posts/prometheus-bound/) 和 [重新发明打孔纸带](https://psiace.me/zh/posts/reinvent-the-punch-tape/) 的核心理念：
+
+1. **单一永续线程** — 会话不分叉、不回滚，只向前追加
+2. **Append-only 日志** — 事实一旦写入不修改，保证可验证、可回溯
+3. **锚点（Anchor）驱动** — 通过 handoff 产生锚点标记阶段切换，不删除也不总结历史，只告诉系统"从哪里开始算"
+4. **按需读取** — 状态从持续负担变为可选资源，"任务出现 → 构造上下文 → 完成 → 结束"
+5. **最小化工具集** — 框架只提供推理核心，其余由 AI 自由裁量
+
 ## 项目信息
 
 - 名称：`cub`
@@ -18,7 +28,7 @@ Python bub                    MoonBit cub
 ─────────────────────────────────────────────
 config/settings.py        →   config/         环境变量加载
 tape/store.py             →   tape/           JSONL append-only store
-tape/service.py           →   tape/           fork/merge, anchors, search
+tape/service.py           →   tape/           handoff, anchors, search
 core/agent_loop.py        →   core/           forward-only loop
 core/model_runner.py      →   core/           LLM 调用 + tool call 处理
 core/router.py            →   core/           输入路由（逗号命令解析）
@@ -44,8 +54,8 @@ cub/
 │   ├── tape/
 │   │   ├── moon.pkg.json
 │   │   ├── types.mbt            # TapeEntry, AnchorSummary
-│   │   ├── store.mbt            # FileTapeStore (JSONL 读写)
-│   │   └── service.mbt          # TapeService (fork/merge/handoff/search)
+│   │   ├── store.mbt            # FileTapeStore (JSONL append-only 读写)
+│   │   └── service.mbt          # TapeService (handoff/anchors/search)
 │   ├── llm/
 │   │   ├── moon.pkg.json
 │   │   ├── client.mbt           # OpenAI-compatible chat API 客户端
@@ -84,8 +94,8 @@ cub/
 1. **初始化项目** — `moon new cub`，配置 `moon.mod.json` 依赖
 2. **config** — Settings 结构体，从环境变量读取（BUB_MODEL, BUB_API_KEY, BUB_DISCORD_TOKEN 等）
 3. **tape/types** — TapeEntry 结构体（id, kind, payload, meta）
-4. **tape/store** — FileTapeStore：JSONL 文件读写、append、fork/merge
-5. **tape/service** — TapeService：handoff、anchors、search、info
+4. **tape/store** — FileTapeStore：JSONL 文件读写、append（严格 append-only，不修改已写入条目）
+5. **tape/service** — TapeService：handoff（产生锚点，标记阶段切换）、anchors（查询锚点列表）、search、info。不实现 fork/merge——用 handoff 替代分叉，用追加新事实替代回滚
 
 ### Phase 2: LLM 客户端 + Tool 系统（~Day 3-4）
 
@@ -140,7 +150,7 @@ cub/
 1. **LLM 协议** — 直接用 OpenAI-compatible HTTP API，不依赖 republic 库
 2. **Discord** — 直接实现 Gateway WebSocket + REST，不用第三方库（MoonBit 没有）
 3. **JSON** — 使用 MoonBit 内置 JSON 支持（@json 包）
-4. **Tape 存储** — 保持 JSONL 格式，与 Python 版兼容
+4. **Tape 存储** — 保持 JSONL 格式，严格 append-only；不实现 fork/merge，用 handoff + anchor 管理阶段切换
 5. **Tool schema** — 手动构造 JSON schema（MoonBit 没有 Pydantic 式反射）
 6. **YAML 解析** — SKILL.md frontmatter 用简单的手写解析器，不引入 YAML 库
 

@@ -1,0 +1,10 @@
+{
+  "is-main": true,
+  "import": [
+    { "path": "moonbitlang/async", "alias": "async" },
+    { "path": "duobei/cub/app", "alias": "app" },
+    { "path": "duobei/cub/cli", "alias": "cli" },
+    { "path": "duobei/cub/config", "alias": "config" },
+    { "path": "duobei/cub/channels", "alias": "channels" }
+  ]
+}

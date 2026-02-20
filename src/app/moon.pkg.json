@@ -1,0 +1,12 @@
+{
+  "import": [
+    { "path": "moonbitlang/async/fs", "alias": "fs" },
+    { "path": "duobei/cub/config", "alias": "config" },
+    { "path": "duobei/cub/tape", "alias": "tape" },
+    { "path": "duobei/cub/llm", "alias": "llm" },
+    { "path": "duobei/cub/tools", "alias": "tools" },
+    { "path": "duobei/cub/core", "alias": "core" },
+    { "path": "duobei/cub/channels", "alias": "channels" },
+    { "path": "duobei/cub/skills", "alias": "skills" }
+  ]
+}
