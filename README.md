@@ -48,6 +48,8 @@ cub version                show version
 --workspace <path>         override workspace directory
 --max-tokens <n>           override max tokens
 --system-prompt <text>     override system prompt
+--tools <list>             filter tools (comma-separated)
+--skills <list>            filter skills (comma-separated)
 ```
 
 ### Built-in Commands
@@ -63,6 +65,7 @@ cub version                show version
 | `,tape.reset` | Reset the tape |
 | `,skills.list` | List available skills |
 | `,skills.describe <name>` | Show skill details |
+| `,sh` | Toggle shell mode (input goes directly to bash) |
 | `,quit` | Exit the session |
 
 ### Built-in Tools
@@ -98,6 +101,8 @@ SKILL.md format:
 ---
 name: my-skill
 description: What the skill does and when to use it.
+metadata:
+  channel: discord    # optional, for channel-specific skills
 ---
 
 Instructions for the agent when this skill is activated.
@@ -107,17 +112,26 @@ Skills are activated via `$name` hint syntax in user input (e.g., `$review check
 
 ### Built-in Skills
 
-| Skill | Description |
-|-------|-------------|
-| `cub` | Delegate sub-tasks to a child cub process |
-| `gh` | GitHub CLI operations: PRs, issues, repos |
-| `commit` | Git commit workflow with conventional commits |
-| `review` | Code review checklist and structured findings |
-| `skill-creator` | Guide for creating new skills |
+| Skill | Type | Description |
+|-------|------|-------------|
+| `cub` | regular | Delegate sub-tasks to a child cub process |
+| `gh` | regular | GitHub CLI operations: PRs, issues, repos |
+| `commit` | regular | Git commit workflow with conventional commits |
+| `review` | regular | Code review checklist and structured findings |
+| `skill-creator` | regular | Guide for creating new skills |
+| `discord` | channel | Discord message formatting and behavior guidelines |
 
 ## AGENTS.md
 
 Place an `AGENTS.md` file in your workspace root to inject custom instructions into the system prompt. This is useful for project-specific coding conventions, tool preferences, or domain knowledge.
+
+## Shell Mode
+
+Type `,sh` in the interactive CLI to toggle shell mode. In shell mode:
+
+- The prompt changes from `>` to `$`
+- All input is sent directly to bash as shell commands
+- Type `,sh` again to return to normal chat mode
 
 ## Discord Bot
 
