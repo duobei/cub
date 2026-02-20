@@ -161,6 +161,6 @@ cub/
 - [x] tape 正确记录所有交互（JSONL 文件）
 - [x] 支持 `done` 工具停止 agent loop
 - [x] 支持逗号命令（`,help`, `,tools`, `,tape.info`）
-- [ ] `cub message` 启动后连接 Discord Gateway（需要 token 验证）
-- [ ] 收到 Discord 消息后触发 agent loop（需要 token 验证）
-- [ ] agent 回复发送回 Discord channel（需要 token 验证）
+- [x] `cub message` 启动后连接 Discord Gateway
+- [x] 收到 Discord 消息后触发 agent loop
+- [x] agent 回复发送回 Discord channel

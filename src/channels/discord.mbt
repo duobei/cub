@@ -250,13 +250,12 @@ async fn DiscordChannel::handle_message_create(
     { "author": { "bot": True, .. }, .. } => true
     _ => false
   }
-  if is_bot {
-    return
-  }
-  // Get content
   let content = match data {
     { "content": String(c), .. } => c
-    _ => return
+    _ => ""
+  }
+  if is_bot {
+    return
   }
   if content.trim().to_string().length() == 0 {
     return

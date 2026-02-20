@@ -180,6 +180,25 @@ fn get_env_int(env : Map[String, String], key : String) -> Int? {
 fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
   match env.get(key) {
     Some(s) => {
+      let trimmed = s.trim(chars=" \t").to_string()
+      // Try JSON array first
+      if trimmed.length() >= 2 && trimmed[0] == '['.to_int().to_uint16() {
+        let parsed = try { @json.parse(trimmed) } catch { _ => Json::null() }
+        match parsed {
+          Array(items) => {
+            let result : Array[String] = []
+            for item in items {
+              match item {
+                String(v) => result.push(v)
+                _ => ()
+              }
+            }
+            return result
+          }
+          _ => ()
+        }
+      }
+      // Fallback: comma-separated
       let parts : Array[String] = []
       let current = StringBuilder::new()
       for ch in s {
