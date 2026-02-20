@@ -69,6 +69,8 @@ pub async fn ModelRunner::run(
   prompt : String
 ) -> ModelTurnResult {
   let mut current_prompt = prompt
+  // Expand skill hints from the initial prompt
+  self.expand_skill_hints(prompt)
   let mut step = 0
   let mut followups = 0
   let visible_parts : Array[String] = []
@@ -204,6 +206,17 @@ fn ModelRunner::render_system_prompt(self : ModelRunner) -> String {
   if tool_block.length() > 0 {
     blocks.push(tool_block)
   }
+  // Skills prompt
+  let skills = (self.list_skills)()
+  let skill_block = @skills.render_skill_prompt(skills)
+  if skill_block.length() > 0 {
+    blocks.push(skill_block)
+  }
+  // Expanded skill bodies (activated via $hint)
+  let expanded_block = @skills.render_expanded_skills(self.expanded_skills)
+  if expanded_block.length() > 0 {
+    blocks.push(expanded_block)
+  }
   join_blocks(blocks)
 }
 
@@ -260,6 +273,38 @@ fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
         None => "unknown error"
       }
       { text: "", error: Some(err_msg), followup_prompt: None }
+    }
+  }
+}
+
+/// Scan text for $name hints and expand matching skills into expanded_skills.
+fn ModelRunner::expand_skill_hints(self : ModelRunner, text : String) -> Unit {
+  let mut i = 0
+  while i < text.length() {
+    if text[i] == '$'.to_int().to_uint16() {
+      let start = i + 1
+      let mut end = start
+      while end < text.length() {
+        let ch = text[end].to_int()
+        if (ch >= 97 && ch <= 122) || (ch >= 65 && ch <= 90) ||
+          (ch >= 48 && ch <= 57) || ch == 46 || ch == 95 || ch == 45 {
+          end += 1
+        } else {
+          break
+        }
+      }
+      if end > start {
+        let hint = try { text[start:end].to_string() } catch { _ => "" }
+        if hint.length() > 0 && not(self.expanded_skills.contains(hint)) {
+          match (self.load_skill_body)(hint) {
+            Some(body) => self.expanded_skills[hint] = body
+            None => ()
+          }
+        }
+      }
+      i = end
+    } else {
+      i += 1
     }
   }
 }

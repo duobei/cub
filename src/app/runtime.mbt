@@ -89,7 +89,7 @@ fn AppRuntime::create_session(
   let tool_ctx = @tools.ToolContext::new(tape, self.workspace)
   @tools.register_builtin_tools(registry, tool_ctx)
   // Register tape tools
-  register_tape_tools(registry, tape)
+  register_tape_tools(registry, tape, self.workspace)
   // Create tool view
   let tool_view = @tools.ProgressiveToolView::new(registry)
   // Create LLM client
@@ -231,7 +231,8 @@ extern "C" fn cub_read_file(path : Bytes, buf : Bytes, buf_size : Int) -> Int = 
 /// Register tape-related internal tools (help, tools, tape.info, etc.).
 fn register_tape_tools(
   registry : @tools.ToolRegistry,
-  tape : @tape.TapeService
+  tape : @tape.TapeService,
+  workspace : String
 ) -> Unit {
   // ,help
   registry.register(
@@ -362,6 +363,52 @@ fn register_tape_tools(
         _ => false
       }
       tape.reset(archive~)
+    },
+  )
+  // ,skills.list
+  let ws_for_skills = workspace
+  registry.register(
+    "skills.list",
+    "List available skills",
+    handler=fn(_args) {
+      let skills = @skills.discover_skills(ws_for_skills)
+      if skills.length() == 0 {
+        return "no skills found"
+      }
+      let buf = StringBuilder::new()
+      buf.write_string("Available skills:\n")
+      for skill in skills {
+        buf.write_string("  ")
+        buf.write_string(skill.name)
+        if skill.description.length() > 0 {
+          buf.write_string(" — ")
+          buf.write_string(skill.description)
+        }
+        buf.write_string(" [")
+        buf.write_string(skill.source)
+        buf.write_string("]\n")
+      }
+      buf.to_string()
+    },
+  )
+  // ,skills.describe
+  let ws_for_describe = workspace
+  let describe_props : Map[String, Json] = Map::new()
+  describe_props["name"] = @tools.string_prop("Skill name")
+  let describe_params = @tools.make_params(describe_props, ["name"])
+  registry.register(
+    "skills.describe",
+    "Show skill details",
+    parameters=describe_params,
+    handler=fn(args) {
+      let name = match args {
+        { "name": String(n), .. } => n
+        _ => return "skills.describe: missing name"
+      }
+      match @skills.load_skill_body(name, ws_for_describe) {
+        Some(body) => "skill: " + name + "\n\n" + body
+        None => "skill not found: " + name
+      }
     },
   )
   // ,quit
