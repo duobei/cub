@@ -21,7 +21,7 @@ Inherited from Bub's philosophy:
 moon build --target native
 cp env.example .env
 # edit .env with your API key
-./target/main
+./_build/native/debug/build/main/main.exe
 ```
 
 Minimal `.env`:
@@ -29,6 +29,16 @@ Minimal `.env`:
 ```bash
 CUB_MODEL=openrouter:qwen/qwen3-coder-next
 OPENROUTER_API_KEY=your_key_here
+```
+
+## Usage
+
+```
+cub              interactive chat (default)
+cub chat         interactive chat
+cub message      run Discord channel
+cub run <msg>    run single message
+cub version      show version
 ```
 
 ## Build
