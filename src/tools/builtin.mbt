@@ -222,7 +222,7 @@ async fn write_file_content(path : String, content : String) -> String {
     }
   }
   try {
-    @fs.write_file(path, content)
+    @fs.write_file(path, content, create=0o644)
   } catch {
     e => fail("fs.write: " + e.to_string())
   }

@@ -117,8 +117,7 @@ pub async fn TapeFile::append_many(self : TapeFile, entries : Array[TapeEntry]) 
   }
   let text = buf.to_string()
   try {
-    // Append to file
-    @fs.write_file(self.path, text, append=true)
+    @fs.write_file(self.path, text, append=true, create=0o644, truncate=false)
   } catch {
     _ => ()
   }
@@ -137,7 +136,7 @@ pub async fn TapeFile::archive(self : TapeFile) -> String? {
   }
   let archive_path = self.path + ".bak"
   try {
-    @fs.write_file(archive_path, content)
+    @fs.write_file(archive_path, content, create=0o644)
   } catch {
     _ => return None
   }

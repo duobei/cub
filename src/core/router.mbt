@@ -189,6 +189,11 @@ async fn InputRouter::execute_internal(
     not(parsed_args.kwargs.contains("name")) {
     parsed_args.kwargs["name"] = parsed_args.positional[0]
   }
+  // Handle tape.search positional arg
+  if name == "tape.search" && parsed_args.positional.length() > 0 &&
+    not(parsed_args.kwargs.contains("query")) {
+    parsed_args.kwargs["query"] = parsed_args.positional.join(" ")
+  }
   // Handle handoff default name
   if name == "handoff" && not(parsed_args.kwargs.contains("name")) {
     if parsed_args.positional.length() > 0 {
