@@ -24,6 +24,7 @@ pub struct DiscordChannel {
   mut sequence : Int?
   mut session_id : String
   mut bot_user_id : String
+  seen_messages : Map[String, Bool]
 }
 
 /// Create a new DiscordChannel.
@@ -39,6 +40,7 @@ pub fn DiscordChannel::new(
     sequence: None,
     session_id: "",
     bot_user_id: "",
+    seen_messages: {},
   }
 }
 
@@ -245,6 +247,21 @@ async fn DiscordChannel::handle_message_create(
   data : Json,
   handler : async (ChannelMessage) -> Unit
 ) -> Unit {
+  // Deduplicate by message ID
+  let msg_id = match data {
+    { "id": String(mid), .. } => mid
+    _ => ""
+  }
+  if msg_id.length() > 0 {
+    if self.seen_messages.contains(msg_id) {
+      return
+    }
+    self.seen_messages[msg_id] = true
+    // Keep seen_messages bounded
+    if self.seen_messages.length() > 1000 {
+      self.seen_messages.clear()
+    }
+  }
   // Skip bot messages
   let is_bot = match data {
     { "author": { "bot": True, .. }, .. } => true
