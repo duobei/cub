@@ -26,16 +26,16 @@ pub fn ToolCallInfo::from_json(json : Json) -> ToolCallInfo? {
   }
 }
 
-/// Convert ToolCallInfo to JSON.
+/// Convert ToolCallInfo to JSON for sending back to the API.
 pub fn ToolCallInfo::to_json(self : ToolCallInfo) -> Json {
-  {
-    "id": self.id.to_json(),
-    "type": self.type_.to_json(),
-    "function": {
-      "name": self.function_.name.to_json(),
-      "arguments": self.function_.arguments.to_json(),
-    },
-  }
+  let func : Map[String, Json] = Map::new()
+  func["name"] = self.function_.name.to_json()
+  func["arguments"] = self.function_.arguments.to_json()
+  let obj : Map[String, Json] = Map::new()
+  obj["id"] = self.id.to_json()
+  obj["type"] = self.type_.to_json()
+  obj["function"] = Json::object(func)
+  Json::object(obj)
 }
 
 /// Response from a chat API call.

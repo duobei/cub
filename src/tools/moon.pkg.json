@@ -1,7 +1,7 @@
 {
   "import": [
+    { "path": "moonbitlang/async", "alias": "async" },
     { "path": "moonbitlang/async/fs", "alias": "fs" },
-    { "path": "moonbitlang/async/http", "alias": "http" },
     { "path": "moonbitlang/async/process", "alias": "process" },
     { "path": "duobei/cub/tape", "alias": "tape" }
   ]

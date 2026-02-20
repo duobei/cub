@@ -1,4 +1,4 @@
-/// Unified tool registry stub.
+/// Unified tool registry.
 
 /// ToolRegistry manages tool registration and execution.
 pub struct ToolRegistry {
@@ -8,7 +8,7 @@ pub struct ToolRegistry {
 
 /// Create a new ToolRegistry.
 pub fn ToolRegistry::new(allowed_tools~ : Array[String]? = None) -> ToolRegistry {
-  { tools: {}, allowed_tools }
+  { tools: Map::new(), allowed_tools }
 }
 
 /// Register a tool.
@@ -17,10 +17,18 @@ pub fn ToolRegistry::register(
   name : String,
   short_description : String,
   detail~ : String = "",
-  parameters~ : Json = Json::object({}),
+  parameters~ : Json = Json::object(Map::new()),
   source~ : String = "builtin",
-  handler~ : async (Json) -> String!Error
+  handler~ : async (Json) -> String
 ) -> Unit {
+  // Check allowed_tools filter
+  match self.allowed_tools {
+    Some(allowed) =>
+      if not(allowed.contains(name)) {
+        return
+      }
+    None => ()
+  }
   let tool : Tool = { name, description: short_description, parameters, handler }
   let descriptor : ToolDescriptor = { name, short_description, detail, tool, source }
   self.tools[name] = descriptor
@@ -44,29 +52,27 @@ pub fn ToolRegistry::descriptors(self : ToolRegistry) -> Array[ToolDescriptor] {
 pub async fn ToolRegistry::execute(
   self : ToolRegistry,
   name : String,
-  kwargs~ : Json = Json::object({})
-) -> String!Error {
-  ignore(kwargs)
+  kwargs~ : Json = Json::object(Map::new())
+) -> String {
   guard self.tools.get(name) is Some(descriptor) else {
     fail!("unknown tool: \{name}")
   }
-  (descriptor.tool.handler)!(kwargs)
+  (descriptor.tool.handler)(kwargs)
 }
 
-/// Get model-compatible tool list.
+/// Get model-compatible tool list (OpenAI function-calling format).
 pub fn ToolRegistry::model_tools(self : ToolRegistry) -> Array[Json] {
   let tools : Array[Json] = []
   for _, descriptor in self.tools {
     let model_name = to_model_name(descriptor.name)
-    let tool_json : Json = {
-      "type": "function".to_json(),
-      "function": {
-        "name": model_name.to_json(),
-        "description": descriptor.short_description.to_json(),
-        "parameters": descriptor.tool.parameters,
-      },
-    }
-    tools.push(tool_json)
+    let func : Map[String, Json] = Map::new()
+    func["name"] = model_name.to_json()
+    func["description"] = descriptor.short_description.to_json()
+    func["parameters"] = descriptor.tool.parameters
+    let tool_json : Map[String, Json] = Map::new()
+    tool_json["type"] = "function".to_json()
+    tool_json["function"] = Json::object(func)
+    tools.push(Json::object(tool_json))
   }
   tools
 }

@@ -1,6 +1,7 @@
 {
   "import": [
     { "path": "moonbitlang/async/http", "alias": "http" },
-    { "path": "duobei/cub/tape", "alias": "tape" }
+    { "path": "duobei/cub/tape", "alias": "tape" },
+    "moonbitlang/core/json"
   ]
 }
