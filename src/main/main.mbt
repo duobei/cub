@@ -15,6 +15,8 @@ fn main {
         model=parsed.model,
         max_tokens=parsed.max_tokens,
         system_prompt=parsed.system_prompt,
+        allowed_tools=parsed.allowed_tools,
+        allowed_skills=parsed.allowed_skills,
       )
       // Create runtime
       let runtime = @app.AppRuntime::new(settings, workspace)
@@ -113,6 +115,8 @@ fn main {
           println("  --workspace <path>         override workspace directory")
           println("  --max-tokens <n>           override max tokens")
           println("  --system-prompt <text>     override system prompt")
+          println("  --tools <list>             filter tools (comma-separated)")
+          println("  --skills <list>            filter skills (comma-separated)")
         }
       }
     },
@@ -128,6 +132,8 @@ struct CliArgs {
   workspace : String?
   max_tokens : Int?
   system_prompt : String?
+  allowed_tools : Array[String]?
+  allowed_skills : Array[String]?
 }
 
 /// Parse CLI arguments, extracting flags and command.
@@ -139,6 +145,8 @@ fn parse_cli_args(args : Array[String]) -> CliArgs {
   let mut workspace : String? = None
   let mut max_tokens : Int? = None
   let mut system_prompt : String? = None
+  let mut allowed_tools : Array[String]? = None
+  let mut allowed_skills : Array[String]? = None
   let mut i = 1  // skip argv[0]
   let mut command_found = false
   while i < args.length() {
@@ -155,6 +163,12 @@ fn parse_cli_args(args : Array[String]) -> CliArgs {
     } else if arg == "--system-prompt" && i + 1 < args.length() {
       i += 1
       system_prompt = Some(args[i])
+    } else if arg == "--tools" && i + 1 < args.length() {
+      i += 1
+      allowed_tools = Some(split_comma(args[i]))
+    } else if arg == "--skills" && i + 1 < args.length() {
+      i += 1
+      allowed_skills = Some(split_comma(args[i]))
     } else if arg == "--help" || arg == "-h" {
       command = "help"
       command_found = true
@@ -175,7 +189,19 @@ fn parse_cli_args(args : Array[String]) -> CliArgs {
     }
     i += 1
   }
-  { command, session_id, positional, model, workspace, max_tokens, system_prompt }
+  { command, session_id, positional, model, workspace, max_tokens, system_prompt, allowed_tools, allowed_skills }
+}
+
+/// Split a comma-separated string into an array.
+fn split_comma(s : String) -> Array[String] {
+  let result : Array[String] = []
+  for part in s.split(",") {
+    let trimmed = part.to_string().trim().to_string()
+    if trimmed.length() > 0 {
+      result.push(trimmed)
+    }
+  }
+  result
 }
 
 /// Parse an integer string, returning default on failure.

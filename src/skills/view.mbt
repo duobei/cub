@@ -9,7 +9,7 @@ pub fn render_skill_prompt(skills : Array[SkillMetadata]) -> String {
   let channel_skills : Array[SkillMetadata] = []
   let regular_skills : Array[SkillMetadata] = []
   for skill in skills {
-    if skill.metadata.contains("channel") {
+    if skill.metadata.contains("channel") || skill.metadata.contains("metadata.channel") {
       channel_skills.push(skill)
     } else {
       regular_skills.push(skill)

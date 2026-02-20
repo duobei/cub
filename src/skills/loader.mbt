@@ -196,6 +196,7 @@ fn add_builtin_skills(
   seen : Map[String, Bool],
   skills : Array[SkillMetadata]
 ) -> Unit {
+  // Regular skills
   let builtins : Array[(String, String)] = [
     ("cub", "Delegate sub-tasks to a child cub process"),
     ("gh", "GitHub CLI operations: PRs, issues, repos, workflows"),
@@ -213,6 +214,27 @@ fn add_builtin_skills(
           description: desc,
           location: "builtin:" + name,
           metadata: {},
+          source: "builtin",
+        },
+      )
+    }
+  }
+  // Channel skills
+  let channel_builtins : Array[(String, String, String)] = [
+    ("discord", "Discord bot integration: message formatting, embeds, reactions", "discord"),
+  ]
+  for triple in channel_builtins {
+    let (name, desc, channel) = triple
+    if not(seen.contains(name)) {
+      seen[name] = true
+      let meta : Map[String, String] = {}
+      meta["metadata.channel"] = channel
+      skills.push(
+        {
+          name,
+          description: desc,
+          location: "builtin:" + name,
+          metadata: meta,
           source: "builtin",
         },
       )
@@ -377,6 +399,7 @@ fn load_builtin_skill_body(name : String) -> String {
     "commit" => commit_skill_body()
     "review" => review_skill_body()
     "skill-creator" => skill_creator_skill_body()
+    "discord" => discord_skill_body()
     _ => ""
   }
 }
@@ -565,5 +588,32 @@ fn skill_creator_skill_body() -> String {
     #|3. **Builtin**: shipped with cub, lowest priority
     #|
     #|Project skills override global skills with the same name.
+  body
+}
+
+/// Body for the builtin discord channel skill.
+fn discord_skill_body() -> String {
+  let body =
+    #|# Discord Channel Integration
+    #|
+    #|You are operating in a Discord channel. Follow these guidelines:
+    #|
+    #|## Message Formatting
+    #|- Discord uses Markdown: **bold**, *italic*, `code`, ```code blocks```
+    #|- Max message length is 2000 characters (auto-chunked by runtime)
+    #|- Use code blocks with language hints: ```python, ```bash, etc.
+    #|- Mentions: <@user_id>, <#channel_id>, <@&role_id>
+    #|
+    #|## Response Style
+    #|- Keep responses concise — Discord is a chat interface, not a document
+    #|- Use bullet points and short paragraphs
+    #|- For long output, summarize first then offer details on request
+    #|- Avoid walls of text — break into multiple focused messages if needed
+    #|
+    #|## Behavioral Rules
+    #|- Respond only to messages directed at you (containing "cub" or using prefix)
+    #|- Do not tag or mention users unless explicitly asked
+    #|- Do not send empty messages
+    #|- If a tool call produces very long output, summarize it
   body
 }

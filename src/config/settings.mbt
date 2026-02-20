@@ -82,6 +82,8 @@ pub struct Settings {
   discord_allow_channels : Array[String]
   discord_command_prefix : String
   discord_proxy : String?
+  allowed_tools : Array[String]
+  allowed_skills : Array[String]
 } derive(Show)
 
 /// Create default settings.
@@ -113,6 +115,8 @@ pub fn Settings::default() -> Settings {
     discord_allow_channels: [],
     discord_command_prefix: "!",
     discord_proxy: None,
+    allowed_tools: [],
+    allowed_skills: [],
   }
 }
 
@@ -121,7 +125,9 @@ pub fn Settings::with_overrides(
   self : Settings,
   model~ : String? = None,
   max_tokens~ : Int? = None,
-  system_prompt~ : String? = None
+  system_prompt~ : String? = None,
+  allowed_tools~ : Array[String]? = None,
+  allowed_skills~ : Array[String]? = None
 ) -> Settings {
   {
     ..self,
@@ -136,6 +142,14 @@ pub fn Settings::with_overrides(
     system_prompt: match system_prompt {
       Some(p) => p
       None => self.system_prompt
+    },
+    allowed_tools: match allowed_tools {
+      Some(t) => t
+      None => self.allowed_tools
+    },
+    allowed_skills: match allowed_skills {
+      Some(s) => s
+      None => self.allowed_skills
     },
   }
 }
@@ -371,5 +385,7 @@ pub async fn load_settings(workspace_path~ : String? = None) -> Settings {
       defaults.discord_command_prefix,
     ),
     discord_proxy: get_env(combined, "BUB_DISCORD_PROXY"),
+    allowed_tools: [],
+    allowed_skills: [],
   }
 }

@@ -21,7 +21,7 @@ pub fn print_welcome(model : String, workspace : String) -> Unit {
   print_colored(ansi_bold + ansi_cyan, "  cub")
   print_colored(ansi_dim, "  model: " + model)
   print_colored(ansi_dim, "  workspace: " + workspace)
-  print_colored(ansi_dim, "  type ,help for commands, ,quit to exit")
+  print_colored(ansi_dim, "  type ,help for commands, ,sh for shell mode, ,quit to exit")
   println("")
 }
 
@@ -48,4 +48,9 @@ pub fn print_command(text : String) -> Unit {
 /// Print the prompt (with newline since MoonBit has no print without newline).
 pub fn print_prompt() -> Unit {
   println(ansi_bold + "> " + ansi_reset)
+}
+
+/// Print shell mode prompt.
+pub fn print_shell_prompt() -> Unit {
+  println(ansi_bold + "$ " + ansi_reset)
 }

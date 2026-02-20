@@ -85,11 +85,16 @@ fn AppRuntime::create_session(
   let tape_name = self.settings.tape_name + ":" + session_slug(session_id)
   let tape = @tape.TapeService::new(tape_name, self.store)
   // Create tool registry and register builtin tools
-  let registry = @tools.ToolRegistry::new()
+  let allowed = if self.settings.allowed_tools.length() > 0 {
+    Some(self.settings.allowed_tools)
+  } else {
+    None
+  }
+  let registry = @tools.ToolRegistry::new(allowed_tools=allowed)
   let tool_ctx = @tools.ToolContext::new(tape, self.workspace)
   @tools.register_builtin_tools(registry, tool_ctx)
   // Register tape tools
-  register_tape_tools(registry, tape, self.workspace)
+  register_tape_tools(registry, tape, self.workspace, allowed_skills=self.settings.allowed_skills)
   // Create tool view
   let tool_view = @tools.ProgressiveToolView::new(registry)
   // Create LLM client
@@ -110,7 +115,21 @@ fn AppRuntime::create_session(
     router,
     tool_view,
     registry.model_tools(),
-    fn() { @skills.discover_skills(ws) },
+    fn() {
+      let skills = @skills.discover_skills(ws)
+      let allowed = self.settings.allowed_skills
+      if allowed.length() == 0 {
+        skills
+      } else {
+        let filtered : Array[@skills.SkillMetadata] = []
+        for s in skills {
+          if allowed.contains(s.name) {
+            filtered.push(s)
+          }
+        }
+        filtered
+      }
+    },
     fn(name) { @skills.load_skill_body(name, ws) },
     self.settings.model,
     self.settings.max_steps,
@@ -190,6 +209,23 @@ fn uint_to_hex(n : UInt) -> String {
   buf.to_string()
 }
 
+/// Filter skills by allowed list (empty = allow all).
+fn filter_skills(
+  skills : Array[@skills.SkillMetadata],
+  allowed : Array[String]
+) -> Array[@skills.SkillMetadata] {
+  if allowed.length() == 0 {
+    return skills
+  }
+  let filtered : Array[@skills.SkillMetadata] = []
+  for s in skills {
+    if allowed.contains(s.name) {
+      filtered.push(s)
+    }
+  }
+  filtered
+}
+
 /// Read AGENTS.md from workspace root, returns empty string if not found.
 fn read_agents_md(workspace : String) -> String {
   let path = workspace + "/AGENTS.md"
@@ -232,7 +268,8 @@ extern "C" fn cub_read_file(path : Bytes, buf : Bytes, buf_size : Int) -> Int = 
 fn register_tape_tools(
   registry : @tools.ToolRegistry,
   tape : @tape.TapeService,
-  workspace : String
+  workspace : String,
+  allowed_skills~ : Array[String] = []
 ) -> Unit {
   // ,help
   registry.register(
@@ -367,11 +404,13 @@ fn register_tape_tools(
   )
   // ,skills.list
   let ws_for_skills = workspace
+  let skill_filter = allowed_skills
   registry.register(
     "skills.list",
     "List available skills",
     handler=fn(_args) {
-      let skills = @skills.discover_skills(ws_for_skills)
+      let all_skills = @skills.discover_skills(ws_for_skills)
+      let skills = filter_skills(all_skills, skill_filter)
       if skills.length() == 0 {
         return "no skills found"
       }

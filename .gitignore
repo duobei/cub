@@ -3,3 +3,4 @@ _build/
 .bub/
 .cub/
 .env
+.agent/
