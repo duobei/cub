@@ -1,4 +1,4 @@
-/// Forward-only agent loop stub.
+/// Forward-only agent loop.
 
 /// Deterministic single-session loop built on an endless tape.
 pub struct AgentLoop {
@@ -20,8 +20,43 @@ pub fn AgentLoop::new(
 pub async fn AgentLoop::handle_input(
   self : AgentLoop,
   raw : String
-) -> LoopResult!Error {
-  ignore(self)
-  ignore(raw)
-  abort("AgentLoop::handle_input not implemented")
+) -> LoopResult {
+  let route = self.router.route_user(raw)
+  if route.exit_requested {
+    return {
+      immediate_output: route.immediate_output,
+      assistant_output: "",
+      exit_requested: true,
+      steps: 0,
+      error: None,
+    }
+  }
+  if not(route.enter_model) {
+    return {
+      immediate_output: route.immediate_output,
+      assistant_output: "",
+      exit_requested: false,
+      steps: 0,
+      error: None,
+    }
+  }
+  // Enter model loop
+  let model_result = self.model_runner.run(route.model_prompt)
+  // Record loop result event
+  let result_data : Map[String, Json] = Map::new()
+  result_data["steps"] = model_result.steps.to_json()
+  result_data["followups"] = model_result.command_followups.to_json()
+  result_data["exit_requested"] = model_result.exit_requested.to_json()
+  match model_result.error {
+    Some(e) => result_data["error"] = e.to_json()
+    None => ()
+  }
+  self.tape.append_event("loop.result", Json::object(result_data))
+  {
+    immediate_output: route.immediate_output,
+    assistant_output: model_result.visible_text,
+    exit_requested: model_result.exit_requested,
+    steps: model_result.steps,
+    error: model_result.error,
+  }
 }
