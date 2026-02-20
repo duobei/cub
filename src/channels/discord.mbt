@@ -49,7 +49,13 @@ pub fn DiscordChannel::name(_self : DiscordChannel) -> String {
   "discord"
 }
 
-/// Start the Discord channel: connect to Gateway, handle events.
+/// Maximum reconnect delay in milliseconds.
+let max_reconnect_delay_ms : Int = 60000
+
+/// Initial reconnect delay in milliseconds.
+let initial_reconnect_delay_ms : Int = 2000
+
+/// Start the Discord channel with automatic reconnection.
 pub async fn DiscordChannel::start(
   self : DiscordChannel,
   handler : async (ChannelMessage) -> Unit
@@ -58,24 +64,58 @@ pub async fn DiscordChannel::start(
     println("[discord] error: token is empty")
     return
   }
+  let mut delay = initial_reconnect_delay_ms
+  for {
+    let ok = self.connect_and_run(handler)
+    // Reset delay on successful long-lived connections
+    if ok {
+      delay = initial_reconnect_delay_ms
+    } else {
+      // Exponential backoff on quick failures
+      delay = if delay * 2 < max_reconnect_delay_ms {
+        delay * 2
+      } else {
+        max_reconnect_delay_ms
+      }
+    }
+    println(
+      "[discord] reconnecting in " + (delay / 1000).to_string() + "s...",
+    )
+    @async.sleep(delay)
+  }
+}
+
+/// Connect to Gateway, run event loop. Returns true if session lasted > 30s.
+async fn DiscordChannel::connect_and_run(
+  self : DiscordChannel,
+  handler : async (ChannelMessage) -> Unit
+) -> Bool {
   println("[discord] connecting to gateway...")
   let conn = try {
     @websocket.connect(discord_gateway_url)
   } catch {
     e => {
       println("[discord] gateway connection failed: " + e.to_string())
-      return
+      return false
     }
   }
   // Read Hello (op 10)
-  let hello_text = read_text_message(conn)
+  let hello_text = try {
+    read_text_message(conn)
+  } catch {
+    e => {
+      println("[discord] failed to read hello: " + e.to_string())
+      conn.close()
+      return false
+    }
+  }
   let hello_json = try {
     @json.parse(hello_text)
   } catch {
     _ => {
       println("[discord] invalid hello message")
       conn.close()
-      return
+      return false
     }
   }
   let heartbeat_interval = match hello_json {
@@ -85,7 +125,7 @@ pub async fn DiscordChannel::start(
     _ => {
       println("[discord] unexpected hello format")
       conn.close()
-      return
+      return false
     }
   }
   println(
@@ -95,11 +135,15 @@ pub async fn DiscordChannel::start(
   )
   // Send Identify
   self.send_identify(conn)
+  // Track connection start time (approximate via heartbeat count)
+  let heartbeat_count : Ref[Int] = { val: 0 }
   // Run heartbeat and event loop concurrently using task group
   @async.with_task_group(
     async fn(group) {
       group.spawn_bg(
-        async fn() { self.heartbeat_loop(conn, heartbeat_interval) },
+        async fn() {
+          self.heartbeat_loop(conn, heartbeat_interval, counter=heartbeat_count)
+        },
         allow_failure=true,
       )
       self.event_loop(conn, handler)
@@ -107,6 +151,8 @@ pub async fn DiscordChannel::start(
       println("[discord] disconnected")
     },
   )
+  // If we got at least a few heartbeats, connection was healthy
+  heartbeat_count.val > 0
 }
 
 /// Send Identify payload.
@@ -138,7 +184,8 @@ async fn DiscordChannel::send_identify(
 async fn DiscordChannel::heartbeat_loop(
   self : DiscordChannel,
   conn : @websocket.Conn,
-  interval_ms : Int
+  interval_ms : Int,
+  counter~ : Ref[Int] = { val: 0 }
 ) -> Unit {
   for {
     @async.sleep(interval_ms)
@@ -150,6 +197,7 @@ async fn DiscordChannel::heartbeat_loop(
     }
     try {
       conn.send_text(Json::object(payload).stringify())
+      counter.val += 1
     } catch {
       _ => break
     }
