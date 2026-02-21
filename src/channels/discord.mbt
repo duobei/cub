@@ -61,7 +61,7 @@ pub async fn DiscordChannel::start(
   handler : async (ChannelMessage) -> Unit
 ) -> Unit {
   if self.token.is_empty() {
-    println("[discord] error: token is empty")
+    @log.error("discord", "token is empty")
     return
   }
   let mut delay = initial_reconnect_delay_ms
@@ -78,7 +78,7 @@ pub async fn DiscordChannel::start(
         max_reconnect_delay_ms
       }
     }
-    println("[discord] reconnecting in \{delay / 1000}s...")
+    @log.info("discord", "reconnecting in \{delay / 1000}s...")
     @async.sleep(delay)
   }
 }
@@ -88,12 +88,12 @@ async fn DiscordChannel::connect_and_run(
   self : DiscordChannel,
   handler : async (ChannelMessage) -> Unit
 ) -> Bool {
-  println("[discord] connecting to gateway...")
+  @log.info("discord", "connecting to gateway...")
   let conn = try {
     @websocket.connect(discord_gateway_url)
   } catch {
     e => {
-      println("[discord] gateway connection failed: \{e}")
+      @log.error("discord", "gateway connection failed: \{e}")
       return false
     }
   }
@@ -102,7 +102,7 @@ async fn DiscordChannel::connect_and_run(
     read_text_message(conn)
   } catch {
     e => {
-      println("[discord] failed to read hello: \{e}")
+      @log.error("discord", "failed to read hello: \{e}")
       conn.close()
       return false
     }
@@ -111,7 +111,7 @@ async fn DiscordChannel::connect_and_run(
     @json.parse(hello_text)
   } catch {
     _ => {
-      println("[discord] invalid hello message")
+      @log.error("discord", "invalid hello message")
       conn.close()
       return false
     }
@@ -121,12 +121,12 @@ async fn DiscordChannel::connect_and_run(
       interval.to_int()
     }
     _ => {
-      println("[discord] unexpected hello format")
+      @log.error("discord", "unexpected hello format")
       conn.close()
       return false
     }
   }
-  println("[discord] hello received, heartbeat interval: \{heartbeat_interval}ms")
+  @log.info("discord", "hello received, heartbeat interval: \{heartbeat_interval}ms")
   // Send Identify
   self.send_identify(conn)
   // Track connection start time (approximate via heartbeat count)
@@ -142,7 +142,7 @@ async fn DiscordChannel::connect_and_run(
       )
       self.event_loop(conn, handler)
       conn.close()
-      println("[discord] disconnected")
+      @log.info("discord", "disconnected")
     },
   )
   // If we got at least a few heartbeats, connection was healthy
@@ -170,7 +170,7 @@ async fn DiscordChannel::send_identify(
   try {
     conn.send_text(text)
   } catch {
-    e => println("[discord] identify send error: \{e}")
+    e => @log.error("discord", "identify send error: \{e}")
   }
 }
 
@@ -273,9 +273,9 @@ async fn DiscordChannel::handle_dispatch(
       match data {
         { "user": { "id": String(uid), .. }, .. } => {
           self.bot_user_id = uid
-          println("[discord] ready, bot user id: \{uid}")
+          @log.info("discord", "ready, bot user id: \{uid}")
         }
-        _ => println("[discord] ready")
+        _ => @log.info("discord", "ready")
       }
     }
     "MESSAGE_CREATE" => self.handle_message_create(data, handler)
@@ -342,7 +342,7 @@ async fn DiscordChannel::handle_message_create(
   if perm != "ok" {
     return  // "ignored" — wrong channel, silently skip
   }
-  println("[discord] message from \{author_name} in \{channel_id}: \{truncate(content, 100)}")
+  @log.info("discord", "message from \{author_name} in \{channel_id}: \{truncate(content, 100)}")
   // Build ChannelMessage
   let session_id = "discord:\{channel_id}"
   let metadata : Map[String, Json] = Map::new()
@@ -418,10 +418,10 @@ pub async fn DiscordChannel::send_message(
     try {
       let (response, _data) = @http.post(url, body_str, headers~)
       if response.code != 200 && response.code != 204 {
-        println("[discord] send_message failed: HTTP \{response.code}")
+        @log.warn("discord", "send_message failed: HTTP \{response.code}")
       }
     } catch {
-      e => println("[discord] send_message error: \{e}")
+      e => @log.error("discord", "send_message error: \{e}")
     }
   }
 }

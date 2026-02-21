@@ -191,7 +191,7 @@ fn get_env(env : Map[String, String], key : String) -> String? {
 }
 
 /// Get an env var as bool.
-fn get_env_bool(env : Map[String, String], key : String) -> Bool? {
+pub fn get_env_bool(env : Map[String, String], key : String) -> Bool? {
   match env.get(key) {
     Some("true") | Some("1") | Some("yes") | Some("TRUE") | Some("True") =>
       Some(true)
@@ -202,7 +202,7 @@ fn get_env_bool(env : Map[String, String], key : String) -> Bool? {
 }
 
 /// Get an env var as int.
-fn get_env_int(env : Map[String, String], key : String) -> Int? {
+pub fn get_env_int(env : Map[String, String], key : String) -> Int? {
   match env.get(key) {
     Some(s) =>
       try {
@@ -215,7 +215,7 @@ fn get_env_int(env : Map[String, String], key : String) -> Int? {
 }
 
 /// Parse a comma-separated list from an env var.
-fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
+pub fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
   match env.get(key) {
     Some(s) => {
       let trimmed = s.trim(chars=" \t").to_string()
@@ -261,7 +261,7 @@ fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
 }
 
 /// Parse a single dotenv line into (key, value). Returns None on skip.
-fn parse_dotenv_line(line : StringView) -> (String, String)? {
+pub fn parse_dotenv_line(line : StringView) -> (String, String)? {
   let trimmed = line.trim(chars=" \t\r")
   if trimmed.is_empty() || trimmed.has_prefix("#") {
     return None

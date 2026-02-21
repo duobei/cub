@@ -69,7 +69,7 @@ pub fn select_messages(entries : Array[TapeEntry]) -> Array[Json] {
 }
 
 /// Extract human-readable context from anchor state payload.
-fn extract_anchor_context(payload : Json) -> String {
+pub fn extract_anchor_context(payload : Json) -> String {
   let parts : Array[String] = []
   match payload {
     { "state": Object(state), .. } => {
@@ -180,7 +180,7 @@ fn normalize_tool_calls(payload : Json) -> Array[Json] {
 }
 
 /// Validate a tool call JSON: must have id, function.name, and parseable arguments.
-fn validate_tool_call(call : Json) -> Bool {
+pub fn validate_tool_call(call : Json) -> Bool {
   match call {
     { "id": String(id), "function": { "name": String(name), "arguments": String(args), .. }, .. } => {
       if id.is_empty() || name.is_empty() {
@@ -212,7 +212,7 @@ fn render_tool_result(result : Json) -> String {
 }
 
 /// Truncate tool output to max lines, appending a note if truncated.
-fn truncate_tool_output(text : String) -> String {
+pub fn truncate_tool_output(text : String) -> String {
   let lines = text.split("\n")
   let mut count = 0
   for _line in lines {

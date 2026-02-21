@@ -24,7 +24,7 @@ pub async fn ChannelManager::run(
   handler : async (ChannelMessage) -> Unit
 ) -> Unit {
   if self.channels.is_empty() {
-    println("[channels] no channels configured")
+    @log.warn("channels", "no channels configured")
     return
   }
   let names : Array[String] = []
@@ -32,7 +32,7 @@ pub async fn ChannelManager::run(
     names.push(ch.name())
   }
   let joined = names.join(", ")
-  println("[channels] starting: \{joined}")
+  @log.info("channels", "starting: \{joined}")
   // Start all channels concurrently using task group
   @async.with_task_group(
     fn(group) {

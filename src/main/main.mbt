@@ -50,7 +50,7 @@ fn main {
           )
           let manager = @channels.ChannelManager::new()
           manager.add_discord(discord)
-          println("[cub] starting message channels...")
+          @log.info("cub", "starting message channels...")
           manager.run(
             async fn(msg) {
               let result = runtime.handle_input(msg.session_id, msg.prompt)

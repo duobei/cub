@@ -1,0 +1,6 @@
+{
+  "import": [
+    { "path": "duobei/cub/config", "alias": "config" }
+  ],
+  "native-stub": ["log_ffi.c"]
+}

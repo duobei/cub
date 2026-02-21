@@ -5,6 +5,7 @@
     { "path": "moonbitlang/async/websocket", "alias": "websocket" },
     "moonbitlang/core/json",
     { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" },
-    "moonbitlang/core/buffer"
+    "moonbitlang/core/buffer",
+    { "path": "duobei/cub/log", "alias": "log" }
   ]
 }

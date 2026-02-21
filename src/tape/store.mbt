@@ -167,7 +167,7 @@ pub fn fnv1a_hash(input : String) -> String {
 }
 
 /// URL-encode a string for tape file names.
-fn url_encode(s : String) -> String {
+pub fn url_encode(s : String) -> String {
   let buf = StringBuilder::new()
   for ch in s {
     if (ch >= 'a' && ch <= 'z') ||

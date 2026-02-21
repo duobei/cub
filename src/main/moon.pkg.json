@@ -6,6 +6,7 @@
     { "path": "duobei/cub/cli", "alias": "cli" },
     { "path": "duobei/cub/config", "alias": "config" },
     { "path": "duobei/cub/channels", "alias": "channels" },
+    { "path": "duobei/cub/log", "alias": "log" },
     "moonbitlang/core/env"
   ]
 }
