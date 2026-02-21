@@ -30,31 +30,56 @@ fn main {
           cli.run()
         }
         "message" => {
-          // Channel mode (Discord)
-          if not(settings.discord_enabled) {
-            println("error: discord not enabled. Set CUB_DISCORD_ENABLED=true")
-            return
-          }
-          if settings.discord_token is None {
-            println("error: missing discord token. Set CUB_DISCORD_TOKEN")
-            return
-          }
-          let token = match settings.discord_token {
-            Some(t) => t
-            None => ""
-          }
-          let discord = @channels.DiscordChannel::new(
-            token,
-            allow_from=settings.discord_allow_from,
-            allow_channels=settings.discord_allow_channels,
-          )
+          // Channel mode (Discord + Telegram)
           let manager = @channels.ChannelManager::new()
-          manager.add_discord(discord)
+          // Discord
+          let discord : @channels.DiscordChannel? = if settings.discord_enabled {
+            match settings.discord_token {
+              Some(t) => {
+                let ch = @channels.DiscordChannel::new(
+                  t,
+                  allow_from=settings.discord_allow_from,
+                  allow_channels=settings.discord_allow_channels,
+                )
+                manager.add_discord(ch)
+                Some(ch)
+              }
+              None => {
+                @log.warn("cub", "discord enabled but no token set")
+                None
+              }
+            }
+          } else {
+            None
+          }
+          // Telegram
+          let telegram : @channels.TelegramChannel? = if settings.telegram_enabled {
+            match settings.telegram_token {
+              Some(t) => {
+                let ch = @channels.TelegramChannel::new(
+                  t,
+                  allow_from=settings.telegram_allow_from,
+                  allow_chats=settings.telegram_allow_chats,
+                )
+                manager.add_telegram(ch)
+                Some(ch)
+              }
+              None => {
+                @log.warn("cub", "telegram enabled but no token set")
+                None
+              }
+            }
+          } else {
+            None
+          }
+          if discord is None && telegram is None {
+            println("error: no channels enabled. Set CUB_DISCORD_ENABLED=true or CUB_TELEGRAM_ENABLED=true")
+            return
+          }
           @log.info("cub", "starting message channels...")
           manager.run(
             async fn(msg) {
               let result = runtime.handle_input(msg.session_id, msg.prompt)
-              // Send response back to Discord
               let output_parts : Array[String] = []
               if result.immediate_output.length() > 0 {
                 output_parts.push(result.immediate_output)
@@ -68,10 +93,20 @@ fn main {
               }
               if output_parts.length() > 0 {
                 let response = output_parts.join("\n\n")
-                // Extract channel_id from session_id (format: "discord:{channel_id}")
                 let channel_id = extract_channel_id(msg.session_id)
                 if channel_id.length() > 0 {
-                  discord.send_message(channel_id, response)
+                  // Route response to the right channel
+                  if msg.session_id.has_prefix("telegram:") {
+                    match telegram {
+                      Some(tg) => tg.send_message(channel_id, response)
+                      None => ()
+                    }
+                  } else {
+                    match discord {
+                      Some(dc) => dc.send_message(channel_id, response)
+                      None => ()
+                    }
+                  }
                 }
               }
             },
@@ -106,7 +141,7 @@ fn main {
           println("usage:")
           println("  cub [options]              interactive chat (default)")
           println("  cub chat [session_id]      interactive chat")
-          println("  cub message                run Discord channel")
+          println("  cub message                run channels (Discord/Telegram)")
           println("  cub run <msg>              run single message")
           println("  cub version                show version")
           println("")

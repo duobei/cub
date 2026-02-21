@@ -35,14 +35,14 @@ pub fn string_to_cstr(s : String) -> Bytes {
 pub fn collect_env_vars() -> Map[String, String] {
   let env : Map[String, String] = {}
   let keys = [
-    "BUB_MODEL", "BUB_API_KEY", "BUB_API_BASE", "BUB_OLLAMA_API_KEY",
-    "BUB_OLLAMA_API_BASE", "LLM_API_KEY", "OPENROUTER_API_KEY",
-    "BUB_MAX_TOKENS", "BUB_MODEL_TIMEOUT_SECONDS", "BUB_SYSTEM_PROMPT",
-    "BUB_HOME", "BUB_WORKSPACE_PATH", "BUB_TAPE_NAME", "BUB_MAX_STEPS",
-    "BUB_PROACTIVE_RESPONSE", "BUB_TELEGRAM_ENABLED", "BUB_TELEGRAM_TOKEN",
-    "BUB_TELEGRAM_ALLOW_FROM", "BUB_TELEGRAM_ALLOW_CHATS", "BUB_TELEGRAM_PROXY",
-    "BUB_DISCORD_ENABLED", "BUB_DISCORD_TOKEN", "BUB_DISCORD_ALLOW_FROM",
-    "BUB_DISCORD_ALLOW_CHANNELS", "BUB_DISCORD_COMMAND_PREFIX", "BUB_DISCORD_PROXY",
+    "CUB_MODEL", "CUB_API_KEY", "CUB_API_BASE", "CUB_OLLAMA_API_KEY",
+    "CUB_OLLAMA_API_BASE", "LLM_API_KEY", "OPENROUTER_API_KEY",
+    "CUB_MAX_TOKENS", "CUB_MODEL_TIMEOUT_SECONDS", "CUB_SYSTEM_PROMPT",
+    "CUB_HOME", "CUB_WORKSPACE_PATH", "CUB_TAPE_NAME", "CUB_MAX_STEPS",
+    "CUB_PROACTIVE_RESPONSE", "CUB_TELEGRAM_ENABLED", "CUB_TELEGRAM_TOKEN",
+    "CUB_TELEGRAM_ALLOW_FROM", "CUB_TELEGRAM_ALLOW_CHATS", "CUB_TELEGRAM_PROXY",
+    "CUB_DISCORD_ENABLED", "CUB_DISCORD_TOKEN", "CUB_DISCORD_ALLOW_FROM",
+    "CUB_DISCORD_ALLOW_CHANNELS", "CUB_DISCORD_COMMAND_PREFIX", "CUB_DISCORD_PROXY",
     "HOME", "PWD",
   ]
   for key in keys {
@@ -101,7 +101,7 @@ pub fn Settings::default() -> Settings {
     system_prompt: "",
     home: None,
     workspace_path: None,
-    tape_name: "bub",
+    tape_name: "cub",
     max_steps: 100,
     proactive_response: false,
     telegram_enabled: false,
@@ -174,13 +174,13 @@ pub fn Settings::resolved_api_key(self : Settings) -> String? {
   None
 }
 
-/// Resolve home directory, default to ~/.bub.
+/// Resolve home directory, default to ~/.cub.
 pub fn Settings::resolve_home(self : Settings) -> String {
   match self.home {
     Some(h) => h
     None => {
       let home = getenv("HOME").unwrap_or(".")
-      "\{home}/.bub"
+      "\{home}/.cub"
     }
   }
 }
@@ -313,7 +313,7 @@ pub fn parse_dotenv(content : String) -> Map[String, String] {
   result
 }
 
-/// Load settings from environment variables (with BUB_ prefix) and optional .env file.
+/// Load settings from environment variables (with CUB_ prefix) and optional .env file.
 pub async fn load_settings(workspace_path~ : String? = None) -> Settings {
   let env = collect_env_vars()
   // Try loading .env file
@@ -333,58 +333,58 @@ pub async fn load_settings(workspace_path~ : String? = None) -> Settings {
   }
   let defaults = Settings::default()
   {
-    model: get_env(combined, "BUB_MODEL").unwrap_or(defaults.model),
-    api_key: get_env(combined, "BUB_API_KEY"),
-    api_base: get_env(combined, "BUB_API_BASE"),
-    ollama_api_key: get_env(combined, "BUB_OLLAMA_API_KEY"),
-    ollama_api_base: get_env(combined, "BUB_OLLAMA_API_BASE"),
+    model: get_env(combined, "CUB_MODEL").unwrap_or(defaults.model),
+    api_key: get_env(combined, "CUB_API_KEY"),
+    api_base: get_env(combined, "CUB_API_BASE"),
+    ollama_api_key: get_env(combined, "CUB_OLLAMA_API_KEY"),
+    ollama_api_base: get_env(combined, "CUB_OLLAMA_API_BASE"),
     llm_api_key: get_env(combined, "LLM_API_KEY"),
     openrouter_api_key: get_env(combined, "OPENROUTER_API_KEY"),
-    max_tokens: get_env_int(combined, "BUB_MAX_TOKENS").unwrap_or(defaults.max_tokens),
-    model_timeout_seconds: match get_env_int(combined, "BUB_MODEL_TIMEOUT_SECONDS") {
+    max_tokens: get_env_int(combined, "CUB_MAX_TOKENS").unwrap_or(defaults.max_tokens),
+    model_timeout_seconds: match get_env_int(combined, "CUB_MODEL_TIMEOUT_SECONDS") {
       Some(v) => Some(v)
       None => defaults.model_timeout_seconds
     },
-    system_prompt: get_env(combined, "BUB_SYSTEM_PROMPT").unwrap_or(defaults.system_prompt),
-    home: get_env(combined, "BUB_HOME"),
+    system_prompt: get_env(combined, "CUB_SYSTEM_PROMPT").unwrap_or(defaults.system_prompt),
+    home: get_env(combined, "CUB_HOME"),
     workspace_path: match workspace_path {
       Some(p) => Some(p)
-      None => get_env(combined, "BUB_WORKSPACE_PATH")
+      None => get_env(combined, "CUB_WORKSPACE_PATH")
     },
-    tape_name: get_env(combined, "BUB_TAPE_NAME").unwrap_or(defaults.tape_name),
-    max_steps: get_env_int(combined, "BUB_MAX_STEPS").unwrap_or(defaults.max_steps),
-    proactive_response: get_env_bool(combined, "BUB_PROACTIVE_RESPONSE").unwrap_or(
+    tape_name: get_env(combined, "CUB_TAPE_NAME").unwrap_or(defaults.tape_name),
+    max_steps: get_env_int(combined, "CUB_MAX_STEPS").unwrap_or(defaults.max_steps),
+    proactive_response: get_env_bool(combined, "CUB_PROACTIVE_RESPONSE").unwrap_or(
       defaults.proactive_response,
     ),
-    telegram_enabled: get_env_bool(combined, "BUB_TELEGRAM_ENABLED").unwrap_or(
+    telegram_enabled: get_env_bool(combined, "CUB_TELEGRAM_ENABLED").unwrap_or(
       defaults.telegram_enabled,
     ),
-    telegram_token: get_env(combined, "BUB_TELEGRAM_TOKEN"),
+    telegram_token: get_env(combined, "CUB_TELEGRAM_TOKEN"),
     telegram_allow_from: {
-      let l = get_env_list(combined, "BUB_TELEGRAM_ALLOW_FROM")
+      let l = get_env_list(combined, "CUB_TELEGRAM_ALLOW_FROM")
       if l.length() > 0 { l } else { defaults.telegram_allow_from }
     },
     telegram_allow_chats: {
-      let l = get_env_list(combined, "BUB_TELEGRAM_ALLOW_CHATS")
+      let l = get_env_list(combined, "CUB_TELEGRAM_ALLOW_CHATS")
       if l.length() > 0 { l } else { defaults.telegram_allow_chats }
     },
-    telegram_proxy: get_env(combined, "BUB_TELEGRAM_PROXY"),
-    discord_enabled: get_env_bool(combined, "BUB_DISCORD_ENABLED").unwrap_or(
+    telegram_proxy: get_env(combined, "CUB_TELEGRAM_PROXY"),
+    discord_enabled: get_env_bool(combined, "CUB_DISCORD_ENABLED").unwrap_or(
       defaults.discord_enabled,
     ),
-    discord_token: get_env(combined, "BUB_DISCORD_TOKEN"),
+    discord_token: get_env(combined, "CUB_DISCORD_TOKEN"),
     discord_allow_from: {
-      let l = get_env_list(combined, "BUB_DISCORD_ALLOW_FROM")
+      let l = get_env_list(combined, "CUB_DISCORD_ALLOW_FROM")
       if l.length() > 0 { l } else { defaults.discord_allow_from }
     },
     discord_allow_channels: {
-      let l = get_env_list(combined, "BUB_DISCORD_ALLOW_CHANNELS")
+      let l = get_env_list(combined, "CUB_DISCORD_ALLOW_CHANNELS")
       if l.length() > 0 { l } else { defaults.discord_allow_channels }
     },
-    discord_command_prefix: get_env(combined, "BUB_DISCORD_COMMAND_PREFIX").unwrap_or(
+    discord_command_prefix: get_env(combined, "CUB_DISCORD_COMMAND_PREFIX").unwrap_or(
       defaults.discord_command_prefix,
     ),
-    discord_proxy: get_env(combined, "BUB_DISCORD_PROXY"),
+    discord_proxy: get_env(combined, "CUB_DISCORD_PROXY"),
     allowed_tools: [],
     allowed_skills: [],
   }

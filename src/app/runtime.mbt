@@ -239,6 +239,92 @@ extern "C" fn cub_read_file(path : Bytes, buf : Bytes, buf_size : Int) -> Int = 
 #borrow(path, data)
 extern "C" fn cub_write_file(path : Bytes, data : Bytes, data_len : Int) -> Int = "cub_write_file"
 
+/// FFI: list directory entries as newline-separated string.
+#borrow(path, buf)
+extern "C" fn cub_list_dir(path : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_list_dir"
+
+/// List files in a directory synchronously.
+fn list_dir_sync(path : String) -> Array[String] {
+  let path_bytes = @config.string_to_cstr(path)
+  let len = cub_list_dir(path_bytes, Bytes::new(0), 0)
+  if len <= 0 {
+    return []
+  }
+  let buf = Bytes::new(len)
+  let actual = cub_list_dir(path_bytes, buf, len)
+  if actual <= 0 {
+    return []
+  }
+  let text = @utf8.decode_lossy(buf[:actual])
+  let entries : Array[String] = []
+  for part in text.split("\n") {
+    let s = part.to_string()
+    if not(s.is_empty()) {
+      entries.push(s)
+    }
+  }
+  entries
+}
+
+/// Decode tape filename back to tape name.
+/// Format: {workspace_hash}__{url_encoded_name}.jsonl → name
+fn decode_tape_filename(filename : String) -> String {
+  // Strip .jsonl suffix
+  let base = try {
+    filename[:filename.length() - 6].to_string()
+  } catch {
+    _ => return filename
+  }
+  // Find __ separator
+  let mut sep_pos = -1
+  for i = 0; i < base.length() - 1; i = i + 1 {
+    if base[i] == '_'.to_int().to_uint16() && i + 1 < base.length() && base[i + 1] == '_'.to_int().to_uint16() {
+      sep_pos = i
+      break
+    }
+  }
+  if sep_pos < 0 {
+    return base
+  }
+  // Get the encoded name part after __
+  let encoded = try {
+    base[sep_pos + 2:].to_string()
+  } catch {
+    _ => return base
+  }
+  // Simple URL decode: %XX → char
+  url_decode(encoded)
+}
+
+/// Simple URL percent-decode.
+fn url_decode(s : String) -> String {
+  let buf = StringBuilder::new()
+  let mut i = 0
+  while i < s.length() {
+    if s[i] == '%'.to_int().to_uint16() && i + 2 < s.length() {
+      let hi = hex_digit(s[i + 1])
+      let lo = hex_digit(s[i + 2])
+      if hi >= 0 && lo >= 0 {
+        buf.write_char((hi * 16 + lo).unsafe_to_char())
+        i += 3
+        continue
+      }
+    }
+    buf.write_char(s[i].to_int().unsafe_to_char())
+    i += 1
+  }
+  buf.to_string()
+}
+
+/// Convert hex digit to int, -1 if invalid.
+fn hex_digit(ch : UInt16) -> Int {
+  let c = ch.to_int()
+  if c >= 48 && c <= 57 { return c - 48 } // 0-9
+  if c >= 65 && c <= 70 { return c - 55 } // A-F
+  if c >= 97 && c <= 102 { return c - 87 } // a-f
+  -1
+}
+
 /// Read MEMORY.md from home directory, returns empty string if not found.
 fn read_memory_md(home : String) -> String {
   let path = "\{home}/MEMORY.md"
@@ -461,6 +547,36 @@ fn register_tape_tools(
         Some(body) => "skill: \{name}\n\n\{body}"
         None => "skill not found: \{name}"
       }
+    },
+  )
+  // ,sessions
+  let sessions_home = home
+  registry.register(
+    "sessions",
+    "List tape sessions in this workspace",
+    handler=fn(_args) {
+      let tape_dir = "\{sessions_home}/tapes"
+      let files = list_dir_sync(tape_dir)
+      let sessions : Array[String] = []
+      for file in files {
+        if file.length() > 6 {
+          // Check for .jsonl suffix
+          let has_suffix = try {
+            file[file.length() - 6:].to_string() == ".jsonl"
+          } catch {
+            _ => false
+          }
+          if has_suffix {
+            // Extract tape name from filename: {hash}__{name}.jsonl
+            let name = decode_tape_filename(file)
+            sessions.push(name)
+          }
+        }
+      }
+      if sessions.is_empty() {
+        return "no sessions found"
+      }
+      "Sessions:\n" + sessions.map(fn(s) { "  \{s}" }).join("\n")
     },
   )
   // ,memory.read

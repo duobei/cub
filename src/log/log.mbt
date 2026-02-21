@@ -18,19 +18,19 @@ pub fn LogLevel::to_string(self : LogLevel) -> String {
   }
 }
 
-/// Global minimum log level (set from BUB_LOG_LEVEL env var).
+/// Global minimum log level (set from CUB_LOG_LEVEL env var).
 let global_level : Ref[LogLevel] = { val: Info }
 
 /// Whether the global level has been initialized.
 let level_initialized : Ref[Bool] = { val: false }
 
-/// Initialize log level from environment variable BUB_LOG_LEVEL.
+/// Initialize log level from environment variable CUB_LOG_LEVEL.
 fn ensure_initialized() -> Unit {
   if level_initialized.val {
     return
   }
   level_initialized.val = true
-  match @config.getenv("BUB_LOG_LEVEL") {
+  match @config.getenv("CUB_LOG_LEVEL") {
     Some(s) => {
       let lower = s.to_lower()
       match lower {

@@ -122,7 +122,7 @@ async fn run_bash_command(
       extra_env[k] = v
     }
   }
-  extra_env["BUB_SESSION_ID"] = session_id
+  extra_env["CUB_SESSION_ID"] = session_id
   let (exit_code, stdout_data, stderr_data) = try {
     @async.with_timeout(
       timeout * 1000,
