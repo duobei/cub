@@ -340,7 +340,9 @@ fn runtime_contract() -> String {
     #|In the handoff state, describe the CURRENT task status and NEXT steps — not a summary of history.
     #|Example: handoff(name="refactor/phase2", summary="Completed router refactor. Next: update tests.", context="Files changed: router.mbt, types.mbt", next_steps="Run tests and fix failures")
     #|If you need to recall earlier conversation, use tape.search to retrieve specific information.
+    #|MEMORY.md is already loaded into your system prompt — do NOT call memory.read unless the user asks.
     #|Use memory.save to persist important facts (project conventions, user preferences) across sessions.
+    #|When you discover important information worth remembering, proactively call memory.save.
     #|</context_contract>
   contract
 }
