@@ -88,6 +88,7 @@ fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     "Run shell command",
     detail="Execute a shell command using bash -lc. Returns stdout on success, stderr on failure.",
     parameters=params,
+    requires_confirmation=true,
     handler=async fn(args) {
       let cmd = match args {
         { "cmd": String(c), .. } => c

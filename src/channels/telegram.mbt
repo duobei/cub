@@ -159,18 +159,29 @@ async fn TelegramChannel::handle_update(
 }
 
 ///|
-/// Send a message to a Telegram chat.
+/// Escape text for Telegram HTML parse mode.
+fn escape_html(text : String) -> String {
+  text
+  .replace(old="&", new="&amp;")
+  .replace(old="<", new="&lt;")
+  .replace(old=">", new="&gt;")
+}
+
+///|
+/// Send a message to a Telegram chat with HTML formatting.
 pub async fn TelegramChannel::send_message(
   self : TelegramChannel,
   chat_id : String,
   text : String,
 ) -> Unit {
+  let escaped = escape_html(text)
   // Chunk if too long
-  let chunks = chunk_message(text, telegram_message_limit)
+  let chunks = chunk_message(escaped, telegram_message_limit)
   for chunk in chunks {
     let body : Map[String, Json] = {}
     body["chat_id"] = chat_id.to_json()
     body["text"] = chunk.to_json()
+    body["parse_mode"] = "HTML".to_json()
     let url = "\{telegram_api_base}/bot\{self.token}/sendMessage"
     let headers : Map[String, String] = {}
     headers["Content-Type"] = "application/json"

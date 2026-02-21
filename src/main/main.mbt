@@ -17,10 +17,15 @@ fn main {
       allowed_tools=parsed.allowed_tools,
       allowed_skills=parsed.allowed_skills,
     )
-    // Create runtime
-    let runtime = @app.AppRuntime::new(settings, workspace)
     // Parse command
     let command = parsed.command
+    // Create runtime — CLI modes get tool confirmation, channels auto-approve
+    let confirm_fn : ((String, String) -> Bool)? = if command == "chat" {
+      Some(@cli.confirm_tool)
+    } else {
+      None
+    }
+    let runtime = @app.AppRuntime::new(settings, workspace, confirm_fn~)
     match command {
       "chat" => {
         // Interactive CLI mode

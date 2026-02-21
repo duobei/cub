@@ -24,6 +24,7 @@ pub fn ToolRegistry::register(
   detail? : String = "",
   parameters? : Json = Json::object(Map::new()),
   source? : String = "builtin",
+  requires_confirmation? : Bool = false,
   handler~ : async (Json) -> String,
 ) -> Unit {
   // Check allowed_tools filter
@@ -36,6 +37,7 @@ pub fn ToolRegistry::register(
     description: short_description,
     parameters,
     handler,
+    requires_confirmation,
   }
   let descriptor : ToolDescriptor = {
     name,
@@ -57,6 +59,18 @@ pub fn ToolRegistry::has(self : ToolRegistry, name : String) -> Bool {
 /// Get all descriptors.
 pub fn ToolRegistry::descriptors(self : ToolRegistry) -> Array[ToolDescriptor] {
   self.tools.values().collect()
+}
+
+///|
+/// Check if a tool requires confirmation before execution.
+pub fn ToolRegistry::needs_confirmation(
+  self : ToolRegistry,
+  name : String,
+) -> Bool {
+  match self.tools.get(name) {
+    Some(descriptor) => descriptor.tool.requires_confirmation
+    None => false
+  }
 }
 
 ///|

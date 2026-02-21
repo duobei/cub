@@ -34,6 +34,8 @@ pub struct AppRuntime {
   workspace : String
   sessions : Map[String, SessionRuntime]
   store : @tape.FileTapeStore
+  confirm_fn : ((String, String) -> Bool)?
+  on_chunk : ((String) -> Unit)?
 }
 
 ///|
@@ -41,10 +43,12 @@ pub struct AppRuntime {
 pub async fn AppRuntime::new(
   settings : @config.Settings,
   workspace : String,
+  confirm_fn? : ((String, String) -> Bool)? = None,
+  on_chunk? : ((String) -> Unit)? = None,
 ) -> AppRuntime {
   let home = settings.home.unwrap_or("\{workspace}/.cub")
   let store = @tape.FileTapeStore::new(home, workspace)
-  { settings, workspace, sessions: {}, store }
+  { settings, workspace, sessions: {}, store, confirm_fn, on_chunk }
 }
 
 ///|
@@ -112,6 +116,8 @@ fn AppRuntime::create_session(
     api_key,
     api_base=self.settings.api_base,
     max_tokens=self.settings.max_tokens,
+    confirm_fn=self.confirm_fn,
+    on_chunk=self.on_chunk,
   )
   // Create router
   let router = @core.InputRouter::new(registry, tool_view, tape, self.workspace)
@@ -588,7 +594,9 @@ fn register_tape_tools(
     if sessions.is_empty() {
       return "no sessions found"
     }
-    "Sessions:\n" + sessions.map(fn(s) { "  \{s}" }).join("\n")
+    "Sessions:\n" +
+    sessions.map(fn(s) { "  \{s}" }).join("\n") +
+    "\n\nUse `,session <name>` to switch."
   })
   // ,memory.read
   let mem_home_read = home

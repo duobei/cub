@@ -1,10 +1,30 @@
 /// Interactive REPL with readline history and shell mode toggle.
 
 ///|
+/// CLI-based tool confirmation using readline.
+/// Returns true if user approves, false otherwise.
+pub fn confirm_tool(tool_name : String, args : String) -> Bool {
+  // Truncate long args for display
+  let display_args = if args.length() > 200 {
+    (args[:200].to_string() catch { _ => args }) + "..."
+  } else {
+    args
+  }
+  let prompt = "\u001b[33mRun \{tool_name}: \{display_args}? [y/N] \u001b[0m"
+  match readline_read(prompt) {
+    None => false
+    Some(line) => {
+      let answer = line.trim().to_string().to_lower()
+      answer == "y" || answer == "yes"
+    }
+  }
+}
+
+///|
 /// Interactive CLI session.
 pub struct InteractiveCli {
   runtime : @app.AppRuntime
-  session_id : String
+  mut session_id : String
   mut shell_mode : Bool
   history_path : String
 }
@@ -108,6 +128,21 @@ pub async fn InteractiveCli::run(self : InteractiveCli) -> Unit {
             )
           } else {
             print_info("Shell mode OFF — back to normal chat.")
+          }
+          continue
+        }
+        // Handle session switching: ,session <name>
+        if trimmed.has_prefix(",session ") {
+          let name = trimmed[9:].to_string() catch { _ => "" }
+          let name = name.trim().to_string()
+          if name.is_empty() {
+            print_error("Usage: ,session <name>")
+          } else {
+            self.session_id = name
+            // Ensure the session is initialized with bootstrap anchor
+            let session = self.runtime.get_session(self.session_id)
+            session.tape.ensure_bootstrap_anchor()
+            print_info("Switched to session: \{name}")
           }
           continue
         }

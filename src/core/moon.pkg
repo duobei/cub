@@ -1,5 +1,6 @@
 import {
   "moonbitlang/async" @async,
+  "duobei/cub/log" @log,
   "duobei/cub/tape" @tape,
   "duobei/cub/llm" @llm,
   "duobei/cub/tools" @tools,

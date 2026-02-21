@@ -1,5 +1,7 @@
 import {
+  "moonbitlang/async" @async,
   "moonbitlang/async/http" @http,
+  "duobei/cub/log" @log,
   "duobei/cub/tape" @tape,
   "moonbitlang/core/json",
 }

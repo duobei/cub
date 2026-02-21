@@ -67,4 +67,5 @@ pub struct ToolAutoResult {
   tool_calls : Array[Json]
   tool_results : Array[Json]
   error : String?
+  has_tool_errors : Bool
 } derive(Show)

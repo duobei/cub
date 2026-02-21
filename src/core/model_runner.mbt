@@ -81,6 +81,7 @@ pub async fn ModelRunner::run(
   let visible_parts : Array[String] = []
   let mut error : String? = None
   let mut exit_requested = false
+  let mut consecutive_tool_failures = 0
   while step < self.max_steps && not(exit_requested) {
     step += 1
     // Record step start
@@ -153,13 +154,36 @@ pub async fn ModelRunner::run(
     }
     // If tool calls were made, continue with follow-up
     if chat_result.followup_prompt is Some(fp) {
+      // Track consecutive tool failures
+      if chat_result.has_tool_errors {
+        consecutive_tool_failures += 1
+        if consecutive_tool_failures >= 5 {
+          error = Some("too many consecutive tool failures")
+          let fail_data : Map[String, Json] = Map::new()
+          fail_data["step"] = step.to_json()
+          fail_data["consecutive_failures"] = consecutive_tool_failures.to_json()
+          self.tape.append_event(
+            "loop.tool_failures_exceeded",
+            Json::object(fail_data),
+          )
+          break
+        }
+        if consecutive_tool_failures >= 3 {
+          // Inject warning into the follow-up prompt
+          current_prompt = "\{fp}\n\n<system_warning>Multiple tool failures (\{consecutive_tool_failures} consecutive). Consider a different approach or verify your arguments.</system_warning>"
+        } else {
+          current_prompt = fp
+        }
+      } else {
+        consecutive_tool_failures = 0
+        current_prompt = fp
+      }
       let fin_data : Map[String, Json] = Map::new()
       fin_data["step"] = step.to_json()
       fin_data["visible_text"] = false.to_json()
       fin_data["followup"] = true.to_json()
       fin_data["exit_requested"] = false.to_json()
       self.tape.append_event("loop.step.finish", Json::object(fin_data))
-      current_prompt = fp
       followups += 1
       continue
     }
@@ -221,6 +245,11 @@ async fn ModelRunner::chat(self : ModelRunner, prompt : String) -> ChatResult {
     let tool_name = @tools.from_model_name(name, self.registry)
     self.registry.execute(tool_name, kwargs=args)
   }
+  let registry = self.registry
+  let needs_confirmation : (String) -> Bool = fn(name) {
+    let tool_name = @tools.from_model_name(name, registry)
+    registry.needs_confirmation(tool_name)
+  }
   let timeout = self.model_timeout_seconds.unwrap_or(120)
   let result = @async.with_timeout(timeout * 1000, async fn() {
     self.llm.run_tools(
@@ -229,15 +258,39 @@ async fn ModelRunner::chat(self : ModelRunner, prompt : String) -> ChatResult {
       system_prompt~,
       max_tokens=self.max_tokens,
       tools_json=self.tools,
+      needs_confirmation~,
       execute_tool~,
     )
   }) catch {
-    _ =>
-      return {
-        text: "",
-        error: Some("model_timeout: no response within \{timeout}s"),
-        followup_prompt: None,
+    _ => {
+      // Retry once with 2x timeout
+      @log.warn(
+        "model",
+        "timeout after \{timeout}s, retrying with \{timeout * 2}s",
+      )
+      let retry_result = @async.with_timeout(timeout * 2 * 1000, async fn() {
+        self.llm.run_tools(
+          self.tape.tape(),
+          prompt,
+          system_prompt~,
+          max_tokens=self.max_tokens,
+          tools_json=self.tools,
+          needs_confirmation~,
+          execute_tool~,
+        )
+      }) catch {
+        _ =>
+          return {
+            text: "",
+            error: Some(
+              "model_timeout: no response within \{timeout * 2}s (after retry)",
+            ),
+            followup_prompt: None,
+            has_tool_errors: false,
+          }
       }
+      return ChatResult::from_tool_auto(retry_result)
+    }
   }
   ChatResult::from_tool_auto(result)
 }
@@ -274,6 +327,7 @@ priv struct ChatResult {
   text : String
   error : String?
   followup_prompt : String?
+  has_tool_errors : Bool
 }
 
 ///|
@@ -281,12 +335,27 @@ priv struct ChatResult {
 fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
   match output.kind {
     @llm.ToolAutoKind::Text =>
-      { text: output.text, error: None, followup_prompt: None }
+      {
+        text: output.text,
+        error: None,
+        followup_prompt: None,
+        has_tool_errors: false,
+      }
     @llm.ToolAutoKind::Tools =>
-      { text: "", error: None, followup_prompt: Some(tool_continue_prompt) }
+      {
+        text: "",
+        error: None,
+        followup_prompt: Some(tool_continue_prompt),
+        has_tool_errors: output.has_tool_errors,
+      }
     @llm.ToolAutoKind::Error => {
       let err_msg = output.error.unwrap_or("unknown error")
-      { text: "", error: Some(err_msg), followup_prompt: None }
+      {
+        text: "",
+        error: Some(err_msg),
+        followup_prompt: None,
+        has_tool_errors: false,
+      }
     }
   }
 }

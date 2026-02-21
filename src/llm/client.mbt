@@ -85,6 +85,8 @@ pub struct LLMClient {
   api_base : String
   extra_headers : Map[String, String]
   max_tokens : Int
+  confirm_fn : ((String, String) -> Bool)?
+  on_chunk : ((String) -> Unit)?
 }
 
 ///|
@@ -95,10 +97,21 @@ pub fn LLMClient::new(
   api_base? : String? = None,
   extra_headers? : Map[String, String] = Map::new(),
   max_tokens? : Int = 1024,
+  confirm_fn? : ((String, String) -> Bool)? = None,
+  on_chunk? : ((String) -> Unit)? = None,
 ) -> LLMClient {
   let (provider, model_id) = parse_model_spec(model)
   let base = api_base.unwrap_or(provider_base_url(provider))
-  { model_id, provider, api_key, api_base: base, extra_headers, max_tokens }
+  {
+    model_id,
+    provider,
+    api_key,
+    api_base: base,
+    extra_headers,
+    max_tokens,
+    confirm_fn,
+    on_chunk,
+  }
 }
 
 ///|
@@ -138,6 +151,207 @@ fn LLMClient::build_request_body(
     body["max_tokens"] = max_tokens.to_json()
   }
   Json::object(body)
+}
+
+///|
+/// Build the request body JSON with stream=true.
+fn LLMClient::build_stream_request_body(
+  self : LLMClient,
+  messages : Array[Json],
+  tools : Array[Json],
+  max_tokens : Int,
+  system_prompt : String?,
+) -> Json {
+  let body = self.build_request_body(messages, tools, max_tokens, system_prompt)
+  match body {
+    Object(map) => {
+      map["stream"] = true.to_json()
+      Json::object(map)
+    }
+    _ => body
+  }
+}
+
+///|
+/// Make a streaming chat API call, calling on_chunk for each content delta.
+/// Returns the full accumulated response.
+pub async fn LLMClient::chat_streaming(
+  self : LLMClient,
+  messages : Array[Json],
+  tools? : Array[Json] = [],
+  max_tokens? : Int = 0,
+  system_prompt? : String? = None,
+) -> ChatResponse {
+  let actual_max_tokens = if max_tokens > 0 {
+    max_tokens
+  } else {
+    self.max_tokens
+  }
+  let body = self.build_stream_request_body(
+    messages, tools, actual_max_tokens, system_prompt,
+  )
+  let body_str = body.stringify()
+  let url = "\{self.api_base}/chat/completions"
+  // Build headers
+  let headers : Map[String, String] = Map::new()
+  headers["Content-Type"] = "application/json"
+  headers["Authorization"] = "Bearer \{self.api_key}"
+  if self.provider == "openrouter" {
+    headers["X-Title"] = "cub"
+    headers["HTTP-Referer"] = "https://github.com/duobei/cub"
+  }
+  for k, v in self.extra_headers {
+    headers[k] = v
+  }
+  // Use post_stream for streaming
+  let client = @http.post_stream(url, headers~) catch {
+    e =>
+      return {
+        text: "",
+        tool_calls: [],
+        finish_reason: "error",
+        error: Some("HTTP stream error: \{e}"),
+      }
+  }
+  // Write request body
+  client.write(body_str) catch {
+    e => {
+      client.close()
+      return {
+        text: "",
+        tool_calls: [],
+        finish_reason: "error",
+        error: Some("HTTP write error: \{e}"),
+      }
+    }
+  }
+  client.flush() catch {
+    _ => ()
+  }
+  let response = client.end_request() catch {
+    e => {
+      client.close()
+      return {
+        text: "",
+        tool_calls: [],
+        finish_reason: "error",
+        error: Some("HTTP request error: \{e}"),
+      }
+    }
+  }
+  if response.code != 200 {
+    let err_text = client.read_all() catch { _ => "" }
+    let err_str = err_text.text() catch { _ => "HTTP \{response.code}" }
+    client.close()
+    return {
+      text: "",
+      tool_calls: [],
+      finish_reason: "error",
+      error: Some("API error (\{response.code}): \{err_str}"),
+    }
+  }
+  // Read SSE stream
+  let content_buf = StringBuilder::new()
+  // For tool calls, we accumulate argument fragments by index
+  let tc_ids : Map[Int, String] = {} // index → id
+  let tc_names : Map[Int, String] = {} // index → function name
+  let tc_args : Map[Int, StringBuilder] = {} // index → accumulated arguments
+  let mut finish_reason = "stop"
+  for {
+    let line = client.read_until("\n") catch { _ => break }
+    match line {
+      None => break
+      Some(l) => {
+        let trimmed = l.trim().to_string()
+        if trimmed.is_empty() {
+          continue
+        }
+        if trimmed == "data: [DONE]" {
+          break
+        }
+        if trimmed.has_prefix("data: ") {
+          let json_str = trimmed[6:].to_string() catch { _ => continue }
+          let json = @json.parse(json_str) catch { _ => continue }
+          // Extract finish_reason
+          match json {
+            { "choices": [{ "finish_reason": String(fr), .. }, ..], .. } =>
+              finish_reason = fr
+            _ => ()
+          }
+          // Extract content delta
+          match json {
+            {
+              "choices": [{ "delta": { "content": String(c), .. }, .. }, ..],
+              ..
+            } =>
+              if c.length() > 0 {
+                content_buf.write_string(c)
+                match self.on_chunk {
+                  Some(cb) => cb(c)
+                  None => ()
+                }
+              }
+            _ => ()
+          }
+          // Extract tool call deltas
+          match json {
+            {
+              "choices": [
+                { "delta": { "tool_calls": Array(calls), .. }, .. },
+                ..,
+              ],
+              ..
+            } =>
+              for call in calls {
+                let idx = match call {
+                  { "index": Number(n, ..), .. } => n.to_int()
+                  _ => 0
+                }
+                match call {
+                  { "id": String(id), .. } => tc_ids[idx] = id
+                  _ => ()
+                }
+                match call {
+                  { "function": { "name": String(name), .. }, .. } =>
+                    tc_names[idx] = name
+                  _ => ()
+                }
+                match call {
+                  { "function": { "arguments": String(args), .. }, .. } => {
+                    if not(tc_args.contains(idx)) {
+                      tc_args[idx] = StringBuilder::new()
+                    }
+                    match tc_args.get(idx) {
+                      Some(sb) => sb.write_string(args)
+                      None => ()
+                    }
+                  }
+                  _ => ()
+                }
+              }
+            _ => ()
+          }
+        }
+      }
+    }
+  }
+  client.close()
+  // Build tool calls from accumulated fragments
+  let tool_calls : Array[ToolCallInfo] = []
+  for idx, id in tc_ids {
+    let name = tc_names.get(idx).unwrap_or("")
+    let args = match tc_args.get(idx) {
+      Some(sb) => sb.to_string()
+      None => ""
+    }
+    tool_calls.push({
+      id,
+      type_: "function",
+      function_: { name, arguments: args },
+    })
+  }
+  let text = strip_think_tags(content_buf.to_string())
+  { text, tool_calls, finish_reason, error: None }
 }
 
 ///|
@@ -295,6 +509,69 @@ fn estimate_tokens(messages : Array[Json], system_prompt : String) -> Int {
 }
 
 ///|
+/// Check if an error is retryable (connection errors, 429, 500-503).
+fn is_retryable_error(error : String) -> Bool {
+  error.contains("HTTP error:") ||
+  error.contains("API error (429)") ||
+  error.contains("API error (500)") ||
+  error.contains("API error (501)") ||
+  error.contains("API error (502)") ||
+  error.contains("API error (503)")
+}
+
+///|
+/// Retry chat with exponential backoff.
+/// Retries on connection errors, 429, and 500-503. Does not retry 400/401/403.
+pub async fn LLMClient::retry_chat(
+  self : LLMClient,
+  messages : Array[Json],
+  tools? : Array[Json] = [],
+  max_tokens? : Int = 0,
+  system_prompt? : String? = None,
+) -> ChatResponse {
+  let max_retries = 3
+  let initial_delay = 1000 // ms
+  let multiplier = 2
+  let max_delay = 10000 // ms
+  let mut delay = initial_delay
+  let mut last_response : ChatResponse = {
+    text: "",
+    tool_calls: [],
+    finish_reason: "error",
+    error: Some("no attempts made"),
+  }
+  for attempt = 0; attempt <= max_retries; attempt = attempt + 1 {
+    let response = if self.on_chunk is Some(_) {
+      self.chat_streaming(messages, tools~, max_tokens~, system_prompt~)
+    } else {
+      self.chat(messages, tools~, max_tokens~, system_prompt~)
+    }
+    // Success or non-retryable error: return immediately
+    match response.error {
+      None => return response
+      Some(err) =>
+        if not(is_retryable_error(err)) {
+          return response
+        } else if attempt < max_retries {
+          @log.warn(
+            "llm",
+            "retry \{attempt + 1}/\{max_retries} after \{delay}ms: \{err}",
+          )
+          @async.sleep(delay)
+          delay = delay * multiplier
+          if delay > max_delay {
+            delay = max_delay
+          }
+          last_response = response
+        } else {
+          last_response = response
+        }
+    }
+  }
+  last_response
+}
+
+///|
 /// Context budget warning threshold (80% of 128k default).
 let context_budget_tokens : Int = 128000
 
@@ -307,6 +584,7 @@ pub async fn LLMClient::run_tools(
   system_prompt? : String = "",
   max_tokens? : Int = 0,
   tools_json? : Array[Json] = [],
+  needs_confirmation? : (String) -> Bool = fn(_name) { false },
   execute_tool~ : async (String, Json) -> String,
 ) -> ToolAutoResult {
   // Record user message to tape
@@ -332,7 +610,7 @@ pub async fn LLMClient::run_tools(
   } else {
     None
   }
-  let response = self.chat(
+  let response = self.retry_chat(
     messages,
     tools=tools_json,
     max_tokens~,
@@ -346,6 +624,7 @@ pub async fn LLMClient::run_tools(
       tool_calls: [],
       tool_results: [],
       error: Some(err),
+      has_tool_errors: false,
     }
   }
   // If no tool calls, return text
@@ -358,6 +637,7 @@ pub async fn LLMClient::run_tools(
       tool_calls: [],
       tool_results: [],
       error: None,
+      has_tool_errors: false,
     }
   }
   // Record assistant tool calls
@@ -365,12 +645,31 @@ pub async fn LLMClient::run_tools(
   tape.append(@tape.TapeEntry::tool_call(call_jsons))
   // Execute each tool call
   let result_jsons : Array[Json] = []
+  let mut any_tool_error = false
   for tc in response.tool_calls {
     let args : Json = @json.parse(tc.function_.arguments) catch {
       _ => Json::object(Map::new())
     }
+    // Check if tool requires confirmation
+    if needs_confirmation(tc.function_.name) {
+      match self.confirm_fn {
+        Some(cfn) =>
+          if not(cfn(tc.function_.name, tc.function_.arguments)) {
+            let result_obj : Map[String, Json] = Map::new()
+            result_obj["tool_call_id"] = tc.id.to_json()
+            result_obj["name"] = tc.function_.name.to_json()
+            result_obj["content"] = "[denied by user]".to_json()
+            result_jsons.push(Json::object(result_obj))
+            continue
+          }
+        None => () // No confirm_fn means auto-approve
+      }
+    }
     let result_text = execute_tool(tc.function_.name, args) catch {
-      e => "Error: \{e}"
+      e => {
+        any_tool_error = true
+        "Error: \{e}"
+      }
     }
     let result_obj : Map[String, Json] = Map::new()
     result_obj["tool_call_id"] = tc.id.to_json()
@@ -386,5 +685,6 @@ pub async fn LLMClient::run_tools(
     tool_calls: call_jsons,
     tool_results: result_jsons,
     error: None,
+    has_tool_errors: any_tool_error,
   }
 }

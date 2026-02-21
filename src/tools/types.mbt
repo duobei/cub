@@ -7,6 +7,7 @@ pub struct Tool {
   description : String
   parameters : Json
   handler : async (Json) -> String raise Error
+  requires_confirmation : Bool
 }
 
 ///|
