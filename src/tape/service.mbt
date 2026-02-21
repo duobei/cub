@@ -122,7 +122,7 @@ pub async fn TapeService::reset(
   }
   ignore(self.handoff("session/start", state=Some(state)))
   match archive_path {
-    Some(p) => "Archived: " + p
+    Some(p) => "Archived: \{p}"
     None => "ok"
   }
 }
@@ -167,7 +167,7 @@ pub async fn TapeService::search(
   limit~ : Int = 20
 ) -> Array[TapeEntry] {
   let normalized = query.to_lower()
-  if normalized.length() == 0 {
+  if normalized.is_empty() {
     return []
   }
   let entries = self.tape().read_entries()

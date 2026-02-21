@@ -25,18 +25,9 @@ extern "C" fn cub_skills_read_file(
   buf_size : Int
 ) -> Int = "cub_skills_read_file"
 
-/// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
-fn string_to_cstr(s : String) -> Bytes {
-  let utf8 = @utf8.encode(s)
-  let len = utf8.length()
-  Bytes::makei(len + 1, fn(i) {
-    if i < len { utf8[i] } else { b'\x00' }
-  })
-}
-
 /// Read a file synchronously via C FFI two-pass pattern.
 fn read_file_sync(path : String) -> String {
-  let path_bytes = string_to_cstr(path)
+  let path_bytes = @config.string_to_cstr(path)
   let len = cub_skills_read_file(path_bytes, Bytes::new(0), 0)
   if len <= 0 {
     return ""
@@ -51,7 +42,7 @@ fn read_file_sync(path : String) -> String {
 
 /// List directory entries synchronously via C FFI two-pass pattern.
 fn list_dir_sync(path : String) -> Array[String] {
-  let path_bytes = string_to_cstr(path)
+  let path_bytes = @config.string_to_cstr(path)
   let len = cub_skills_list_dir(path_bytes, Bytes::new(0), 0)
   if len <= 0 {
     return []
@@ -79,12 +70,12 @@ pub fn discover_skills(workspace : String) -> Array[SkillMetadata] {
   let seen : Map[String, Bool] = {}
   let skills : Array[SkillMetadata] = []
   // Level 1: workspace skills
-  let ws_skills_dir = workspace + "/.agent/skills"
+  let ws_skills_dir = "\{workspace}/.agent/skills"
   scan_skills_dir(ws_skills_dir, "workspace", seen, skills)
   // Level 2: user-global skills (~/.agent/skills)
   let home = get_home_dir()
   if home.length() > 0 {
-    let global_skills_dir = home + "/.agent/skills"
+    let global_skills_dir = "\{home}/.agent/skills"
     scan_skills_dir(global_skills_dir, "global", seen, skills)
   }
   // Level 3: builtin skills (compiled into the binary via known path)
@@ -109,7 +100,7 @@ fn get_home_dir() -> String {
 /// Read HOME from /proc/self/environ (Linux-specific).
 fn read_env_home() -> String {
   let content = read_file_sync("/proc/self/environ")
-  if content.length() == 0 {
+  if content.is_empty() {
     return ""
   }
   // /proc/self/environ has null-separated KEY=VALUE pairs
@@ -152,10 +143,10 @@ fn scan_skills_dir(
 ) -> Unit {
   let entries = list_dir_sync(dir)
   for entry in entries {
-    let skill_dir = dir + "/" + entry
-    let skill_md_path = skill_dir + "/SKILL.md"
+    let skill_dir = "\{dir}/\{entry}"
+    let skill_md_path = "\{skill_dir}/SKILL.md"
     let content = read_file_sync(skill_md_path)
-    if content.length() == 0 {
+    if content.is_empty() {
       continue
     }
     let (meta, _body) = parse_frontmatter(content)
@@ -163,11 +154,12 @@ fn scan_skills_dir(
       Some(n) => n
       None => entry
     }
-    // First-match-wins deduplication
-    if seen.contains(name) {
+    // First-match-wins deduplication (case-insensitive)
+    let key = name.to_lower()
+    if seen.contains(key) {
       continue
     }
-    seen[name] = true
+    seen[key] = true
     let description = match meta.get("description") {
       Some(d) => d
       None => ""
@@ -207,13 +199,14 @@ fn add_builtin_skills(
   ]
   for pair in builtins {
     let (name, desc) = pair
-    if not(seen.contains(name)) {
-      seen[name] = true
+    let key = name.to_lower()
+    if not(seen.contains(key)) {
+      seen[key] = true
       skills.push(
         {
           name,
           description: desc,
-          location: "builtin:" + name,
+          location: "builtin:\{name}",
           metadata: {},
           source: "builtin",
         },
@@ -227,15 +220,16 @@ fn add_builtin_skills(
   ]
   for triple in channel_builtins {
     let (name, desc, channel) = triple
-    if not(seen.contains(name)) {
-      seen[name] = true
+    let key = name.to_lower()
+    if not(seen.contains(key)) {
+      seen[key] = true
       let meta : Map[String, String] = {}
       meta["metadata.channel"] = channel
       skills.push(
         {
           name,
           description: desc,
-          location: "builtin:" + name,
+          location: "builtin:\{name}",
           metadata: meta,
           source: "builtin",
         },
@@ -310,7 +304,7 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
   for line in fm_text.split("\n") {
     let line_str = line.to_string()
     let trimmed = line_str.trim().to_string()
-    if trimmed.length() == 0 {
+    if trimmed.is_empty() {
       continue
     }
     // Check if this is a nested block header (e.g., "metadata:")
@@ -344,7 +338,7 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
         _ => continue
       }
       if is_indented && current_nested_prefix.length() > 0 {
-        meta[current_nested_prefix + "." + key] = value
+        meta["\{current_nested_prefix}.\{key}"] = value
       } else {
         current_nested_prefix = ""
         meta[key] = value
@@ -368,6 +362,7 @@ fn find_char(s : String, ch : Char) -> Int {
 /// Load the full SKILL.md body for a skill name.
 /// Searches workspace, global, and builtin skill locations.
 pub fn load_skill_body(name : String, workspace : String) -> String? {
+  let lower_name = name.to_lower()
   // Search in order: workspace, global, builtin
   let dirs : Array[(String, String)] = []
   dirs.push((workspace + "/.agent/skills", "workspace"))
@@ -375,18 +370,28 @@ pub fn load_skill_body(name : String, workspace : String) -> String? {
   if home.length() > 0 {
     dirs.push((home + "/.agent/skills", "global"))
   }
-  // Check each directory
+  // Check each directory (try both original and lowercase name)
   for pair in dirs {
     let (dir, _source) = pair
-    let skill_md_path = dir + "/" + name + "/SKILL.md"
+    // Try original name first
+    let skill_md_path = "\{dir}/\{name}/SKILL.md"
     let content = read_file_sync(skill_md_path)
     if content.length() > 0 {
       let (_meta, body) = parse_frontmatter(content)
       return Some(body)
     }
+    // Try lowercase name
+    if lower_name != name {
+      let lower_path = "\{dir}/\{lower_name}/SKILL.md"
+      let lower_content = read_file_sync(lower_path)
+      if lower_content.length() > 0 {
+        let (_meta, body) = parse_frontmatter(lower_content)
+        return Some(body)
+      }
+    }
   }
-  // Check builtin
-  let builtin_body = load_builtin_skill_body(name)
+  // Check builtin (case-insensitive)
+  let builtin_body = load_builtin_skill_body(lower_name)
   if builtin_body.length() > 0 {
     return Some(builtin_body)
   }

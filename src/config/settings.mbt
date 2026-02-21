@@ -22,7 +22,7 @@ pub fn getenv(name : String) -> String? {
 }
 
 /// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
-fn string_to_cstr(s : String) -> Bytes {
+pub fn string_to_cstr(s : String) -> Bytes {
   let utf8 = @utf8.encode(s)
   let len = utf8.length()
   // Build with extra byte for null terminator
@@ -102,7 +102,7 @@ pub fn Settings::default() -> Settings {
     home: None,
     workspace_path: None,
     tape_name: "bub",
-    max_steps: 20,
+    max_steps: 100,
     proactive_response: false,
     telegram_enabled: false,
     telegram_token: None,
@@ -180,7 +180,7 @@ pub fn Settings::resolve_home(self : Settings) -> String {
     Some(h) => h
     None => {
       let home = getenv("HOME").unwrap_or(".")
-      home + "/.bub"
+      "\{home}/.bub"
     }
   }
 }
@@ -263,7 +263,7 @@ fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
 /// Parse a single dotenv line into (key, value). Returns None on skip.
 fn parse_dotenv_line(line : StringView) -> (String, String)? {
   let trimmed = line.trim(chars=" \t\r")
-  if trimmed.length() == 0 || trimmed.has_prefix("#") {
+  if trimmed.is_empty() || trimmed.has_prefix("#") {
     return None
   }
   // Find first = sign

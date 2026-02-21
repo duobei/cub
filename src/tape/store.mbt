@@ -47,7 +47,7 @@ pub async fn TapeFile::read(self : TapeFile) -> Array[TapeEntry] {
       return []
     }
   }
-  if content.length() == 0 {
+  if content.is_empty() {
     self.reset_state()
     return []
   }
@@ -70,7 +70,7 @@ pub async fn TapeFile::read(self : TapeFile) -> Array[TapeEntry] {
     }
     idx += 1
     let trimmed = line.trim(chars=" \t\r")
-    if trimmed.length() == 0 {
+    if trimmed.is_empty() {
       continue
     }
     let parsed = try {
@@ -96,7 +96,7 @@ pub async fn TapeFile::append(self : TapeFile, entry : TapeEntry) -> Unit {
 
 /// Append multiple entries with auto-incrementing IDs.
 pub async fn TapeFile::append_many(self : TapeFile, entries : Array[TapeEntry]) -> Unit {
-  if entries.length() == 0 {
+  if entries.is_empty() {
     return
   }
   // Ensure we have current state
@@ -131,10 +131,10 @@ pub async fn TapeFile::archive(self : TapeFile) -> String? {
   } catch {
     _ => return None
   }
-  if content.length() == 0 {
+  if content.is_empty() {
     return None
   }
-  let archive_path = self.path + ".bak"
+  let archive_path = "\{self.path}.bak"
   try {
     @fs.write_file(archive_path, content, create=0o644)
   } catch {
@@ -202,7 +202,7 @@ pub async fn FileTapeStore::new(
   workspace_path : String
 ) -> FileTapeStore {
   let workspace_hash = fnv1a_hash(workspace_path)
-  let tape_root = home + "/tapes"
+  let tape_root = "\{home}/tapes"
   try {
     @fs.mkdir(tape_root, permission=0o755, recursive=true)
   } catch {
@@ -217,12 +217,7 @@ fn FileTapeStore::tape_file(self : FileTapeStore, name : String) -> TapeFile {
     Some(tf) => tf
     None => {
       let encoded = url_encode(name)
-      let path = self.tape_root +
-        "/" +
-        self.workspace_hash +
-        "__" +
-        encoded +
-        ".jsonl"
+      let path = "\{self.tape_root}/\{self.workspace_hash}__\{encoded}.jsonl"
       let tf = TapeFile::new(path)
       self.tape_files[name] = tf
       tf

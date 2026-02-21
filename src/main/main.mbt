@@ -63,7 +63,7 @@ fn main {
                 output_parts.push(result.assistant_output)
               }
               match result.error {
-                Some(e) => output_parts.push("Error: " + e)
+                Some(e) => output_parts.push("Error: \{e}")
                 None => ()
               }
               if output_parts.length() > 0 {
@@ -79,14 +79,14 @@ fn main {
         }
         "run" => {
           // Single message mode
-          if parsed.positional.length() == 0 {
+          if parsed.positional.is_empty() {
             println("usage: cub run <message>")
             return
           }
           let message = parsed.positional.join(" ")
           let result = runtime.handle_input("cli", message)
           match result.error {
-            Some(e) => println("Error: " + e)
+            Some(e) => println("Error: \{e}")
             None => {
               let output = if result.assistant_output.length() > 0 {
                 result.assistant_output

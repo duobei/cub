@@ -4,6 +4,7 @@
     { "path": "moonbitlang/async/fs", "alias": "fs" },
     { "path": "moonbitlang/async/process", "alias": "process" },
     { "path": "duobei/cub/tape", "alias": "tape" },
+    { "path": "duobei/cub/config", "alias": "config" },
     "moonbitlang/core/encoding/utf8"
   ],
   "native-stub": ["web_ffi.c"]

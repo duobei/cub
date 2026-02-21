@@ -4,7 +4,7 @@
 pub fn render_tool_prompt_block(view : ProgressiveToolView) -> String {
   let compact = view.compact_block()
   let expanded = view.expanded_block()
-  if compact.length() == 0 && expanded.length() == 0 {
+  if compact.is_empty() && expanded.is_empty() {
     return ""
   }
   let buf = StringBuilder::new()

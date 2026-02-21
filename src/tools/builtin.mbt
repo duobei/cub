@@ -60,13 +60,14 @@ fn resolve_path(workspace : String, path : String) -> String {
   if path.length() > 0 && path[0] == '/'.to_int().to_uint16() {
     path // absolute
   } else {
-    workspace + "/" + path
+    "\{workspace}/\{path}"
   }
 }
 
 /// Register bash tool.
 fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   let workspace = ctx.workspace
+  let session_id = ctx.session_id
   let props : Map[String, Json] = Map::new()
   props["cmd"] = string_prop("Shell command to execute")
   props["cwd"] = string_prop("Working directory (default: workspace)")
@@ -93,22 +94,44 @@ fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         { "timeout_seconds": Number(n, ..), .. } => n.to_int()
         _ => subprocess_timeout_seconds
       }
-      run_bash_command(cmd, cwd, timeout)
+      run_bash_command(cmd, cwd, timeout, workspace, session_id)
     },
   )
 }
 
 /// Execute a bash command.
-async fn run_bash_command(cmd : String, cwd : String, timeout : Int) -> String {
+async fn run_bash_command(
+  cmd : String,
+  cwd : String,
+  timeout : Int,
+  workspace : String,
+  session_id : String
+) -> String {
+  // Load workspace .env into extra environment
+  let extra_env : Map[String, String] = {}
+  let env_path = "\{workspace}/.env"
+  let env_content = try {
+    let data = @fs.read_file(env_path)
+    data.text()
+  } catch {
+    _ => ""
+  }
+  if env_content.length() > 0 {
+    let dotenv = @config.parse_dotenv(env_content)
+    for k, v in dotenv {
+      extra_env[k] = v
+    }
+  }
+  extra_env["BUB_SESSION_ID"] = session_id
   let (exit_code, stdout_data, stderr_data) = try {
     @async.with_timeout(
       timeout * 1000,
       async fn() {
-        @process.collect_output("bash", ["-lc", cmd], cwd=cwd)
+        @process.collect_output("bash", ["-lc", cmd], cwd=cwd, extra_env=extra_env)
       },
     )
   } catch {
-    e => fail("bash error: " + e.to_string())
+    e => fail("bash error: \{e}")
   }
   let stdout_text = try { stdout_data.text() } catch { _ => "" }
   let stderr_text = try { stderr_data.text() } catch { _ => "" }
@@ -118,7 +141,7 @@ async fn run_bash_command(cmd : String, cwd : String, timeout : Int) -> String {
     } else {
       stdout_text
     }
-    fail("exit=\{exit_code}: " + error_output)
+    fail("exit=\{exit_code}: \{error_output}")
   }
   if stdout_text.length() > 0 {
     stdout_text
@@ -163,7 +186,7 @@ async fn read_file_content(path : String, offset : Int, limit : Int?) -> String 
   let content = try {
     @fs.read_file(path).text()
   } catch {
-    e => fail("fs.read: " + e.to_string())
+    e => fail("fs.read: \{e}")
   }
   let lines : Array[StringView] = []
   for line in content.split("\n") {
@@ -227,9 +250,9 @@ async fn write_file_content(path : String, content : String) -> String {
   try {
     @fs.write_file(path, content, create=0o644)
   } catch {
-    e => fail("fs.write: " + e.to_string())
+    e => fail("fs.write: \{e}")
   }
-  "wrote: " + path
+  "wrote: \{path}"
 }
 
 /// Get parent directory from a path.
@@ -301,7 +324,7 @@ async fn edit_file_content(
   let content = try {
     @fs.read_file(path).text()
   } catch {
-    e => fail("fs.edit: " + e.to_string())
+    e => fail("fs.edit: \{e}")
   }
   if not(content.contains(old_string)) {
     fail("fs.edit: old_string not found in file")
@@ -325,14 +348,14 @@ async fn edit_file_content(
   try {
     @fs.write_file(path, new_content, create=0o644)
   } catch {
-    e => fail("fs.edit: " + e.to_string())
+    e => fail("fs.edit: \{e}")
   }
-  "edited: " + path
+  "edited: \{path}"
 }
 
 /// Find substring position in a string.
 fn find_substring_in(haystack : String, needle : String) -> Int {
-  if needle.length() == 0 {
+  if needle.is_empty() {
     return 0
   }
   if needle.length() > haystack.length() {
@@ -374,9 +397,30 @@ fn register_web_fetch(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   )
 }
 
+/// Normalize a URL: ensure scheme, validate format.
+fn normalize_url(raw : String) -> String raise {
+  let url = raw.trim().to_string()
+  if url.is_empty() {
+    fail("web.fetch: empty URL")
+  }
+  // Check if it has a scheme
+  let has_scheme = url.contains("://")
+  if has_scheme {
+    // Validate scheme is http or https
+    let lower = url.to_lower()
+    if lower.has_prefix("http://") || lower.has_prefix("https://") {
+      return url
+    }
+    fail("web.fetch: unsupported scheme (only http/https)")
+  }
+  // No scheme — auto-upgrade to https
+  "https://\{url}"
+}
+
 /// Fetch URL content via C FFI, strip HTML tags.
-fn fetch_url(url : String) -> String raise {
-  let url_bytes = string_to_cstr(url)
+fn fetch_url(raw_url : String) -> String raise {
+  let url = normalize_url(raw_url)
+  let url_bytes = @config.string_to_cstr(url)
   // First pass: get content size
   let len = cub_web_fetch(url_bytes, Bytes::new(0), 0)
   if len <= 0 {
@@ -395,7 +439,7 @@ fn fetch_url(url : String) -> String raise {
   let max_len = 50000
   if stripped.length() > max_len {
     try {
-      stripped[:max_len].to_string() + "\n\n[truncated]"
+      "\{stripped[:max_len]}\n\n[truncated]"
     } catch {
       _ => stripped
     }
@@ -490,15 +534,6 @@ fn peek_tag_name(s : String, start : Int) -> String {
   buf.to_string()
 }
 
-/// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
-fn string_to_cstr(s : String) -> Bytes {
-  let utf8 = @utf8.encode(s)
-  let len = utf8.length()
-  Bytes::makei(len + 1, fn(i) {
-    if i < len { utf8[i] } else { b'\x00' }
-  })
-}
-
 /// FFI: fetch URL content into buffer, returns size or -1 on error.
 #borrow(url, buf)
 extern "C" fn cub_web_fetch(url : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_web_fetch"
@@ -520,8 +555,8 @@ fn register_web_search(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
         _ => fail("web.search: missing 'query' argument")
       }
       let encoded = url_encode(query)
-      let search_url = "https://duckduckgo.com/?q=" + encoded
-      let lite_url = "https://lite.duckduckgo.com/lite/?q=" + encoded
+      let search_url = "https://duckduckgo.com/?q=\{encoded}"
+      let lite_url = "https://lite.duckduckgo.com/lite/?q=\{encoded}"
       let result = StringBuilder::new()
       result.write_string("Search URL: ")
       result.write_string(search_url)

@@ -56,7 +56,7 @@ pub fn parse_command_words(text : String) -> Array[String] {
 /// Parse ',name ...' command line into name and args tokens.
 pub fn parse_internal_command(line : String) -> (String, Array[String]) {
   let trimmed = line.trim().to_string()
-  if trimmed.length() == 0 {
+  if trimmed.is_empty() {
     return ("", [])
   }
   // Strip leading comma
@@ -67,7 +67,7 @@ pub fn parse_internal_command(line : String) -> (String, Array[String]) {
   }
   let body_trimmed = body.trim().to_string()
   let words = parse_command_words(body_trimmed)
-  if words.length() == 0 {
+  if words.is_empty() {
     return ("", [])
   }
   let name = words[0]
@@ -85,7 +85,7 @@ pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
   let mut idx = 0
   while idx < tokens.length() {
     let token = tokens[idx]
-    if token.length() >= 2 && starts_with(token, "--") {
+    if token.length() >= 2 && token.has_prefix("--") {
       let key = try { token[2:].to_string() } catch { _ => token }
       // Check for --key=value
       let eq_pos = find_char(key, '=')
@@ -97,7 +97,7 @@ pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
         continue
       }
       // Check for --key value
-      if idx + 1 < tokens.length() && not(starts_with(tokens[idx + 1], "--")) {
+      if idx + 1 < tokens.length() && not(tokens[idx + 1].has_prefix("--")) {
         kwargs[key] = tokens[idx + 1]
         idx += 2
         continue
@@ -122,18 +122,6 @@ pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
   { kwargs, positional }
 }
 
-/// Helper: check if string starts with prefix.
-fn starts_with(s : String, prefix : String) -> Bool {
-  if prefix.length() > s.length() {
-    return false
-  }
-  for i = 0; i < prefix.length(); i = i + 1 {
-    if s[i] != prefix[i] {
-      return false
-    }
-  }
-  true
-}
 
 /// Helper: find character position in string, returns -1 if not found.
 fn find_char(s : String, ch : Char) -> Int {

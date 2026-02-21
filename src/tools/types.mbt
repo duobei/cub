@@ -28,12 +28,14 @@ pub struct ToolDescriptor {
 pub struct ToolContext {
   tape : @tape.TapeService
   workspace : String
+  session_id : String
 }
 
 /// Create a new ToolContext.
 pub fn ToolContext::new(
   tape : @tape.TapeService,
-  workspace : String
+  workspace : String,
+  session_id~ : String = "cli"
 ) -> ToolContext {
-  { tape, workspace }
+  { tape, workspace, session_id }
 }

@@ -33,7 +33,7 @@ pub async fn InteractiveCli::run(self : InteractiveCli) -> Unit {
       None => break // EOF
       Some(raw) => {
         let trimmed = raw.trim().to_string()
-        if trimmed.length() == 0 {
+        if trimmed.is_empty() {
           continue
         }
         // Handle shell mode toggle
@@ -47,7 +47,7 @@ pub async fn InteractiveCli::run(self : InteractiveCli) -> Unit {
           continue
         }
         // In shell mode, prefix with comma to run as shell command
-        let input = if self.shell_mode { "," + trimmed } else { trimmed }
+        let input = if self.shell_mode { ",\{trimmed}" } else { trimmed }
         let result = self.runtime.handle_input(self.session_id, input)
         if result.immediate_output.length() > 0 {
           print_command(result.immediate_output)

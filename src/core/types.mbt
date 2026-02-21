@@ -19,7 +19,7 @@ pub struct CommandExecutionResult {
 
 /// Format as XML command block.
 pub fn CommandExecutionResult::block(self : CommandExecutionResult) -> String {
-  "<command name=\"\{self.name}\" status=\"\{self.status}\">\n\{self.output}\n</command>"
+  "<command name=\"\{self.name}\" status=\"\{self.status}\" elapsed_ms=\"\{self.elapsed_ms}\">\n\{self.output}\n</command>"
 }
 
 /// Routing outcome for user input.

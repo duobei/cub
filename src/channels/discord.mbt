@@ -60,7 +60,7 @@ pub async fn DiscordChannel::start(
   self : DiscordChannel,
   handler : async (ChannelMessage) -> Unit
 ) -> Unit {
-  if self.token.length() == 0 {
+  if self.token.is_empty() {
     println("[discord] error: token is empty")
     return
   }
@@ -78,9 +78,7 @@ pub async fn DiscordChannel::start(
         max_reconnect_delay_ms
       }
     }
-    println(
-      "[discord] reconnecting in " + (delay / 1000).to_string() + "s...",
-    )
+    println("[discord] reconnecting in \{delay / 1000}s...")
     @async.sleep(delay)
   }
 }
@@ -95,7 +93,7 @@ async fn DiscordChannel::connect_and_run(
     @websocket.connect(discord_gateway_url)
   } catch {
     e => {
-      println("[discord] gateway connection failed: " + e.to_string())
+      println("[discord] gateway connection failed: \{e}")
       return false
     }
   }
@@ -104,7 +102,7 @@ async fn DiscordChannel::connect_and_run(
     read_text_message(conn)
   } catch {
     e => {
-      println("[discord] failed to read hello: " + e.to_string())
+      println("[discord] failed to read hello: \{e}")
       conn.close()
       return false
     }
@@ -128,11 +126,7 @@ async fn DiscordChannel::connect_and_run(
       return false
     }
   }
-  println(
-    "[discord] hello received, heartbeat interval: " +
-    heartbeat_interval.to_string() +
-    "ms",
-  )
+  println("[discord] hello received, heartbeat interval: \{heartbeat_interval}ms")
   // Send Identify
   self.send_identify(conn)
   // Track connection start time (approximate via heartbeat count)
@@ -176,7 +170,7 @@ async fn DiscordChannel::send_identify(
   try {
     conn.send_text(text)
   } catch {
-    e => println("[discord] identify send error: " + e.to_string())
+    e => println("[discord] identify send error: \{e}")
   }
 }
 
@@ -279,7 +273,7 @@ async fn DiscordChannel::handle_dispatch(
       match data {
         { "user": { "id": String(uid), .. }, .. } => {
           self.bot_user_id = uid
-          println("[discord] ready, bot user id: " + uid)
+          println("[discord] ready, bot user id: \{uid}")
         }
         _ => println("[discord] ready")
       }
@@ -322,7 +316,7 @@ async fn DiscordChannel::handle_message_create(
   if is_bot {
     return
   }
-  if content.trim().to_string().length() == 0 {
+  if content.trim().to_string().is_empty() {
     return
   }
   // Get channel_id
@@ -340,19 +334,17 @@ async fn DiscordChannel::handle_message_create(
     _ => ""
   }
   // Permission check
-  if not(self.allow_message(channel_id, author_id, author_name, content)) {
+  let perm = self.check_permission(channel_id, author_id, author_name, content)
+  if perm == "denied" {
+    self.send_message(channel_id, "Access denied. Please deploy your own instance of Cub.")
     return
   }
-  println(
-    "[discord] message from " +
-    author_name +
-    " in " +
-    channel_id +
-    ": " +
-    truncate(content, 100),
-  )
+  if perm != "ok" {
+    return  // "ignored" — wrong channel, silently skip
+  }
+  println("[discord] message from \{author_name} in \{channel_id}: \{truncate(content, 100)}")
   // Build ChannelMessage
-  let session_id = "discord:" + channel_id
+  let session_id = "discord:\{channel_id}"
   let metadata : Map[String, Json] = Map::new()
   metadata["channel"] = "discord".to_json()
   metadata["channel_id"] = channel_id.to_json()
@@ -371,40 +363,40 @@ async fn DiscordChannel::handle_message_create(
   handler(msg)
 }
 
-/// Check if a message should be processed.
-fn DiscordChannel::allow_message(
+/// Check permission for a message. Returns "ok", "denied", or "ignored".
+fn DiscordChannel::check_permission(
   self : DiscordChannel,
   channel_id : String,
   author_id : String,
   author_name : String,
   content : String
-) -> Bool {
-  // Check channel filter
+) -> String {
+  // Check channel filter — wrong channel is silently ignored
   if self.allow_channels.length() > 0 &&
     not(self.allow_channels.contains(channel_id)) {
-    return false
+    return "ignored"
   }
-  // Check sender filter
+  // Check sender filter — unauthorized user gets denied message
   if self.allow_from.length() > 0 {
     let allowed = self.allow_from.contains(author_id) ||
       self.allow_from.contains(author_name)
     if not(allowed) {
-      return false
+      return "denied"
     }
   }
   // Check if message mentions cub or is a command
   if content.trim().to_string().length() > 0 &&
     content[0] == ','.to_int().to_uint16() {
-    return true
+    return "ok"
   }
   if content.to_lower().contains("cub") {
-    return true
+    return "ok"
   }
-  // If no channel restriction, accept all
+  // If channel is in allowed list, accept all messages in it
   if self.allow_channels.length() > 0 {
-    return true
+    return "ok"
   }
-  true
+  "ok"
 }
 
 /// Send a message to a Discord channel via REST API.
@@ -415,23 +407,21 @@ pub async fn DiscordChannel::send_message(
 ) -> Unit {
   let chunks = chunk_message(text, discord_message_limit)
   for chunk in chunks {
-    let url = discord_api_base + "/channels/" + channel_id + "/messages"
+    let url = "\{discord_api_base}/channels/\{channel_id}/messages"
     let body : Map[String, Json] = Map::new()
     body["content"] = chunk.to_json()
     let body_str = Json::object(body).stringify()
     let headers : Map[String, String] = Map::new()
     headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bot " + self.token
+    headers["Authorization"] = "Bot \{self.token}"
     headers["User-Agent"] = "DiscordBot (cub, 0.1.0)"
     try {
       let (response, _data) = @http.post(url, body_str, headers~)
       if response.code != 200 && response.code != 204 {
-        println(
-          "[discord] send_message failed: HTTP " + response.code.to_string(),
-        )
+        println("[discord] send_message failed: HTTP \{response.code}")
       }
     } catch {
-      e => println("[discord] send_message error: " + e.to_string())
+      e => println("[discord] send_message error: \{e}")
     }
   }
 }
