@@ -4,3 +4,4 @@ _build/
 .cub/
 .env
 .agent/
+skills/
