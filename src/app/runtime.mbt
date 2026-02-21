@@ -86,7 +86,8 @@ fn AppRuntime::create_session(
   let tool_ctx = @tools.ToolContext::new(tape, self.workspace, session_id=session_id)
   @tools.register_builtin_tools(registry, tool_ctx)
   // Register tape tools
-  register_tape_tools(registry, tape, self.workspace, allowed_skills=self.settings.allowed_skills)
+  let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
+  register_tape_tools(registry, tape, self.workspace, home, allowed_skills=self.settings.allowed_skills)
   // Create tool view
   let tool_view = @tools.ProgressiveToolView::new(registry)
   // Create LLM client
@@ -117,7 +118,11 @@ fn AppRuntime::create_session(
     self.settings.max_tokens,
     timeout,
     self.settings.system_prompt,
-    fn() { read_agents_md(ws) },
+    fn() {
+      let agents = read_agents_md(ws)
+      let memory = read_memory_md(home)
+      if agents.is_empty() { memory } else if memory.is_empty() { agents } else { "\{agents}\n\n\{memory}" }
+    },
     llm,
     registry,
   )
@@ -230,11 +235,26 @@ fn read_file_sync(path : String) -> String {
 #borrow(path, buf)
 extern "C" fn cub_read_file(path : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_read_file"
 
+/// FFI: write data to file, returns bytes written or -1 on error.
+#borrow(path, data)
+extern "C" fn cub_write_file(path : Bytes, data : Bytes, data_len : Int) -> Int = "cub_write_file"
+
+/// Read MEMORY.md from home directory, returns empty string if not found.
+fn read_memory_md(home : String) -> String {
+  let path = "\{home}/MEMORY.md"
+  let text = read_file_sync(path)
+  if text.is_empty() {
+    return ""
+  }
+  "<workspace_memory>\n\{text}\n</workspace_memory>"
+}
+
 /// Register tape-related internal tools (help, tools, tape.info, etc.).
 fn register_tape_tools(
   registry : @tools.ToolRegistry,
   tape : @tape.TapeService,
   workspace : String,
+  home : String,
   allowed_skills~ : Array[String] = []
 ) -> Unit {
   // ,help
@@ -324,12 +344,15 @@ fn register_tape_tools(
   )
   // ,handoff
   let props : Map[String, Json] = Map::new()
-  props["name"] = @tools.string_prop("Handoff name")
-  props["summary"] = @tools.string_prop("Summary of current state")
+  props["name"] = @tools.string_prop("Handoff name (e.g. 'refactor/phase2')")
+  props["summary"] = @tools.string_prop("Current task status — what was done")
+  props["context"] = @tools.string_prop("Key context to carry forward (files, decisions)")
+  props["next_steps"] = @tools.string_prop("What should happen next")
+  props["task"] = @tools.string_prop("Current task description")
   let handoff_params = @tools.make_params(props, ["name"])
   registry.register(
     "handoff",
-    "Create a tape handoff (stage transition)",
+    "Create a stage transition — carry forward state, not history",
     parameters=handoff_params,
     handler=async fn(args) {
       let name = match args {
@@ -339,6 +362,18 @@ fn register_tape_tools(
       let state : Map[String, Json] = Map::new()
       match args {
         { "summary": String(s), .. } => state["summary"] = s.to_json()
+        _ => ()
+      }
+      match args {
+        { "context": String(c), .. } => state["context"] = c.to_json()
+        _ => ()
+      }
+      match args {
+        { "next_steps": String(ns), .. } => state["next_steps"] = ns.to_json()
+        _ => ()
+      }
+      match args {
+        { "task": String(t), .. } => state["task"] = t.to_json()
         _ => ()
       }
       ignore(tape.handoff(name, state=Some(state)))
@@ -425,6 +460,48 @@ fn register_tape_tools(
       match @skills.load_skill_body(name, ws_for_describe) {
         Some(body) => "skill: \{name}\n\n\{body}"
         None => "skill not found: \{name}"
+      }
+    },
+  )
+  // ,memory.read
+  let mem_home_read = home
+  registry.register(
+    "memory.read",
+    "Read persistent workspace memory (MEMORY.md)",
+    handler=fn(_args) {
+      let text = read_file_sync("\{mem_home_read}/MEMORY.md")
+      if text.is_empty() { "no memory saved yet" } else { text }
+    },
+  )
+  // ,memory.save
+  let mem_home_save = home
+  let mem_props : Map[String, Json] = Map::new()
+  mem_props["content"] = @tools.string_prop("Content to save — facts, conventions, preferences (not conversation summaries)")
+  let mem_params = @tools.make_params(mem_props, ["content"])
+  registry.register(
+    "memory.save",
+    "Save persistent facts to workspace memory (MEMORY.md) — survives across sessions",
+    parameters=mem_params,
+    handler=fn(args) {
+      let content = match args {
+        { "content": String(c), .. } => c
+        _ => return "memory.save: missing content"
+      }
+      let path = "\{mem_home_save}/MEMORY.md"
+      // Read existing content and append
+      let existing = read_file_sync(path)
+      let new_content = if existing.is_empty() {
+        "# Workspace Memory\n\n\{content}\n"
+      } else {
+        "\{existing}\n\{content}\n"
+      }
+      let bytes = @config.string_to_cstr(path)
+      let content_bytes = @utf8.encode(new_content)
+      let result = cub_write_file(bytes, content_bytes, content_bytes.length())
+      if result < 0 {
+        "memory.save: write failed"
+      } else {
+        "saved to MEMORY.md"
       }
     },
   )

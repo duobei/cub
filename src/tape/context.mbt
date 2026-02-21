@@ -1,13 +1,36 @@
 /// Tape context: convert tape entries to LLM chat messages.
 
 /// Convert tape entries to chat messages for the LLM.
+/// Only processes entries AFTER the last anchor (anchor-aware context selection).
+/// If the last anchor has state, injects it as the first system message.
 /// Handles orphan tool_calls (no matching tool_result) by buffering
 /// the assistant message and only emitting it when a tool_result follows.
 pub fn select_messages(entries : Array[TapeEntry]) -> Array[Json] {
+  // Find the last anchor position
+  let mut last_anchor_idx = -1
+  let mut last_anchor_state : Json = Json::null()
+  for i, entry in entries {
+    if entry.kind == "anchor" {
+      last_anchor_idx = i
+      last_anchor_state = entry.payload
+    }
+  }
   let messages : Array[Json] = []
+  // Inject anchor state as context if present
+  let state_text = extract_anchor_context(last_anchor_state)
+  if not(state_text.is_empty()) {
+    let ctx_msg : Map[String, Json] = {}
+    ctx_msg["role"] = "system".to_json()
+    ctx_msg["content"] = "<handoff_context>\n\{state_text}\n</handoff_context>".to_json()
+    messages.push(Json::object(ctx_msg))
+  }
+  // Process only entries after the last anchor
   let mut pending_calls : Array[Json] = []
   let mut pending_assistant_msg : Json? = None
-  for entry in entries {
+  for i, entry in entries {
+    if i <= last_anchor_idx {
+      continue
+    }
     if entry.kind == "message" {
       // If there's a buffered tool_call without a result, drop it
       if pending_assistant_msg is Some(_) {
@@ -43,6 +66,34 @@ pub fn select_messages(entries : Array[TapeEntry]) -> Array[Json] {
   }
   // If there's a trailing orphan tool_call, drop it
   messages
+}
+
+/// Extract human-readable context from anchor state payload.
+fn extract_anchor_context(payload : Json) -> String {
+  let parts : Array[String] = []
+  match payload {
+    { "state": Object(state), .. } => {
+      // Extract meaningful state fields
+      match state.get("summary") {
+        Some(String(s)) => parts.push("Summary: \{s}")
+        _ => ()
+      }
+      match state.get("context") {
+        Some(String(c)) => parts.push("Context: \{c}")
+        _ => ()
+      }
+      match state.get("next_steps") {
+        Some(String(ns)) => parts.push("Next steps: \{ns}")
+        _ => ()
+      }
+      match state.get("task") {
+        Some(String(t)) => parts.push("Current task: \{t}")
+        _ => ()
+      }
+    }
+    _ => ()
+  }
+  parts.join("\n")
 }
 
 /// Append a message entry directly as a chat message.
@@ -132,7 +183,7 @@ fn normalize_tool_calls(payload : Json) -> Array[Json] {
 fn validate_tool_call(call : Json) -> Bool {
   match call {
     { "id": String(id), "function": { "name": String(name), "arguments": String(args), .. }, .. } => {
-      if id.length() == 0 || name.length() == 0 {
+      if id.is_empty() || name.is_empty() {
         return false
       }
       // Arguments must be valid JSON
@@ -148,10 +199,38 @@ fn validate_tool_call(call : Json) -> Bool {
   }
 }
 
-/// Render a tool result to string.
+/// Max lines to keep in a tool result when it appears in history.
+let tool_result_max_lines : Int = 80
+
+/// Render a tool result to string, truncating if too long.
 fn render_tool_result(result : Json) -> String {
-  match result {
+  let text = match result {
     String(s) => s
     _ => result.stringify()
   }
+  truncate_tool_output(text)
+}
+
+/// Truncate tool output to max lines, appending a note if truncated.
+fn truncate_tool_output(text : String) -> String {
+  let lines = text.split("\n")
+  let mut count = 0
+  for _line in lines {
+    count += 1
+  }
+  if count <= tool_result_max_lines {
+    return text
+  }
+  // Keep first N lines
+  let kept : Array[String] = []
+  let mut i = 0
+  for line in text.split("\n") {
+    if i >= tool_result_max_lines {
+      break
+    }
+    kept.push(line.to_string())
+    i += 1
+  }
+  let joined = kept.join("\n")
+  "\{joined}\n[...truncated, \{count} lines total]"
 }

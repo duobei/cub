@@ -30,3 +30,15 @@ int32_t cub_read_file(const char *path, char *buf, int32_t buf_size) {
   fclose(f);
   return (int32_t)file_size;
 }
+
+/* Write content to file. Returns bytes written, or -1 on error. */
+MOONBIT_FFI_EXPORT
+int32_t cub_write_file(const char *path, const char *data, int32_t data_len) {
+  FILE *f = fopen(path, "w");
+  if (!f) {
+    return -1;
+  }
+  size_t written = fwrite(data, 1, data_len, f);
+  fclose(f);
+  return (int32_t)written;
+}

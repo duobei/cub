@@ -335,7 +335,12 @@ fn runtime_contract() -> String {
     #|6) Use '$name' hints to request detail expansion for tools/skills when needed.
     #|</runtime_contract>
     #|<context_contract>
-    #|Excessively long context may cause model call failures. In this case, you SHOULD first use tape.handoff tool to shorten the length of the retrieved history. The current limit is 200k tokens.
+    #|Context is managed via tape anchors. Only entries after the last anchor are visible.
+    #|When context grows large, use handoff to transition to a new stage.
+    #|In the handoff state, describe the CURRENT task status and NEXT steps — not a summary of history.
+    #|Example: handoff(name="refactor/phase2", summary="Completed router refactor. Next: update tests.", context="Files changed: router.mbt, types.mbt", next_steps="Run tests and fix failures")
+    #|If you need to recall earlier conversation, use tape.search to retrieve specific information.
+    #|Use memory.save to persist important facts (project conventions, user preferences) across sessions.
     #|</context_contract>
   contract
 }

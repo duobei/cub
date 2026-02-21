@@ -282,6 +282,18 @@ pub async fn LLMClient::chat(
   parse_chat_response(response_json)
 }
 
+/// Estimate token count from messages (rough: chars / 4).
+fn estimate_tokens(messages : Array[Json], system_prompt : String) -> Int {
+  let mut chars = system_prompt.length()
+  for msg in messages {
+    chars += msg.stringify().length()
+  }
+  chars / 4
+}
+
+/// Context budget warning threshold (80% of 128k default).
+let context_budget_tokens : Int = 128000
+
 /// Run a single tool-use cycle: chat → execute tools → return result.
 pub async fn LLMClient::run_tools(
   self : LLMClient,
@@ -296,9 +308,22 @@ pub async fn LLMClient::run_tools(
   tape.append(@tape.TapeEntry::message("user", prompt))
   // Get messages from tape
   let messages = tape.read_messages()
-  // Call LLM
+  // Estimate token usage and inject budget warning if needed
+  let estimated = estimate_tokens(messages, system_prompt)
+  let threshold = context_budget_tokens * 4 / 5 // 80%
   let sp : String? = if system_prompt.length() > 0 {
-    Some(system_prompt)
+    if estimated > threshold {
+      let warning =
+        #|
+        #|<context_warning>
+        #|WARNING: Context is at ~{estimated} tokens (~80% of budget).
+        #|You SHOULD use handoff NOW to transition to a new stage.
+        #|Carry forward the current task state, not history.
+        #|</context_warning>
+      Some("\{system_prompt}\{warning}")
+    } else {
+      Some(system_prompt)
+    }
   } else {
     None
   }
