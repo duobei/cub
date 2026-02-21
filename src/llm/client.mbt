@@ -725,27 +725,91 @@ pub async fn LLMClient::run_tools(
   // Record assistant tool calls
   let call_jsons = response.tool_calls.map(fn(tc) { tc.to_json() })
   tape.append(@tape.TapeEntry::tool_call(call_jsons))
-  // Execute each tool call
+  // Separate tool calls into confirmation-required (serial) and parallel-safe
+  let serial_calls : Array[ToolCallInfo] = []
+  let parallel_calls : Array[ToolCallInfo] = []
+  for tc in response.tool_calls {
+    if needs_confirmation(tc.function_.name) {
+      serial_calls.push(tc)
+    } else {
+      parallel_calls.push(tc)
+    }
+  }
+  // Execute tool calls with parallel optimization
   let result_jsons : Array[Json] = []
   let mut any_tool_error = false
-  for tc in response.tool_calls {
+  // Execute parallel-safe tools concurrently when there are multiple
+  if parallel_calls.length() > 1 {
+    // Pre-allocate result slots to preserve order
+    let parallel_results : Array[String] = []
+    for _tc in parallel_calls {
+      parallel_results.push("")
+    }
+    // Use task group for concurrent execution
+    @async.with_task_group(fn(group) {
+      for idx, tc in parallel_calls {
+        let tc_args_str = tc.function_.arguments
+        let tc_name = tc.function_.name
+        let slot = idx
+        group.spawn_bg(async fn() {
+          let args : Json = @json.parse(tc_args_str) catch {
+            _ => Json::object(Map::new())
+          }
+          let result_text = execute_tool(tc_name, args) catch {
+            e => "Error: \{e}"
+          }
+          parallel_results[slot] = result_text
+        })
+      }
+    })
+    // Collect results in original order
+    for idx, tc in parallel_calls {
+      let result_text = parallel_results[idx]
+      if result_text.has_prefix("Error: ") {
+        any_tool_error = true
+      }
+      let result_obj : Map[String, Json] = Map::new()
+      result_obj["tool_call_id"] = tc.id.to_json()
+      result_obj["name"] = tc.function_.name.to_json()
+      result_obj["content"] = result_text.to_json()
+      result_jsons.push(Json::object(result_obj))
+    }
+  } else {
+    // Single parallel call or none — execute sequentially
+    for tc in parallel_calls {
+      let args : Json = @json.parse(tc.function_.arguments) catch {
+        _ => Json::object(Map::new())
+      }
+      let result_text = execute_tool(tc.function_.name, args) catch {
+        e => {
+          any_tool_error = true
+          "Error: \{e}"
+        }
+      }
+      let result_obj : Map[String, Json] = Map::new()
+      result_obj["tool_call_id"] = tc.id.to_json()
+      result_obj["name"] = tc.function_.name.to_json()
+      result_obj["content"] = result_text.to_json()
+      result_jsons.push(Json::object(result_obj))
+    }
+  }
+  // Execute confirmation-required tools serially
+  for tc in serial_calls {
     let args : Json = @json.parse(tc.function_.arguments) catch {
       _ => Json::object(Map::new())
     }
     // Check if tool requires confirmation
-    if needs_confirmation(tc.function_.name) {
-      match self.confirm_fn {
-        Some(cfn) =>
-          if not(cfn(tc.function_.name, tc.function_.arguments)) {
-            let result_obj : Map[String, Json] = Map::new()
-            result_obj["tool_call_id"] = tc.id.to_json()
-            result_obj["name"] = tc.function_.name.to_json()
-            result_obj["content"] = "[denied by user]".to_json()
-            result_jsons.push(Json::object(result_obj))
-            continue
-          }
-        None => () // No confirm_fn means auto-approve
-      }
+    match self.confirm_fn {
+      Some(cfn) =>
+        if not(cfn(tc.function_.name, tc.function_.arguments)) {
+          let result_obj : Map[String, Json] = Map::new()
+          result_obj["tool_call_id"] = tc.id.to_json()
+          result_obj["name"] = tc.function_.name.to_json()
+          result_obj["content"] = "[denied by user]".to_json()
+          result_jsons.push(Json::object(result_obj))
+          continue
+        }
+      None => () // No confirm_fn means auto-approve
     }
     let result_text = execute_tool(tc.function_.name, args) catch {
       e => {

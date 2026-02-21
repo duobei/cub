@@ -1,7 +1,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <errno.h>
 #include <moonbit.h>
+
+/* Read file into buffer for tools package.
+   If buf_size is 0, just returns the size needed. */
+MOONBIT_FFI_EXPORT
+int32_t cub_tools_read_file(const char *path, char *buf, int32_t buf_size) {
+  FILE *f = fopen(path, "r");
+  if (!f) return -1;
+  fseek(f, 0, SEEK_END);
+  long file_size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  if (file_size < 0) { fclose(f); return -1; }
+  if (buf_size > 0 && buf != NULL) {
+    int32_t to_read = file_size < buf_size ? (int32_t)file_size : buf_size;
+    size_t read_len = fread(buf, 1, to_read, f);
+    fclose(f);
+    return (int32_t)read_len;
+  }
+  fclose(f);
+  return (int32_t)file_size;
+}
 
 /* Simple HTTP GET using libcurl.
    Two-pass pattern: call with buf_size=0 to get content length,

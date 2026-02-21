@@ -1,4 +1,6 @@
-/// Built-in tools: bash, fs.read, fs.write, fs.edit, fs.list, fs.glob, grep, web.fetch, web.search, done.
+/// Built-in tools: bash, fs.read, fs.write, fs.edit, fs.list, fs.glob, grep, web.fetch, web.search,
+/// schedule.add, schedule.remove, schedule.list, agent.spawn, project.analyze,
+/// git.status, git.diff, git.log, git.commit, done.
 
 ///|
 /// Default subprocess timeout in seconds.
@@ -20,6 +22,15 @@ pub fn register_builtin_tools(
   register_web_fetch(registry, ctx)
   register_web_search(registry, ctx)
   register_skill_install(registry, ctx)
+  register_schedule_add(registry, ctx)
+  register_schedule_remove(registry, ctx)
+  register_schedule_list(registry, ctx)
+  register_agent_spawn(registry, ctx)
+  register_project_analyze(registry, ctx)
+  register_git_status(registry, ctx)
+  register_git_diff(registry, ctx)
+  register_git_log(registry, ctx)
+  register_git_commit(registry, ctx)
   register_done(registry, ctx)
 }
 
@@ -1006,6 +1017,661 @@ pub fn extract_skill_name(content : String) -> String {
     }
   }
   ""
+}
+
+///|
+/// Generate a short unique job ID from current timestamp.
+
+///|
+/// Global counter for generating unique job IDs within a process.
+let job_counter : Ref[Int] = { val: 0 }
+
+///|
+/// Generate a unique job ID using timestamp + counter.
+fn generate_job_id() -> String {
+  let ts = @async.now()
+  job_counter.val = job_counter.val + 1
+  let count = job_counter.val
+  // FNV-1a hash mixing timestamp + counter
+  let mut hash : UInt = 2166136261
+  // Mix in timestamp bytes
+  for i = 0; i < 8; i = i + 1 {
+    let byte = ((ts >> (i * 8)) & 0xFFL).to_int().reinterpret_as_uint()
+    hash = hash ^ byte
+    hash = hash * 16777619
+  }
+  // Mix in counter
+  hash = hash ^ count.reinterpret_as_uint()
+  hash = hash * 16777619
+  let hex_chars = "0123456789abcdef"
+  let buf = StringBuilder::new()
+  buf.write_string("job_")
+  for i = 0; i < 8; i = i + 1 {
+    let nibble = ((hash >> ((7 - i) * 4)) & 0xf).reinterpret_as_int()
+    buf.write_char(hex_chars[nibble].to_int().unsafe_to_char())
+  }
+  buf.to_string()
+}
+
+///|
+/// Register schedule.add tool.
+fn register_schedule_add(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["message"] = string_prop("Message/task to execute when triggered")
+  props["trigger"] = string_prop(
+    "Trigger specification: 'cron:*/5 * * * *', 'date:2026-02-23T10:00:00', or 'interval:30m'",
+  )
+  props["session_id"] = string_prop(
+    "Session ID to run the task in (optional, default: schedule)",
+  )
+  let params = make_params(props, ["message", "trigger"])
+  registry.register(
+    "schedule.add",
+    "Add a scheduled task",
+    detail="Schedule a task to run at a future time or on a recurring basis. Supports cron expressions, specific dates, and intervals (e.g. 30m, 1h, 2d).",
+    parameters=params,
+    handler=async fn(args) {
+      let message = match args {
+        { "message": String(m), .. } => m
+        _ => fail("schedule.add: missing 'message' argument")
+      }
+      let trigger = match args {
+        { "trigger": String(t), .. } => t
+        _ => fail("schedule.add: missing 'trigger' argument")
+      }
+      let session_id = match args {
+        { "session_id": String(s), .. } => s
+        _ => "schedule"
+      }
+      // Validate trigger format
+      if not(trigger.has_prefix("cron:")) &&
+        not(trigger.has_prefix("date:")) &&
+        not(trigger.has_prefix("interval:")) {
+        fail(
+          "schedule.add: trigger must start with 'cron:', 'date:', or 'interval:'",
+        )
+      }
+      // Validate interval format if interval trigger
+      if trigger.has_prefix("interval:") {
+        let interval_str = trigger[9:].to_string() catch {
+          _ => fail("schedule.add: invalid interval format")
+        }
+        if parse_interval_seconds(interval_str) <= 0 {
+          fail(
+            "schedule.add: invalid interval format (use e.g. '30m', '1h', '2d')",
+          )
+        }
+      }
+      let job_id = generate_job_id()
+      // Build schedule entry
+      let entry : Map[String, Json] = Map::new()
+      entry["id"] = job_id.to_json()
+      entry["message"] = message.to_json()
+      entry["trigger"] = trigger.to_json()
+      entry["session_id"] = session_id.to_json()
+      let now_ms = @async.now()
+      entry["created_at_ms"] = now_ms.to_json()
+      entry["enabled"] = true.to_json()
+      // Read existing schedules
+      let schedules_path = resolve_schedules_path(workspace)
+      let existing = read_schedules_file(schedules_path)
+      existing.push(Json::object(entry))
+      // Write back
+      write_schedules_file(schedules_path, existing)
+      "scheduled: \{job_id} (trigger: \{trigger})"
+    },
+  )
+}
+
+///|
+/// Resolve the path to schedules.json.
+fn resolve_schedules_path(_workspace : String) -> String {
+  let home = @config.getenv("HOME").unwrap_or("/tmp")
+  "\{home}/.cub/schedules.json"
+}
+
+///|
+/// Read schedules from JSON file as sync via C FFI.
+fn read_schedules_file(path : String) -> Array[Json] {
+  let path_bytes = @config.string_to_cstr(path)
+  let len = cub_read_file_ffi(path_bytes, Bytes::new(0), 0)
+  if len <= 0 {
+    return []
+  }
+  let buf = Bytes::new(len)
+  let actual = cub_read_file_ffi(path_bytes, buf, len)
+  if actual <= 0 {
+    return []
+  }
+  let content = @utf8.decode_lossy(buf[:actual])
+  if content.trim().to_string().is_empty() {
+    return []
+  }
+  let parsed : Json = @json.parse(content) catch { _ => return [] }
+  match parsed {
+    Array(items) => items
+    _ => []
+  }
+}
+
+///|
+/// Check if a file exists via C FFI (lightweight, no content read).
+fn file_exists(path : String) -> Bool {
+  let path_bytes = @config.string_to_cstr(path)
+  cub_read_file_ffi(path_bytes, Bytes::new(0), 0) >= 0
+}
+
+///|
+/// FFI: read file for tools package.
+#borrow(path, buf)
+extern "C" fn cub_read_file_ffi(
+  path : Bytes,
+  buf : Bytes,
+  buf_size : Int,
+) -> Int = "cub_tools_read_file"
+
+///|
+/// Write schedules to JSON file. Raises on failure.
+async fn write_schedules_file(path : String, schedules : Array[Json]) -> Unit {
+  let json = Json::array(schedules)
+  let content = json.stringify()
+  // Create parent directory
+  let parent = get_parent_dir(path)
+  if parent.length() > 0 {
+    @fs.mkdir(parent, permission=0o755, recursive=true) catch {
+      _ => ()
+    }
+  }
+  @fs.write_file(path, content, create=0o644) catch {
+    e => fail("schedule: failed to write \{path}: \{e}")
+  }
+}
+
+///|
+/// Parse interval string like "30m", "1h", "2d" into seconds.
+pub fn parse_interval_seconds(s : String) -> Int {
+  let trimmed = s.trim().to_string()
+  if trimmed.is_empty() {
+    return -1
+  }
+  let last_char = trimmed[trimmed.length() - 1]
+  let num_str = trimmed[:trimmed.length() - 1].to_string() catch {
+    _ => return -1
+  }
+  let num = @strconv.parse_int(num_str) catch { _ => return -1 }
+  if num <= 0 {
+    return -1
+  }
+  let multiplier = if last_char == 's'.to_int().to_uint16() {
+    1
+  } else if last_char == 'm'.to_int().to_uint16() {
+    60
+  } else if last_char == 'h'.to_int().to_uint16() {
+    3600
+  } else if last_char == 'd'.to_int().to_uint16() {
+    86400
+  } else {
+    return -1
+  }
+  num * multiplier
+}
+
+///|
+/// Register schedule.remove tool.
+fn register_schedule_remove(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["id"] = string_prop("Job ID to remove")
+  let params = make_params(props, ["id"])
+  registry.register(
+    "schedule.remove",
+    "Remove a scheduled task",
+    detail="Remove a scheduled task by its job ID.",
+    parameters=params,
+    handler=async fn(args) {
+      let id = match args {
+        { "id": String(i), .. } => i
+        _ => fail("schedule.remove: missing 'id' argument")
+      }
+      let path = resolve_schedules_path(workspace)
+      let schedules = read_schedules_file(path)
+      let filtered = schedules.filter(fn(s) {
+        match s {
+          { "id": String(sid), .. } => sid != id
+          _ => true
+        }
+      })
+      if filtered.length() == schedules.length() {
+        fail("schedule.remove: job '\{id}' not found")
+      }
+      write_schedules_file(path, filtered)
+      "removed: \{id}"
+    },
+  )
+}
+
+///|
+/// Register schedule.list tool.
+fn register_schedule_list(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let params = make_params(Map::new(), [])
+  registry.register(
+    "schedule.list",
+    "List all scheduled tasks",
+    detail="Show all pending scheduled tasks with their triggers and messages.",
+    parameters=params,
+    handler=fn(_args) {
+      let path = resolve_schedules_path(workspace)
+      let schedules = read_schedules_file(path)
+      if schedules.is_empty() {
+        return "no scheduled tasks"
+      }
+      let lines : Array[String] = []
+      for s in schedules {
+        let id = match s {
+          { "id": String(i), .. } => i
+          _ => "?"
+        }
+        let msg = match s {
+          { "message": String(m), .. } => m
+          _ => ""
+        }
+        let trigger = match s {
+          { "trigger": String(t), .. } => t
+          _ => ""
+        }
+        let enabled = match s {
+          { "enabled": True, .. } => "active"
+          _ => "disabled"
+        }
+        // Truncate message for display
+        let display_msg = if msg.length() > 60 {
+          "\{msg[:60]}..." catch {
+            _ => msg
+          }
+        } else {
+          msg
+        }
+        lines.push("  \{id}  [\{trigger}]  \{display_msg}  (\{enabled})")
+      }
+      "Scheduled tasks:\n" + lines.join("\n")
+    },
+  )
+}
+
+///|
+/// Register agent.spawn tool.
+fn register_agent_spawn(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["task"] = string_prop("Task description for the sub-agent to execute")
+  props["session_id"] = string_prop(
+    "Session ID for the sub-agent (optional, auto-generated if omitted)",
+  )
+  props["timeout_seconds"] = int_prop(
+    "Maximum seconds for sub-agent to run",
+    default_val=Some(300),
+  )
+  let params = make_params(props, ["task"])
+  registry.register(
+    "agent.spawn",
+    "Spawn a sub-agent to handle a task",
+    detail="Launch a sub-agent process that runs independently with its own session. The sub-agent inherits the workspace but has its own tape. Returns the sub-agent's final output.",
+    parameters=params,
+    requires_confirmation=true,
+    handler=async fn(args) {
+      let task = match args {
+        { "task": String(t), .. } => t
+        _ => fail("agent.spawn: missing 'task' argument")
+      }
+      let child_session = match args {
+        { "session_id": String(s), .. } => s
+        _ => "child_\{generate_job_id()}"
+      }
+      let timeout = match args {
+        { "timeout_seconds": Number(n, ..), .. } => n.to_int()
+        _ => 300
+      }
+      spawn_sub_agent(workspace, child_session, task, timeout)
+    },
+  )
+}
+
+///|
+/// Spawn a sub-agent as a subprocess.
+async fn spawn_sub_agent(
+  workspace : String,
+  _session_id : String,
+  task : String,
+  timeout : Int,
+) -> String {
+  // Find the cub binary
+  let cub_bin = match @config.getenv("CUB_BIN") {
+    Some(b) => b
+    None => {
+      // Try common locations via C FFI (lightweight: only check file size)
+      let candidates = [
+        "\{workspace}/_build/native/debug/build/main/main.exe",
+        "/usr/local/bin/cub",
+      ]
+      let mut found = ""
+      for c in candidates {
+        let path_bytes = @config.string_to_cstr(c)
+        let size = cub_read_file_ffi(path_bytes, Bytes::new(0), 0)
+        if size > 0 {
+          found = c
+          break
+        }
+      }
+      if found.is_empty() {
+        fail("agent.spawn: cannot find cub binary (set CUB_BIN)")
+      }
+      found
+    }
+  }
+  let (exit_code, stdout_data, stderr_data) = @async.with_timeout(
+    timeout * 1000,
+    async fn() {
+      @process.collect_output(cub_bin, ["run", "--workspace", workspace, task])
+    },
+  ) catch {
+    _ => fail("agent.spawn: timeout after \{timeout}s")
+  }
+  let stdout_text = stdout_data.text() catch { _ => "" }
+  let stderr_text = stderr_data.text() catch { _ => "" }
+  if exit_code != 0 {
+    let error_output = if stderr_text.length() > 0 {
+      stderr_text
+    } else {
+      stdout_text
+    }
+    fail("agent.spawn: exit=\{exit_code}: \{error_output}")
+  }
+  if stdout_text.trim().to_string().is_empty() {
+    "(sub-agent produced no output)"
+  } else {
+    stdout_text
+  }
+}
+
+///|
+/// Register project.analyze tool.
+fn register_project_analyze(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let params = make_params(Map::new(), [])
+  registry.register(
+    "project.analyze",
+    "Analyze project structure and detect language/framework",
+    detail="Automatically detect project language, framework, entry point, build and test commands by inspecting manifest files.",
+    parameters=params,
+    handler=async fn(_args) { analyze_project(workspace) },
+  )
+}
+
+///|
+/// Analyze a project directory to detect language, framework, etc.
+async fn analyze_project(workspace : String) -> String {
+  let results : Array[String] = []
+  // Check various manifest files
+  let manifests : Array[(String, String, String, String, String)] = [
+    (
+      "moon.pkg.json", "MoonBit", "", "moon build --target native", "moon test --target native",
+    ),
+    (
+      "moon.pkg", "MoonBit", "", "moon build --target native", "moon test --target native",
+    ),
+    (
+      "package.json", "JavaScript/TypeScript", "Node.js", "npm run build", "npm test",
+    ),
+    ("Cargo.toml", "Rust", "Cargo", "cargo build", "cargo test"),
+    ("go.mod", "Go", "", "go build ./...", "go test ./..."),
+    ("pyproject.toml", "Python", "", "python -m build", "python -m pytest"),
+    ("pom.xml", "Java", "Maven", "mvn package", "mvn test"),
+    ("build.gradle", "Java/Kotlin", "Gradle", "gradle build", "gradle test"),
+    (
+      "Gemfile", "Ruby", "Bundler", "bundle exec rake build", "bundle exec rake test",
+    ),
+    ("composer.json", "PHP", "Composer", "composer install", "composer test"),
+    ("CMakeLists.txt", "C/C++", "CMake", "cmake --build .", "ctest"),
+    ("Makefile", "C/C++", "Make", "make", "make test"),
+  ]
+  let mut detected_language = ""
+  let mut detected_framework = ""
+  let mut detected_build = ""
+  let mut detected_test = ""
+  for item in manifests {
+    let (file, lang, framework, build_cmd, test_cmd) = item
+    let path = "\{workspace}/\{file}"
+    if file_exists(path) {
+      detected_language = lang
+      detected_framework = framework
+      detected_build = build_cmd
+      detected_test = test_cmd
+      results.push("manifest: \{file}")
+      break
+    }
+  }
+  // Detect entry points
+  let entry_candidates = [
+    "src/main/main.mbt", "src/main.rs", "main.go", "src/index.ts", "src/index.js",
+    "index.ts", "index.js", "app.py", "main.py", "src/main.py",
+  ]
+  let mut entry_file = ""
+  for candidate in entry_candidates {
+    let path = "\{workspace}/\{candidate}"
+    if file_exists(path) {
+      entry_file = candidate
+      break
+    }
+  }
+  // Check for AGENTS.md
+  let has_agents_md = file_exists("\{workspace}/AGENTS.md")
+  // Check for README
+  let has_readme = file_exists("\{workspace}/README.md")
+  // Check for .git
+  let has_git = try {
+    let (code, _, _) = @process.collect_output("git", [
+      "-C", workspace, "rev-parse", "--git-dir",
+    ])
+    code == 0
+  } catch {
+    _ => false
+  }
+  // Build report
+  let buf = StringBuilder::new()
+  buf.write_string("Project Analysis:\n")
+  if detected_language.length() > 0 {
+    buf.write_string("  Language: \{detected_language}\n")
+  } else {
+    buf.write_string("  Language: unknown\n")
+  }
+  if detected_framework.length() > 0 {
+    buf.write_string("  Framework: \{detected_framework}\n")
+  }
+  if entry_file.length() > 0 {
+    buf.write_string("  Entry point: \{entry_file}\n")
+  }
+  if detected_build.length() > 0 {
+    buf.write_string("  Build command: \{detected_build}\n")
+  }
+  if detected_test.length() > 0 {
+    buf.write_string("  Test command: \{detected_test}\n")
+  }
+  let git_status = if has_git { "yes" } else { "no" }
+  let agents_status = if has_agents_md { "present" } else { "not found" }
+  let readme_status = if has_readme { "present" } else { "not found" }
+  buf.write_string("  Git: \{git_status}\n")
+  buf.write_string("  AGENTS.md: \{agents_status}\n")
+  buf.write_string("  README.md: \{readme_status}\n")
+  if results.length() > 0 {
+    let detected_str = results.join(", ")
+    buf.write_string("  Detected: \{detected_str}\n")
+  }
+  buf.to_string()
+}
+
+///|
+/// Register git.status tool.
+fn register_git_status(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let params = make_params(Map::new(), [])
+  registry.register(
+    "git.status",
+    "Show git working tree status",
+    detail="Show modified, added, and deleted files in the git repository.",
+    parameters=params,
+    handler=async fn(_args) {
+      run_git_command(workspace, ["status", "--porcelain=v1"])
+    },
+  )
+}
+
+///|
+/// Register git.diff tool.
+fn register_git_diff(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["path"] = string_prop("File path to diff (optional, default: all)")
+  props["staged"] = {
+    let p : Map[String, Json] = Map::new()
+    p["type"] = "boolean".to_json()
+    p["description"] = "Show staged changes (default: false)".to_json()
+    p["default"] = false.to_json()
+    Json::object(p)
+  }
+  let params = make_params(props, [])
+  registry.register(
+    "git.diff",
+    "Show git diff",
+    detail="Show unified diff of changes. Use staged=true for staged changes, or path to diff a specific file.",
+    parameters=params,
+    handler=async fn(args) {
+      let git_args : Array[String] = ["diff"]
+      match args {
+        { "staged": True, .. } => git_args.push("--cached")
+        _ => ()
+      }
+      git_args.push("--")
+      match args {
+        { "path": String(p), .. } => git_args.push(p)
+        _ => ()
+      }
+      run_git_command(workspace, git_args)
+    },
+  )
+}
+
+///|
+/// Register git.log tool.
+fn register_git_log(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["count"] = int_prop("Number of commits to show", default_val=Some(10))
+  props["oneline"] = {
+    let p : Map[String, Json] = Map::new()
+    p["type"] = "boolean".to_json()
+    p["description"] = "Show compact one-line format (default: true)".to_json()
+    p["default"] = true.to_json()
+    Json::object(p)
+  }
+  let params = make_params(props, [])
+  registry.register(
+    "git.log",
+    "Show recent git commits",
+    detail="Show recent commit history with hash, author, and message.",
+    parameters=params,
+    handler=async fn(args) {
+      let count = match args {
+        { "count": Number(n, ..), .. } => n.to_int()
+        _ => 10
+      }
+      let oneline = match args {
+        { "oneline": False, .. } => false
+        _ => true
+      }
+      let git_args : Array[String] = ["log", "-n", count.to_string()]
+      if oneline {
+        git_args.push("--oneline")
+      } else {
+        git_args.push("--format=%H %an %ad %s")
+        git_args.push("--date=short")
+      }
+      run_git_command(workspace, git_args)
+    },
+  )
+}
+
+///|
+/// Register git.commit tool.
+fn register_git_commit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["message"] = string_prop("Commit message")
+  props["files"] = string_prop(
+    "Space-separated list of files to stage (optional, default: all staged)",
+  )
+  let params = make_params(props, ["message"])
+  registry.register(
+    "git.commit",
+    "Create a git commit",
+    detail="Stage files and create a git commit. If files are specified, they are added before committing.",
+    parameters=params,
+    requires_confirmation=true,
+    handler=async fn(args) {
+      let message = match args {
+        { "message": String(m), .. } => m
+        _ => fail("git.commit: missing 'message' argument")
+      }
+      // Stage files if specified
+      match args {
+        { "files": String(files), .. } => {
+          let file_list : Array[String] = []
+          for f in files.split(" ") {
+            let trimmed = f.to_string().trim().to_string()
+            if not(trimmed.is_empty()) {
+              file_list.push(trimmed)
+            }
+          }
+          if file_list.length() > 0 {
+            let add_args : Array[String] = ["add"]
+            for f in file_list {
+              add_args.push(f)
+            }
+            ignore(run_git_command(workspace, add_args))
+          }
+        }
+        _ => ()
+      }
+      // Commit
+      run_git_command(workspace, ["commit", "-m", message])
+    },
+  )
+}
+
+///|
+/// Run a git command in the workspace.
+async fn run_git_command(workspace : String, args : Array[String]) -> String {
+  let full_args : Array[String] = ["-C", workspace]
+  for a in args {
+    full_args.push(a)
+  }
+  let (exit_code, stdout_data, stderr_data) = @async.with_timeout(15000, async fn() {
+    @process.collect_output("git", full_args)
+  }) catch {
+    e => fail("git: \{e}")
+  }
+  let stdout_text = stdout_data.text() catch { _ => "" }
+  let stderr_text = stderr_data.text() catch { _ => "" }
+  if exit_code != 0 {
+    let error = if stderr_text.length() > 0 { stderr_text } else { stdout_text }
+    fail("git: exit=\{exit_code}: \{error}")
+  }
+  if stdout_text.trim().to_string().is_empty() {
+    "(no output)"
+  } else {
+    stdout_text
+  }
 }
 
 ///|

@@ -145,3 +145,108 @@ test "parse_ddg_results extracts URLs" {
   inspect(result.contains("https://example.com/page"), content="true")
   inspect(result.contains("Another Title"), content="true")
 }
+
+///|
+test "to_model_name converts schedule tool names" {
+  inspect(@tools.to_model_name("schedule.add"), content="schedule_add")
+  inspect(@tools.to_model_name("schedule.remove"), content="schedule_remove")
+  inspect(@tools.to_model_name("schedule.list"), content="schedule_list")
+}
+
+///|
+test "to_model_name converts agent.spawn" {
+  inspect(@tools.to_model_name("agent.spawn"), content="agent_spawn")
+}
+
+///|
+test "to_model_name converts project.analyze" {
+  inspect(@tools.to_model_name("project.analyze"), content="project_analyze")
+}
+
+///|
+test "to_model_name converts git tool names" {
+  inspect(@tools.to_model_name("git.status"), content="git_status")
+  inspect(@tools.to_model_name("git.diff"), content="git_diff")
+  inspect(@tools.to_model_name("git.log"), content="git_log")
+  inspect(@tools.to_model_name("git.commit"), content="git_commit")
+}
+
+///|
+test "parse_interval_seconds valid intervals" {
+  inspect(@tools.parse_interval_seconds("30s"), content="30")
+  inspect(@tools.parse_interval_seconds("5m"), content="300")
+  inspect(@tools.parse_interval_seconds("1h"), content="3600")
+  inspect(@tools.parse_interval_seconds("2d"), content="172800")
+}
+
+///|
+test "parse_interval_seconds invalid intervals" {
+  inspect(@tools.parse_interval_seconds(""), content="-1")
+  inspect(@tools.parse_interval_seconds("abc"), content="-1")
+  inspect(@tools.parse_interval_seconds("0m"), content="-1")
+  inspect(@tools.parse_interval_seconds("-5m"), content="-1")
+}
+
+///|
+test "parse_interval_seconds edge cases" {
+  inspect(@tools.parse_interval_seconds("1s"), content="1")
+  inspect(@tools.parse_interval_seconds("60m"), content="3600")
+  inspect(@tools.parse_interval_seconds("24h"), content="86400")
+}
+
+///|
+test "from_model_name converts new tools back" {
+  let reg = @tools.ToolRegistry::new()
+  reg.register("schedule.add", "add schedule", handler=fn(_args) { "ok" })
+  reg.register("git.status", "git status", handler=fn(_args) { "ok" })
+  reg.register("agent.spawn", "spawn agent", handler=fn(_args) { "ok" })
+  inspect(@tools.from_model_name("schedule_add", reg), content="schedule.add")
+  inspect(@tools.from_model_name("git_status", reg), content="git.status")
+  inspect(@tools.from_model_name("agent_spawn", reg), content="agent.spawn")
+}
+
+///|
+test "ToolRegistry registers new tools with confirmation" {
+  let reg = @tools.ToolRegistry::new()
+  reg.register("git.commit", "commit", requires_confirmation=true, handler=fn(
+    _args,
+  ) {
+    "ok"
+  })
+  reg.register("agent.spawn", "spawn", requires_confirmation=true, handler=fn(
+    _args,
+  ) {
+    "ok"
+  })
+  reg.register("git.status", "status", handler=fn(_args) { "ok" })
+  inspect(reg.needs_confirmation("git.commit"), content="true")
+  inspect(reg.needs_confirmation("agent.spawn"), content="true")
+  inspect(reg.needs_confirmation("git.status"), content="false")
+}
+
+///|
+test "ToolRegistry model_tools includes new tools" {
+  let reg = @tools.ToolRegistry::new()
+  reg.register("schedule.add", "add schedule", handler=fn(_args) { "ok" })
+  reg.register("git.status", "git status", handler=fn(_args) { "ok" })
+  let tools = reg.model_tools()
+  inspect(tools.length(), content="2")
+  // Check that dot names are converted to underscores
+  let mut has_schedule = false
+  let mut has_git = false
+  for t in tools {
+    match t {
+      { "function": { "name": String(n), .. }, .. } => {
+        if n == "schedule_add" {
+          has_schedule = true
+        }
+        if n == "git_status" {
+          has_git = true
+        }
+      }
+      _ => ()
+    }
+  }
+  inspect(has_schedule, content="true")
+  inspect(has_git, content="true")
+}

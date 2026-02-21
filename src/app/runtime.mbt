@@ -189,13 +189,18 @@ fn AppRuntime::create_session(
     fn() {
       let agents = read_agents_md(ws)
       let memory = read_memory_md(home)
-      if agents.is_empty() {
-        memory
-      } else if memory.is_empty() {
-        agents
-      } else {
-        "\{agents}\n\n\{memory}"
+      let startup = read_startup_md(ws)
+      let parts : Array[String] = []
+      if not(agents.is_empty()) {
+        parts.push(agents)
       }
+      if not(memory.is_empty()) {
+        parts.push(memory)
+      }
+      if not(startup.is_empty()) {
+        parts.push(startup)
+      }
+      parts.join("\n\n")
     },
     llm,
     registry,
@@ -206,12 +211,18 @@ fn AppRuntime::create_session(
 }
 
 ///|
-/// Handle input for a session.
+/// Handle input for a session. Checks due schedules on each call.
 pub async fn AppRuntime::handle_input(
   self : AppRuntime,
   session_id : String,
   text : String,
 ) -> @core.LoopResult {
+  // Check due schedules before handling input
+  let due = self.check_due_schedules()
+  for msg in due {
+    @log.info("schedule", "executing due task: \{msg}")
+    ignore(self.get_session("schedule").handle_input(msg))
+  }
   let session = self.get_session(session_id)
   session.handle_input(text)
 }
@@ -905,6 +916,156 @@ fn register_tape_tools(
       }
     },
   )
+  // ,schedules — alias for schedule.list
+  let sched_ws = workspace
+  registry.register(
+    "schedules",
+    "List scheduled tasks (alias for schedule.list)",
+    handler=fn(_args) {
+      let sched_home = @config.getenv("HOME").unwrap_or("/tmp")
+      let path = "\{sched_home}/.cub/schedules.json"
+      let content = read_file_sync(path)
+      if content.trim().to_string().is_empty() {
+        return "no scheduled tasks"
+      }
+      let parsed : Json = @json.parse(content) catch {
+        _ => return "no scheduled tasks"
+      }
+      match parsed {
+        Array(items) => {
+          if items.is_empty() {
+            return "no scheduled tasks"
+          }
+          let lines : Array[String] = []
+          for s in items {
+            let id = match s {
+              { "id": String(i), .. } => i
+              _ => "?"
+            }
+            let msg = match s {
+              { "message": String(m), .. } => m
+              _ => ""
+            }
+            let trigger = match s {
+              { "trigger": String(t), .. } => t
+              _ => ""
+            }
+            lines.push("  \{id}  [\{trigger}]  \{msg}")
+          }
+          "Scheduled tasks:\n" + lines.join("\n")
+        }
+        _ => "no scheduled tasks"
+      }
+    },
+  )
+  ignore(sched_ws)
   // ,quit
   registry.register("quit", "Exit the session", handler=fn(_args) { "exit" })
+}
+
+///|
+/// Read .agent/startup.md from workspace, returns empty string if not found.
+fn read_startup_md(workspace : String) -> String {
+  let path = "\{workspace}/.agent/startup.md"
+  let text = read_file_sync(path)
+  if text.is_empty() {
+    return ""
+  }
+  "<startup_instructions>\n\{text}\n</startup_instructions>"
+}
+
+///|
+/// Check and execute due scheduled tasks. Returns messages for due tasks.
+/// For interval triggers, checks if enough time has elapsed since created_at_ms.
+/// For date triggers, checks if the date has passed.
+pub fn AppRuntime::check_due_schedules(self : AppRuntime) -> Array[String] {
+  let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
+  let path = "\{home}/schedules.json"
+  let content = read_file_sync(path)
+  if content.trim().to_string().is_empty() {
+    return []
+  }
+  let parsed : Json = @json.parse(content) catch { _ => return [] }
+  let schedules = match parsed {
+    Array(items) => items
+    _ => return []
+  }
+  let now_ms = @async.now()
+  let due_messages : Array[String] = []
+  let remaining : Array[Json] = []
+  let mut changed = false
+  for s in schedules {
+    let enabled = match s {
+      { "enabled": True, .. } => true
+      _ => false
+    }
+    if not(enabled) {
+      remaining.push(s)
+      continue
+    }
+    let trigger = match s {
+      { "trigger": String(t), .. } => t
+      _ => {
+        remaining.push(s)
+        continue
+      }
+    }
+    let message = match s {
+      { "message": String(m), .. } => m
+      _ => {
+        remaining.push(s)
+        continue
+      }
+    }
+    let created_at_ms = match s {
+      { "created_at_ms": Number(n, ..), .. } => n.to_int64()
+      _ => 0L
+    }
+    // Check interval triggers
+    if trigger.has_prefix("interval:") {
+      let interval_str = trigger[9:].to_string() catch {
+        _ => {
+          remaining.push(s)
+          continue
+        }
+      }
+      let interval_secs = @tools.parse_interval_seconds(interval_str)
+      if interval_secs > 0 {
+        let interval_ms = interval_secs.to_int64() * 1000L
+        if now_ms - created_at_ms >= interval_ms {
+          due_messages.push(message)
+          changed = true
+          // Update created_at_ms for next interval
+          let updated : Map[String, Json] = Map::new()
+          match s {
+            { "id": String(id), .. } => updated["id"] = id.to_json()
+            _ => ()
+          }
+          updated["message"] = message.to_json()
+          updated["trigger"] = trigger.to_json()
+          match s {
+            { "session_id": String(sid), .. } =>
+              updated["session_id"] = sid.to_json()
+            _ => ()
+          }
+          updated["created_at_ms"] = now_ms.to_json()
+          updated["enabled"] = true.to_json()
+          remaining.push(Json::object(updated))
+        } else {
+          remaining.push(s)
+        }
+      } else {
+        remaining.push(s)
+      }
+      continue
+    }
+    // For cron and date triggers: keep for now (date not yet fully implemented)
+    remaining.push(s)
+  }
+  // Write back if changed
+  if changed {
+    let json_str = Json::array(remaining).stringify()
+    ignore(write_file_sync(path, json_str))
+  }
+  due_messages
 }

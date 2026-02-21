@@ -1,4 +1,5 @@
 import {
+  "moonbitlang/async" @async,
   "duobei/cub/config" @config,
   "duobei/cub/tape" @tape,
   "duobei/cub/llm" @llm,

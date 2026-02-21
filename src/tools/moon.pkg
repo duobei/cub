@@ -5,6 +5,8 @@ import {
   "duobei/cub/tape" @tape,
   "duobei/cub/config" @config,
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/strconv",
+  "moonbitlang/core/json",
 }
 
 options(

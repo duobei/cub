@@ -408,7 +408,7 @@ fn is_api_bad_request(err : String) -> Bool {
 fn runtime_contract() -> String {
   let contract =
     #|<runtime_contract>
-    #|1) Use tool calls for all actions (file ops, shell, web, tape, skills).
+    #|1) Use tool calls for all actions (file ops, shell, web, git, tape, skills).
     #|2) Do not emit comma-prefixed commands in normal flow; use tool calls instead.
     #|3) If a compatibility fallback is required, runtime can still parse comma commands.
     #|4) Never emit '<command ...>' blocks yourself; those are runtime-generated.
@@ -417,6 +417,10 @@ fn runtime_contract() -> String {
     #|7) After completing complex tasks, reflect and save useful patterns via memory.save.
     #|8) For repeated workflows, create reusable skills via skill.create.
     #|9) Update AGENTS.md via agents.update to evolve workspace behavior over time.
+    #|10) Use git.status/diff/log/commit for structured git operations instead of bash.
+    #|11) Use schedule.add to create timed tasks; schedule.list/remove to manage them.
+    #|12) Use agent.spawn to delegate complex subtasks to a child agent process.
+    #|13) Use project.analyze to understand workspace language, framework, and build commands.
     #|</runtime_contract>
     #|<context_contract>
     #|Context is managed via tape anchors. Only entries after the last anchor are visible.
