@@ -1,8 +1,10 @@
 /// Model turn runner.
 
+///|
 /// Tool continue prompt sent after tool execution.
 let tool_continue_prompt : String = "Continue the task."
 
+///|
 /// Runs assistant loop over tape with command-aware follow-up handling.
 pub struct ModelRunner {
   tape : @tape.TapeService
@@ -22,6 +24,7 @@ pub struct ModelRunner {
   expanded_skills : Map[String, String]
 }
 
+///|
 /// Create a new ModelRunner.
 pub fn ModelRunner::new(
   tape : @tape.TapeService,
@@ -37,7 +40,7 @@ pub fn ModelRunner::new(
   base_system_prompt : String,
   get_workspace_system_prompt : () -> String,
   llm : @llm.LLMClient,
-  registry : @tools.ToolRegistry
+  registry : @tools.ToolRegistry,
 ) -> ModelRunner {
   {
     tape,
@@ -58,15 +61,17 @@ pub fn ModelRunner::new(
   }
 }
 
+///|
 /// Reset volatile model-side context caches.
 pub fn ModelRunner::reset_context(self : ModelRunner) -> Unit {
   self.expanded_skills.clear()
 }
 
+///|
 /// Run the model turn loop: chat → handle tool calls / commands → repeat.
 pub async fn ModelRunner::run(
   self : ModelRunner,
-  prompt : String
+  prompt : String,
 ) -> ModelTurnResult {
   let mut current_prompt = prompt
   // Expand skill hints from the initial prompt
@@ -96,7 +101,10 @@ pub async fn ModelRunner::run(
         let retry_data : Map[String, Json] = Map::new()
         retry_data["step"] = step.to_json()
         retry_data["error"] = err.to_json()
-        self.tape.append_event("loop.step.retry_after_handoff", Json::object(retry_data))
+        self.tape.append_event(
+          "loop.step.retry_after_handoff",
+          Json::object(retry_data),
+        )
         // Retry with same prompt
         let retry_result = self.chat(current_prompt)
         if retry_result.error is Some(retry_err) {
@@ -195,14 +203,18 @@ pub async fn ModelRunner::run(
   }
   // Join visible parts
   let visible_text = join_visible_parts(visible_parts)
-  { visible_text, exit_requested, steps: step, error, command_followups: followups }
+  {
+    visible_text,
+    exit_requested,
+    steps: step,
+    error,
+    command_followups: followups,
+  }
 }
 
+///|
 /// Make a single chat call with tool execution.
-async fn ModelRunner::chat(
-  self : ModelRunner,
-  prompt : String
-) -> ChatResult {
+async fn ModelRunner::chat(self : ModelRunner, prompt : String) -> ChatResult {
   let system_prompt = self.render_system_prompt()
   let execute_tool : async (String, Json) -> String = async fn(name, args) {
     // Convert model name back to registry name
@@ -210,33 +222,27 @@ async fn ModelRunner::chat(
     self.registry.execute(tool_name, kwargs=args)
   }
   let timeout = self.model_timeout_seconds.unwrap_or(120)
-  let result = try {
-    @async.with_timeout(
-      timeout * 1000,
-      async fn() {
-        self.llm.run_tools(
-          self.tape.tape(),
-          prompt,
-          system_prompt~,
-          max_tokens=self.max_tokens,
-          tools_json=self.tools,
-          execute_tool~,
-        )
-      },
+  let result = @async.with_timeout(timeout * 1000, async fn() {
+    self.llm.run_tools(
+      self.tape.tape(),
+      prompt,
+      system_prompt~,
+      max_tokens=self.max_tokens,
+      tools_json=self.tools,
+      execute_tool~,
     )
-  } catch {
+  }) catch {
     _ =>
       return {
         text: "",
-        error: Some(
-          "model_timeout: no response within \{timeout}s",
-        ),
+        error: Some("model_timeout: no response within \{timeout}s"),
         followup_prompt: None,
       }
   }
   ChatResult::from_tool_auto(result)
 }
 
+///|
 /// Render the full system prompt.
 fn ModelRunner::render_system_prompt(self : ModelRunner) -> String {
   let blocks : Array[String] = [
@@ -250,22 +256,19 @@ fn ModelRunner::render_system_prompt(self : ModelRunner) -> String {
   join_blocks(blocks)
 }
 
+///|
 /// Join non-empty blocks with double newlines.
 fn join_blocks(blocks : Array[String]) -> String {
-  blocks
-    .filter(fn(b) { not(b.trim().to_string().is_empty()) })
-    .join("\n\n")
+  blocks.filter(fn(b) { not(b.trim().to_string().is_empty()) }).join("\n\n")
 }
 
+///|
 /// Join visible parts with double newlines.
 fn join_visible_parts(parts : Array[String]) -> String {
-  parts
-    .filter(fn(p) { not(p.is_empty()) })
-    .join("\n\n")
-    .trim()
-    .to_string()
+  parts.filter(fn(p) { not(p.is_empty()) }).join("\n\n").trim().to_string()
 }
 
+///|
 /// Internal chat result (before being returned as ModelTurnResult).
 priv struct ChatResult {
   text : String
@@ -273,10 +276,12 @@ priv struct ChatResult {
   followup_prompt : String?
 }
 
+///|
 /// Convert a ToolAutoResult into a ChatResult.
 fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
   match output.kind {
-    @llm.ToolAutoKind::Text => { text: output.text, error: None, followup_prompt: None }
+    @llm.ToolAutoKind::Text =>
+      { text: output.text, error: None, followup_prompt: None }
     @llm.ToolAutoKind::Tools =>
       { text: "", error: None, followup_prompt: Some(tool_continue_prompt) }
     @llm.ToolAutoKind::Error => {
@@ -286,6 +291,7 @@ fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
   }
 }
 
+///|
 /// Scan text for $name hints and expand matching skills into expanded_skills.
 fn ModelRunner::expand_skill_hints(self : ModelRunner, text : String) -> Unit {
   let mut i = 0
@@ -295,15 +301,19 @@ fn ModelRunner::expand_skill_hints(self : ModelRunner, text : String) -> Unit {
       let mut end = start
       while end < text.length() {
         let ch = text[end].to_int()
-        if (ch >= 97 && ch <= 122) || (ch >= 65 && ch <= 90) ||
-          (ch >= 48 && ch <= 57) || ch == 46 || ch == 95 || ch == 45 {
+        if (ch >= 97 && ch <= 122) ||
+          (ch >= 65 && ch <= 90) ||
+          (ch >= 48 && ch <= 57) ||
+          ch == 46 ||
+          ch == 95 ||
+          ch == 45 {
           end += 1
         } else {
           break
         }
       }
       if end > start {
-        let hint = try { text[start:end].to_string() } catch { _ => "" }
+        let hint = text[start:end].to_string() catch { _ => "" }
         if hint.length() > 0 && not(self.expanded_skills.contains(hint)) {
           match (self.load_skill_body)(hint) {
             Some(body) => self.expanded_skills[hint] = body
@@ -318,11 +328,13 @@ fn ModelRunner::expand_skill_hints(self : ModelRunner, text : String) -> Unit {
   }
 }
 
+///|
 /// Check if an error string indicates an API 400 bad request.
 fn is_api_bad_request(err : String) -> Bool {
   err.contains("API error (400)") || err.contains("bad_request_error")
 }
 
+///|
 /// The runtime contract injected into every system prompt.
 fn runtime_contract() -> String {
   let contract =

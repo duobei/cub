@@ -1,12 +1,14 @@
 /// Built-in tools: bash, fs.read, fs.write, fs.edit, web.fetch, web.search, done.
 
+///|
 /// Default subprocess timeout in seconds.
 let subprocess_timeout_seconds : Int = 30
 
+///|
 /// Register all built-in tools.
 pub fn register_builtin_tools(
   registry : ToolRegistry,
-  ctx : ToolContext
+  ctx : ToolContext,
 ) -> Unit {
   register_bash(registry, ctx)
   register_fs_read(registry, ctx)
@@ -17,10 +19,11 @@ pub fn register_builtin_tools(
   register_done(registry, ctx)
 }
 
+///|
 /// Build a JSON Schema object for tool parameters.
 pub fn make_params(
   properties : Map[String, Json],
-  required : Array[String]
+  required : Array[String],
 ) -> Json {
   let schema : Map[String, Json] = Map::new()
   schema["type"] = "object".to_json()
@@ -35,6 +38,7 @@ pub fn make_params(
   Json::object(schema)
 }
 
+///|
 /// Helper: create a string property schema.
 pub fn string_prop(description : String) -> Json {
   let p : Map[String, Json] = Map::new()
@@ -43,8 +47,9 @@ pub fn string_prop(description : String) -> Json {
   Json::object(p)
 }
 
+///|
 /// Helper: create an integer property schema.
-fn int_prop(description : String, default_val~ : Int? = None) -> Json {
+fn int_prop(description : String, default_val? : Int? = None) -> Json {
   let p : Map[String, Json] = Map::new()
   p["type"] = "integer".to_json()
   p["description"] = description.to_json()
@@ -55,6 +60,7 @@ fn int_prop(description : String, default_val~ : Int? = None) -> Json {
   Json::object(p)
 }
 
+///|
 /// Helper: resolve a path relative to workspace.
 fn resolve_path(workspace : String, path : String) -> String {
   if path.length() > 0 && path[0] == '/'.to_int().to_uint16() {
@@ -64,6 +70,7 @@ fn resolve_path(workspace : String, path : String) -> String {
   }
 }
 
+///|
 /// Register bash tool.
 fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   let workspace = ctx.workspace
@@ -99,13 +106,14 @@ fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   )
 }
 
+///|
 /// Execute a bash command.
 async fn run_bash_command(
   cmd : String,
   cwd : String,
   timeout : Int,
   workspace : String,
-  session_id : String
+  session_id : String,
 ) -> String {
   // Load workspace .env into extra environment
   let extra_env : Map[String, String] = {}
@@ -123,18 +131,16 @@ async fn run_bash_command(
     }
   }
   extra_env["CUB_SESSION_ID"] = session_id
-  let (exit_code, stdout_data, stderr_data) = try {
-    @async.with_timeout(
-      timeout * 1000,
-      async fn() {
-        @process.collect_output("bash", ["-lc", cmd], cwd=cwd, extra_env=extra_env)
-      },
-    )
-  } catch {
+  let (exit_code, stdout_data, stderr_data) = @async.with_timeout(
+    timeout * 1000,
+    async fn() {
+      @process.collect_output("bash", ["-lc", cmd], cwd~, extra_env~)
+    },
+  ) catch {
     e => fail("bash error: \{e}")
   }
-  let stdout_text = try { stdout_data.text() } catch { _ => "" }
-  let stderr_text = try { stderr_data.text() } catch { _ => "" }
+  let stdout_text = stdout_data.text() catch { _ => "" }
+  let stderr_text = stderr_data.text() catch { _ => "" }
   if exit_code != 0 {
     let error_output = if stderr_text.length() > 0 {
       stderr_text
@@ -150,12 +156,16 @@ async fn run_bash_command(
   }
 }
 
+///|
 /// Register fs.read tool.
 fn register_fs_read(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   let workspace = ctx.workspace
   let props : Map[String, Json] = Map::new()
   props["path"] = string_prop("File path (relative to workspace or absolute)")
-  props["offset"] = int_prop("Line offset to start reading from", default_val=Some(0))
+  props["offset"] = int_prop(
+    "Line offset to start reading from",
+    default_val=Some(0),
+  )
   props["limit"] = int_prop("Maximum number of lines to read")
   let params = make_params(props, ["path"])
   registry.register(
@@ -181,13 +191,10 @@ fn register_fs_read(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   )
 }
 
+///|
 /// Read file content with optional offset and limit.
 async fn read_file_content(path : String, offset : Int, limit : Int?) -> String {
-  let content = try {
-    @fs.read_file(path).text()
-  } catch {
-    e => fail("fs.read: \{e}")
-  }
+  let content = @fs.read_file(path).text() catch { e => fail("fs.read: \{e}") }
   let lines : Array[StringView] = []
   for line in content.split("\n") {
     lines.push(line)
@@ -196,7 +203,11 @@ async fn read_file_content(path : String, offset : Int, limit : Int?) -> String 
   let end = match limit {
     Some(l) => {
       let e = start + l
-      if e < lines.length() { e } else { lines.length() }
+      if e < lines.length() {
+        e
+      } else {
+        lines.length()
+      }
     }
     None => lines.length()
   }
@@ -210,6 +221,7 @@ async fn read_file_content(path : String, offset : Int, limit : Int?) -> String 
   result.to_string()
 }
 
+///|
 /// Register fs.write tool.
 fn register_fs_write(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   let workspace = ctx.workspace
@@ -236,25 +248,23 @@ fn register_fs_write(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   )
 }
 
+///|
 /// Write content to a file, creating parent directories as needed.
 async fn write_file_content(path : String, content : String) -> String {
   // Create parent directory
   let parent = get_parent_dir(path)
   if parent.length() > 0 {
-    try {
-      @fs.mkdir(parent, permission=0o755, recursive=true)
-    } catch {
+    @fs.mkdir(parent, permission=0o755, recursive=true) catch {
       _ => ()
     }
   }
-  try {
-    @fs.write_file(path, content, create=0o644)
-  } catch {
+  @fs.write_file(path, content, create=0o644) catch {
     e => fail("fs.write: \{e}")
   }
   "wrote: \{path}"
 }
 
+///|
 /// Get parent directory from a path.
 fn get_parent_dir(path : String) -> String {
   let mut last_slash = -1
@@ -266,14 +276,13 @@ fn get_parent_dir(path : String) -> String {
   if last_slash <= 0 {
     ""
   } else {
-    try {
-      path[:last_slash].to_string()
-    } catch {
+    path[:last_slash].to_string() catch {
       _ => ""
     }
   }
 }
 
+///|
 /// Register fs.edit tool.
 fn register_fs_edit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   let workspace = ctx.workspace
@@ -314,18 +323,15 @@ fn register_fs_edit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   )
 }
 
+///|
 /// Edit a file by finding and replacing text.
 async fn edit_file_content(
   path : String,
   old_string : String,
   new_string : String,
-  replace_all : Bool
+  replace_all : Bool,
 ) -> String {
-  let content = try {
-    @fs.read_file(path).text()
-  } catch {
-    e => fail("fs.edit: \{e}")
-  }
+  let content = @fs.read_file(path).text() catch { e => fail("fs.edit: \{e}") }
   if not(content.contains(old_string)) {
     fail("fs.edit: old_string not found in file")
   }
@@ -337,22 +343,19 @@ async fn edit_file_content(
     if idx < 0 {
       fail("fs.edit: old_string not found in file")
     }
-    let before = try { content[:idx].to_string() } catch { _ => "" }
-    let after = try {
-      content[idx + old_string.length():].to_string()
-    } catch {
+    let before = content[:idx].to_string() catch { _ => "" }
+    let after = content[idx + old_string.length():].to_string() catch {
       _ => ""
     }
     before + new_string + after
   }
-  try {
-    @fs.write_file(path, new_content, create=0o644)
-  } catch {
+  @fs.write_file(path, new_content, create=0o644) catch {
     e => fail("fs.edit: \{e}")
   }
   "edited: \{path}"
 }
 
+///|
 /// Find substring position in a string.
 fn find_substring_in(haystack : String, needle : String) -> Int {
   if needle.is_empty() {
@@ -377,6 +380,7 @@ fn find_substring_in(haystack : String, needle : String) -> Int {
   -1
 }
 
+///|
 /// Register web.fetch tool.
 fn register_web_fetch(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   let props : Map[String, Json] = Map::new()
@@ -397,6 +401,7 @@ fn register_web_fetch(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   )
 }
 
+///|
 /// Normalize a URL: ensure scheme, validate format.
 fn normalize_url(raw : String) -> String raise {
   let url = raw.trim().to_string()
@@ -417,6 +422,7 @@ fn normalize_url(raw : String) -> String raise {
   "https://\{url}"
 }
 
+///|
 /// Fetch URL content via C FFI, strip HTML tags.
 fn fetch_url(raw_url : String) -> String raise {
   let url = normalize_url(raw_url)
@@ -438,9 +444,7 @@ fn fetch_url(raw_url : String) -> String raise {
   // Truncate if very large (keep first 50K chars)
   let max_len = 50000
   if stripped.length() > max_len {
-    try {
-      "\{stripped[:max_len]}\n\n[truncated]"
-    } catch {
+    "\{stripped[:max_len]}\n\n[truncated]" catch {
       _ => stripped
     }
   } else {
@@ -448,6 +452,7 @@ fn fetch_url(raw_url : String) -> String raise {
   }
 }
 
+///|
 /// Strip HTML tags from a string (regex-free scanner).
 fn strip_html_tags(html : String) -> String {
   let buf = StringBuilder::new()
@@ -484,7 +489,9 @@ fn strip_html_tags(html : String) -> String {
       continue
     }
     // Collapse whitespace
-    let is_ws = c == ' '.to_int() || c == '\t'.to_int() || c == '\n'.to_int() ||
+    let is_ws = c == ' '.to_int() ||
+      c == '\t'.to_int() ||
+      c == '\n'.to_int() ||
       c == '\r'.to_int()
     if is_ws {
       if not(last_was_space) {
@@ -499,14 +506,15 @@ fn strip_html_tags(html : String) -> String {
   let result = buf.to_string()
   // Decode common HTML entities
   result
-    .replace(old="&amp;", new="&")
-    .replace(old="&lt;", new="<")
-    .replace(old="&gt;", new=">")
-    .replace(old="&quot;", new="\"")
-    .replace(old="&#39;", new="'")
-    .replace(old="&nbsp;", new=" ")
+  .replace(old="&amp;", new="&")
+  .replace(old="&lt;", new="<")
+  .replace(old="&gt;", new=">")
+  .replace(old="&quot;", new="\"")
+  .replace(old="&#39;", new="'")
+  .replace(old="&nbsp;", new=" ")
 }
 
+///|
 /// Peek at the tag name starting at position i in the string.
 fn peek_tag_name(s : String, start : Int) -> String {
   let buf = StringBuilder::new()
@@ -518,8 +526,11 @@ fn peek_tag_name(s : String, start : Int) -> String {
   }
   while i < s.length() {
     let c = s[i].to_int()
-    if c == ' '.to_int() || c == '>'.to_int() || c == '\t'.to_int() || c ==
-    '\n'.to_int() || c == '/'.to_int() {
+    if c == ' '.to_int() ||
+      c == '>'.to_int() ||
+      c == '\t'.to_int() ||
+      c == '\n'.to_int() ||
+      c == '/'.to_int() {
       break
     }
     // Lowercase
@@ -534,10 +545,12 @@ fn peek_tag_name(s : String, start : Int) -> String {
   buf.to_string()
 }
 
+///|
 /// FFI: fetch URL content into buffer, returns size or -1 on error.
 #borrow(url, buf)
 extern "C" fn cub_web_fetch(url : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_web_fetch"
 
+///|
 /// Register web.search tool.
 fn register_web_search(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   let props : Map[String, Json] = Map::new()
@@ -567,6 +580,7 @@ fn register_web_search(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   )
 }
 
+///|
 /// URL-encode a string (percent-encoding).
 fn url_encode(s : String) -> String {
   let buf = StringBuilder::new()
@@ -574,9 +588,13 @@ fn url_encode(s : String) -> String {
   let utf8 = @utf8.encode(s)
   for i = 0; i < utf8.length(); i = i + 1 {
     let b = utf8[i].to_int()
-    if (b >= 'A'.to_int() && b <= 'Z'.to_int()) || (b >= 'a'.to_int() && b <=
-    'z'.to_int()) || (b >= '0'.to_int() && b <= '9'.to_int()) || b ==
-    '-'.to_int() || b == '_'.to_int() || b == '.'.to_int() || b == '~'.to_int() {
+    if (b >= 'A'.to_int() && b <= 'Z'.to_int()) ||
+      (b >= 'a'.to_int() && b <= 'z'.to_int()) ||
+      (b >= '0'.to_int() && b <= '9'.to_int()) ||
+      b == '-'.to_int() ||
+      b == '_'.to_int() ||
+      b == '.'.to_int() ||
+      b == '~'.to_int() {
       buf.write_char(b.unsafe_to_char())
     } else if b == ' '.to_int() {
       buf.write_char('+')
@@ -589,6 +607,7 @@ fn url_encode(s : String) -> String {
   buf.to_string()
 }
 
+///|
 /// Register done tool.
 fn register_done(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   ignore(ctx)

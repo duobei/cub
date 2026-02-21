@@ -1,5 +1,6 @@
 /// LLM client for OpenAI-compatible chat API.
 
+///|
 /// Strip <think>...</think> reasoning blocks from model output.
 fn strip_think_tags(text : String) -> String {
   let mut result = text
@@ -11,16 +12,17 @@ fn strip_think_tags(text : String) -> String {
     let end = find_substring(result, "</think>")
     if end < 0 {
       // Unclosed <think> — strip from start to end
-      result = try { result[:start].to_string() } catch { _ => "" }
+      result = result[:start].to_string() catch { _ => "" }
       break
     }
-    let before = try { result[:start].to_string() } catch { _ => "" }
-    let after = try { result[end + 8:].to_string() } catch { _ => "" }
+    let before = result[:start].to_string() catch { _ => "" }
+    let after = result[end + 8:].to_string() catch { _ => "" }
     result = before + after
   }
   result.trim().to_string()
 }
 
+///|
 /// Find substring position, returns -1 if not found.
 fn find_substring(haystack : String, needle : String) -> Int {
   let hlen = haystack.length()
@@ -43,6 +45,7 @@ fn find_substring(haystack : String, needle : String) -> Int {
   -1
 }
 
+///|
 /// Known provider base URLs.
 fn provider_base_url(provider : String) -> String {
   match provider {
@@ -54,6 +57,7 @@ fn provider_base_url(provider : String) -> String {
   }
 }
 
+///|
 /// Parse "provider:model" format into (provider, model_id).
 pub fn parse_model_spec(model : String) -> (String, String) {
   // Find first ':'
@@ -67,11 +71,12 @@ pub fn parse_model_spec(model : String) -> (String, String) {
   if colon_pos < 0 {
     return ("openrouter", model)
   }
-  let provider = try { model[:colon_pos].to_string() } catch { _ => model }
-  let model_id = try { model[colon_pos + 1:].to_string() } catch { _ => model }
+  let provider = model[:colon_pos].to_string() catch { _ => model }
+  let model_id = model[colon_pos + 1:].to_string() catch { _ => model }
   (provider, model_id)
 }
 
+///|
 /// LLM client for OpenAI-compatible chat API.
 pub struct LLMClient {
   model_id : String
@@ -82,26 +87,28 @@ pub struct LLMClient {
   max_tokens : Int
 }
 
+///|
 /// Create a new LLMClient from model spec (e.g., "openrouter:qwen/qwen3-coder-next").
 pub fn LLMClient::new(
   model : String,
   api_key : String,
-  api_base~ : String? = None,
-  extra_headers~ : Map[String, String] = Map::new(),
-  max_tokens~ : Int = 1024
+  api_base? : String? = None,
+  extra_headers? : Map[String, String] = Map::new(),
+  max_tokens? : Int = 1024,
 ) -> LLMClient {
   let (provider, model_id) = parse_model_spec(model)
   let base = api_base.unwrap_or(provider_base_url(provider))
   { model_id, provider, api_key, api_base: base, extra_headers, max_tokens }
 }
 
+///|
 /// Build the request body JSON.
 fn LLMClient::build_request_body(
   self : LLMClient,
   messages : Array[Json],
   tools : Array[Json],
   max_tokens : Int,
-  system_prompt : String?
+  system_prompt : String?,
 ) -> Json {
   let body : Map[String, Json] = Map::new()
   body["model"] = self.model_id.to_json()
@@ -133,6 +140,7 @@ fn LLMClient::build_request_body(
   Json::object(body)
 }
 
+///|
 /// Parse a chat completion response JSON into ChatResponse.
 fn parse_chat_response(response_json : Json) -> ChatResponse {
   // Check for error
@@ -204,16 +212,23 @@ fn parse_chat_response(response_json : Json) -> ChatResponse {
   { text, tool_calls, finish_reason, error: None }
 }
 
+///|
 /// Make a chat API call.
 pub async fn LLMClient::chat(
   self : LLMClient,
   messages : Array[Json],
-  tools~ : Array[Json] = [],
-  max_tokens~ : Int = 0,
-  system_prompt~ : String? = None
+  tools? : Array[Json] = [],
+  max_tokens? : Int = 0,
+  system_prompt? : String? = None,
 ) -> ChatResponse {
-  let actual_max_tokens = if max_tokens > 0 { max_tokens } else { self.max_tokens }
-  let body = self.build_request_body(messages, tools, actual_max_tokens, system_prompt)
+  let actual_max_tokens = if max_tokens > 0 {
+    max_tokens
+  } else {
+    self.max_tokens
+  }
+  let body = self.build_request_body(
+    messages, tools, actual_max_tokens, system_prompt,
+  )
   let body_str = body.stringify()
   let url = "\{self.api_base}/chat/completions"
   // Build headers
@@ -230,24 +245,17 @@ pub async fn LLMClient::chat(
     headers[k] = v
   }
   // Make HTTP request
-  let (response, response_data) = try {
-    @http.post(url, body_str, headers~)
-  } catch {
-    e => {
+  let (response, response_data) = @http.post(url, body_str, headers~) catch {
+    e =>
       return {
         text: "",
         tool_calls: [],
         finish_reason: "error",
         error: Some("HTTP error: \{e}"),
       }
-    }
   }
   if response.code != 200 {
-    let error_text = try {
-      response_data.text()
-    } catch {
-      _ => "HTTP \{response.code}"
-    }
+    let error_text = response_data.text() catch { _ => "HTTP \{response.code}" }
     return {
       text: "",
       tool_calls: [],
@@ -255,33 +263,28 @@ pub async fn LLMClient::chat(
       error: Some("API error (\{response.code}): \{error_text}"),
     }
   }
-  let response_text = try {
-    response_data.text()
-  } catch {
-    e => {
+  let response_text = response_data.text() catch {
+    e =>
       return {
         text: "",
         tool_calls: [],
         finish_reason: "error",
         error: Some("Failed to read response: \{e}"),
       }
-    }
   }
-  let response_json = try {
-    @json.parse(response_text)
-  } catch {
-    e => {
+  let response_json = @json.parse(response_text) catch {
+    e =>
       return {
         text: "",
         tool_calls: [],
         finish_reason: "error",
         error: Some("Failed to parse JSON: \{e}"),
       }
-    }
   }
   parse_chat_response(response_json)
 }
 
+///|
 /// Estimate token count from messages (rough: chars / 4).
 fn estimate_tokens(messages : Array[Json], system_prompt : String) -> Int {
   let mut chars = system_prompt.length()
@@ -291,18 +294,20 @@ fn estimate_tokens(messages : Array[Json], system_prompt : String) -> Int {
   chars / 4
 }
 
+///|
 /// Context budget warning threshold (80% of 128k default).
 let context_budget_tokens : Int = 128000
 
+///|
 /// Run a single tool-use cycle: chat → execute tools → return result.
 pub async fn LLMClient::run_tools(
   self : LLMClient,
   tape : @tape.Tape,
   prompt : String,
-  system_prompt~ : String = "",
-  max_tokens~ : Int = 0,
-  tools_json~ : Array[Json] = [],
-  execute_tool~ : async (String, Json) -> String
+  system_prompt? : String = "",
+  max_tokens? : Int = 0,
+  tools_json? : Array[Json] = [],
+  execute_tool~ : async (String, Json) -> String,
 ) -> ToolAutoResult {
   // Record user message to tape
   tape.append(@tape.TapeEntry::message("user", prompt))
@@ -327,7 +332,12 @@ pub async fn LLMClient::run_tools(
   } else {
     None
   }
-  let response = self.chat(messages, tools=tools_json, max_tokens~, system_prompt=sp)
+  let response = self.chat(
+    messages,
+    tools=tools_json,
+    max_tokens~,
+    system_prompt=sp,
+  )
   // Handle error
   if response.error is Some(err) {
     return {
@@ -356,14 +366,10 @@ pub async fn LLMClient::run_tools(
   // Execute each tool call
   let result_jsons : Array[Json] = []
   for tc in response.tool_calls {
-    let args : Json = try {
-      @json.parse(tc.function_.arguments)
-    } catch {
+    let args : Json = @json.parse(tc.function_.arguments) catch {
       _ => Json::object(Map::new())
     }
-    let result_text = try {
-      execute_tool(tc.function_.name, args)
-    } catch {
+    let result_text = execute_tool(tc.function_.name, args) catch {
       e => "Error: \{e}"
     }
     let result_obj : Map[String, Json] = Map::new()

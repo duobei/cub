@@ -1,5 +1,5 @@
+///|
 /// High-level tape service (no fork/merge — handoff + anchors only).
-
 pub struct TapeService {
   store : FileTapeStore
   current_tape_name : String
@@ -7,8 +7,12 @@ pub struct TapeService {
   done_requested : Bool
 }
 
+///|
 /// Create a new TapeService.
-pub fn TapeService::new(tape_name : String, store : FileTapeStore) -> TapeService {
+pub fn TapeService::new(
+  tape_name : String,
+  store : FileTapeStore,
+) -> TapeService {
   {
     store,
     current_tape_name: tape_name,
@@ -17,11 +21,13 @@ pub fn TapeService::new(tape_name : String, store : FileTapeStore) -> TapeServic
   }
 }
 
+///|
 /// Get the current tape.
 pub fn TapeService::tape(self : TapeService) -> Tape {
   Tape::new(self.current_tape_name, self.store)
 }
 
+///|
 /// Ensure a bootstrap anchor exists.
 pub async fn TapeService::ensure_bootstrap_anchor(self : TapeService) -> Unit {
   let entries = self.read_entries()
@@ -33,37 +39,42 @@ pub async fn TapeService::ensure_bootstrap_anchor(self : TapeService) -> Unit {
   }
 }
 
+///|
 /// Read all entries from the current tape.
 pub async fn TapeService::read_entries(self : TapeService) -> Array[TapeEntry] {
   self.tape().read_entries()
 }
 
+///|
 /// Perform a handoff.
 pub async fn TapeService::handoff(
   self : TapeService,
   name : String,
-  state~ : Map[String, Json]? = None
+  state? : Map[String, Json]? = None,
 ) -> Array[TapeEntry] {
   self.tape().handoff(name, state~)
 }
 
+///|
 /// Append an event entry.
 pub async fn TapeService::append_event(
   self : TapeService,
   name : String,
-  data : Json
+  data : Json,
 ) -> Unit {
   self.tape().append(TapeEntry::event(name, data~))
 }
 
+///|
 /// Append a system message.
 pub async fn TapeService::append_system(
   self : TapeService,
-  content : String
+  content : String,
 ) -> Unit {
   self.tape().append(TapeEntry::system(content))
 }
 
+///|
 /// Get tape info summary.
 pub async fn TapeService::info(self : TapeService) -> TapeInfo {
   let entries = self.tape().read_entries()
@@ -103,10 +114,11 @@ pub async fn TapeService::info(self : TapeService) -> TapeInfo {
   }
 }
 
+///|
 /// Reset the tape, optionally archiving first.
 pub async fn TapeService::reset(
   self : TapeService,
-  archive~ : Bool = false
+  archive? : Bool = false,
 ) -> String {
   let archive_path : String? = if archive {
     self.store.archive(self.base_tape_name)
@@ -127,10 +139,11 @@ pub async fn TapeService::reset(
   }
 }
 
+///|
 /// Get anchors summary.
 pub async fn TapeService::anchors(
   self : TapeService,
-  limit~ : Int = 20
+  limit? : Int = 20,
 ) -> Array[AnchorSummary] {
   let entries = self.tape().read_entries()
   let anchor_entries : Array[TapeEntry] = []
@@ -160,11 +173,12 @@ pub async fn TapeService::anchors(
   results
 }
 
+///|
 /// Search tape entries by substring match.
 pub async fn TapeService::search(
   self : TapeService,
   query : String,
-  limit~ : Int = 20
+  limit? : Int = 20,
 ) -> Array[TapeEntry] {
   let normalized = query.to_lower()
   if normalized.is_empty() {

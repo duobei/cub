@@ -1,5 +1,6 @@
 /// Tool view helpers.
 
+///|
 /// Render the combined tool prompt section.
 pub fn render_tool_prompt_block(view : ProgressiveToolView) -> String {
   let compact = view.compact_block()

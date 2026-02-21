@@ -1,5 +1,6 @@
 /// LLM types for chat API interaction.
 
+///|
 /// Information about a single tool call from the model.
 pub struct ToolCallInfo {
   id : String
@@ -7,12 +8,14 @@ pub struct ToolCallInfo {
   function_ : ToolCallFunction
 } derive(Show)
 
+///|
 /// The function part of a tool call.
 pub struct ToolCallFunction {
   name : String
   arguments : String
 } derive(Show)
 
+///|
 /// Parse ToolCallInfo from JSON.
 pub fn ToolCallInfo::from_json(json : Json) -> ToolCallInfo? {
   match json {
@@ -26,6 +29,7 @@ pub fn ToolCallInfo::from_json(json : Json) -> ToolCallInfo? {
   }
 }
 
+///|
 /// Convert ToolCallInfo to JSON for sending back to the API.
 pub fn ToolCallInfo::to_json(self : ToolCallInfo) -> Json {
   let func : Map[String, Json] = Map::new()
@@ -38,6 +42,7 @@ pub fn ToolCallInfo::to_json(self : ToolCallInfo) -> Json {
   Json::object(obj)
 }
 
+///|
 /// Response from a chat API call.
 pub struct ChatResponse {
   text : String
@@ -46,6 +51,7 @@ pub struct ChatResponse {
   error : String?
 } derive(Show)
 
+///|
 /// Kind of tool auto result.
 pub enum ToolAutoKind {
   Text
@@ -53,6 +59,7 @@ pub enum ToolAutoKind {
   Error
 } derive(Show)
 
+///|
 /// Result of an automatic tool execution cycle.
 pub struct ToolAutoResult {
   kind : ToolAutoKind

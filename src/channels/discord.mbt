@@ -1,21 +1,34 @@
 /// Discord Gateway WebSocket + REST.
 
+///|
 /// Discord Gateway URL.
 let discord_gateway_url : String = "wss://gateway.discord.gg/?v=10&encoding=json"
 
+///|
 /// Discord REST API base URL.
 let discord_api_base : String = "https://discord.com/api/v10"
 
+///|
 /// Discord message chunk limit.
 let discord_message_limit : Int = 2000
 
+///|
 /// Discord Gateway opcodes.
 let op_dispatch : Int = 0
+
+///|
 let op_heartbeat : Int = 1
+
+///|
 let op_identify : Int = 2
+
+///|
 let _op_hello : Int = 10
+
+///|
 let op_heartbeat_ack : Int = 11
 
+///|
 /// Discord channel implementation.
 pub struct DiscordChannel {
   token : String
@@ -27,11 +40,12 @@ pub struct DiscordChannel {
   seen_messages : Map[String, Bool]
 }
 
+///|
 /// Create a new DiscordChannel.
 pub fn DiscordChannel::new(
   token : String,
-  allow_from~ : Array[String] = [],
-  allow_channels~ : Array[String] = []
+  allow_from? : Array[String] = [],
+  allow_channels? : Array[String] = [],
 ) -> DiscordChannel {
   {
     token,
@@ -44,21 +58,25 @@ pub fn DiscordChannel::new(
   }
 }
 
+///|
 /// Get channel name.
 pub fn DiscordChannel::name(_self : DiscordChannel) -> String {
   "discord"
 }
 
+///|
 /// Maximum reconnect delay in milliseconds.
 let max_reconnect_delay_ms : Int = 60000
 
+///|
 /// Initial reconnect delay in milliseconds.
 let initial_reconnect_delay_ms : Int = 2000
 
+///|
 /// Start the Discord channel with automatic reconnection.
 pub async fn DiscordChannel::start(
   self : DiscordChannel,
-  handler : async (ChannelMessage) -> Unit
+  handler : async (ChannelMessage) -> Unit,
 ) -> Unit {
   if self.token.is_empty() {
     @log.error("discord", "token is empty")
@@ -83,33 +101,28 @@ pub async fn DiscordChannel::start(
   }
 }
 
+///|
 /// Connect to Gateway, run event loop. Returns true if session lasted > 30s.
 async fn DiscordChannel::connect_and_run(
   self : DiscordChannel,
-  handler : async (ChannelMessage) -> Unit
+  handler : async (ChannelMessage) -> Unit,
 ) -> Bool {
   @log.info("discord", "connecting to gateway...")
-  let conn = try {
-    @websocket.connect(discord_gateway_url)
-  } catch {
+  let conn = @websocket.connect(discord_gateway_url) catch {
     e => {
       @log.error("discord", "gateway connection failed: \{e}")
       return false
     }
   }
   // Read Hello (op 10)
-  let hello_text = try {
-    read_text_message(conn)
-  } catch {
+  let hello_text = read_text_message(conn) catch {
     e => {
       @log.error("discord", "failed to read hello: \{e}")
       conn.close()
       return false
     }
   }
-  let hello_json = try {
-    @json.parse(hello_text)
-  } catch {
+  let hello_json = @json.parse(hello_text) catch {
     _ => {
       @log.error("discord", "invalid hello message")
       conn.close()
@@ -117,42 +130,46 @@ async fn DiscordChannel::connect_and_run(
     }
   }
   let heartbeat_interval = match hello_json {
-    { "op": Number(_), "d": { "heartbeat_interval": Number(interval, ..), .. }, .. } => {
-      interval.to_int()
-    }
+    {
+      "op": Number(_),
+      "d": { "heartbeat_interval": Number(interval, ..), .. },
+      ..
+    } => interval.to_int()
     _ => {
       @log.error("discord", "unexpected hello format")
       conn.close()
       return false
     }
   }
-  @log.info("discord", "hello received, heartbeat interval: \{heartbeat_interval}ms")
+  @log.info(
+    "discord",
+    "hello received, heartbeat interval: \{heartbeat_interval}ms",
+  )
   // Send Identify
   self.send_identify(conn)
   // Track connection start time (approximate via heartbeat count)
   let heartbeat_count : Ref[Int] = { val: 0 }
   // Run heartbeat and event loop concurrently using task group
-  @async.with_task_group(
-    async fn(group) {
-      group.spawn_bg(
-        async fn() {
-          self.heartbeat_loop(conn, heartbeat_interval, counter=heartbeat_count)
-        },
-        allow_failure=true,
-      )
-      self.event_loop(conn, handler)
-      conn.close()
-      @log.info("discord", "disconnected")
-    },
-  )
+  @async.with_task_group(async fn(group) {
+    group.spawn_bg(
+      async fn() {
+        self.heartbeat_loop(conn, heartbeat_interval, counter=heartbeat_count)
+      },
+      allow_failure=true,
+    )
+    self.event_loop(conn, handler)
+    conn.close()
+    @log.info("discord", "disconnected")
+  })
   // If we got at least a few heartbeats, connection was healthy
   heartbeat_count.val > 0
 }
 
+///|
 /// Send Identify payload.
 async fn DiscordChannel::send_identify(
   self : DiscordChannel,
-  conn : @websocket.Conn
+  conn : @websocket.Conn,
 ) -> Unit {
   let intents = 512 + 32768 // GUILDS + MESSAGE_CONTENT
   let payload : Map[String, Json] = Map::new()
@@ -167,19 +184,18 @@ async fn DiscordChannel::send_identify(
   d["properties"] = Json::object(properties)
   payload["d"] = Json::object(d)
   let text = Json::object(payload).stringify()
-  try {
-    conn.send_text(text)
-  } catch {
+  conn.send_text(text) catch {
     e => @log.error("discord", "identify send error: \{e}")
   }
 }
 
+///|
 /// Heartbeat loop: send heartbeat at the given interval.
 async fn DiscordChannel::heartbeat_loop(
   self : DiscordChannel,
   conn : @websocket.Conn,
   interval_ms : Int,
-  counter~ : Ref[Int] = { val: 0 }
+  counter? : Ref[Int] = { val: 0 },
 ) -> Unit {
   for {
     @async.sleep(interval_ms)
@@ -198,23 +214,16 @@ async fn DiscordChannel::heartbeat_loop(
   }
 }
 
+///|
 /// Event loop: receive and dispatch Gateway events.
 async fn DiscordChannel::event_loop(
   self : DiscordChannel,
   conn : @websocket.Conn,
-  handler : async (ChannelMessage) -> Unit
+  handler : async (ChannelMessage) -> Unit,
 ) -> Unit {
   for {
-    let text = try {
-      read_text_message(conn)
-    } catch {
-      _ => break
-    }
-    let json = try {
-      @json.parse(text)
-    } catch {
-      _ => continue
-    }
+    let text = read_text_message(conn) catch { _ => break }
+    let json = @json.parse(text) catch { _ => continue }
     let op = match json {
       { "op": Number(n, ..), .. } => n.to_int()
       _ => continue
@@ -227,41 +236,41 @@ async fn DiscordChannel::event_loop(
     match op {
       _ if op == op_dispatch => self.handle_dispatch(json, handler)
       _ if op == op_heartbeat_ack => () // OK
-      _ if op == op_heartbeat =>
-        // Server requesting heartbeat
-        {
-          let payload : Map[String, Json] = Map::new()
-          payload["op"] = op_heartbeat.to_json()
-          match self.sequence {
-            Some(s) => payload["d"] = s.to_json()
-            None => payload["d"] = Json::null()
-          }
-          try {
-            conn.send_text(Json::object(payload).stringify())
-          } catch {
-            _ => break
-          }
+      _ if op == op_heartbeat
+      // Server requesting heartbeat
+      => {
+        let payload : Map[String, Json] = Map::new()
+        payload["op"] = op_heartbeat.to_json()
+        match self.sequence {
+          Some(s) => payload["d"] = s.to_json()
+          None => payload["d"] = Json::null()
         }
+        conn.send_text(Json::object(payload).stringify()) catch {
+          _ => break
+        }
+      }
       _ => ()
     }
   }
 }
 
+///|
 /// Handle a DISPATCH event.
 async fn DiscordChannel::handle_dispatch(
   self : DiscordChannel,
   json : Json,
-  handler : async (ChannelMessage) -> Unit
+  handler : async (ChannelMessage) -> Unit,
 ) -> Unit {
   let event_name = match json {
     { "t": String(t), .. } => t
     _ => return
   }
   let data = match json {
-    { "d": Object(_), .. } => match json {
-      { "d": d, .. } => d
-      _ => return
-    }
+    { "d": Object(_), .. } =>
+      match json {
+        { "d": d, .. } => d
+        _ => return
+      }
     _ => return
   }
   match event_name {
@@ -283,11 +292,12 @@ async fn DiscordChannel::handle_dispatch(
   }
 }
 
+///|
 /// Handle a MESSAGE_CREATE event.
 async fn DiscordChannel::handle_message_create(
   self : DiscordChannel,
   data : Json,
-  handler : async (ChannelMessage) -> Unit
+  handler : async (ChannelMessage) -> Unit,
 ) -> Unit {
   // Deduplicate by message ID
   let msg_id = match data {
@@ -336,13 +346,18 @@ async fn DiscordChannel::handle_message_create(
   // Permission check
   let perm = self.check_permission(channel_id, author_id, author_name, content)
   if perm == "denied" {
-    self.send_message(channel_id, "Access denied. Please deploy your own instance of Cub.")
+    self.send_message(
+      channel_id, "Access denied. Please deploy your own instance of Cub.",
+    )
     return
   }
   if perm != "ok" {
-    return  // "ignored" — wrong channel, silently skip
+    return // "ignored" — wrong channel, silently skip
   }
-  @log.info("discord", "message from \{author_name} in \{channel_id}: \{truncate(content, 100)}")
+  @log.info(
+    "discord",
+    "message from \{author_name} in \{channel_id}: \{truncate(content, 100)}",
+  )
   // Build ChannelMessage
   let session_id = "discord:\{channel_id}"
   let metadata : Map[String, Json] = Map::new()
@@ -363,13 +378,14 @@ async fn DiscordChannel::handle_message_create(
   handler(msg)
 }
 
+///|
 /// Check permission for a message. Returns "ok", "denied", or "ignored".
 fn DiscordChannel::check_permission(
   self : DiscordChannel,
   channel_id : String,
   author_id : String,
   author_name : String,
-  content : String
+  content : String,
 ) -> String {
   // Check channel filter — wrong channel is silently ignored
   if self.allow_channels.length() > 0 &&
@@ -399,11 +415,12 @@ fn DiscordChannel::check_permission(
   "ok"
 }
 
+///|
 /// Send a message to a Discord channel via REST API.
 pub async fn DiscordChannel::send_message(
   self : DiscordChannel,
   channel_id : String,
-  text : String
+  text : String,
 ) -> Unit {
   let chunks = chunk_message(text, discord_message_limit)
   for chunk in chunks {
@@ -426,6 +443,7 @@ pub async fn DiscordChannel::send_message(
   }
 }
 
+///|
 /// Read a text message from a WebSocket connection.
 async fn read_text_message(conn : @websocket.Conn) -> String {
   let msg = conn.recv()
@@ -441,6 +459,7 @@ async fn read_text_message(conn : @websocket.Conn) -> String {
   @utf8.decode_lossy(buf.contents())
 }
 
+///|
 /// Chunk a message to fit within Discord's message limit.
 fn chunk_message(text : String, limit : Int) -> Array[String] {
   if text.length() <= limit {
@@ -464,29 +483,22 @@ fn chunk_message(text : String, limit : Int) -> Array[String] {
     if split_at <= 0 {
       split_at = limit
     }
-    let chunk = try {
-      remaining[:split_at].to_string()
-    } catch {
-      _ => remaining
-    }
+    let chunk = remaining[:split_at].to_string() catch { _ => remaining }
     chunks.push(chunk.trim().to_string())
-    remaining = try {
-      remaining[split_at:].to_string().trim().to_string()
-    } catch {
-      _ => ""
-    }
+    remaining = remaining[split_at:].to_string().trim().to_string() catch {
+        _ => ""
+      }
   }
   chunks
 }
 
+///|
 /// Truncate a string to max length.
 fn truncate(s : String, max_len : Int) -> String {
   if s.length() <= max_len {
     s
   } else {
-    try {
-      s[:max_len].to_string() + "..."
-    } catch {
+    try s[:max_len].to_string() + "..." catch {
       _ => s
     }
   }

@@ -1,8 +1,0 @@
-{
-  "import": [
-    { "path": "duobei/cub/app", "alias": "app" },
-    { "path": "duobei/cub/config", "alias": "config" },
-    { "path": "moonbitlang/core/encoding/utf8", "alias": "utf8" }
-  ],
-  "native-stub": ["readline_ffi.c"]
-}

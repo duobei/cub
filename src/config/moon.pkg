@@ -1,0 +1,10 @@
+import {
+  "moonbitlang/async/fs" @fs,
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/json",
+  "moonbitlang/core/strconv",
+}
+
+options(
+  "native-stub": [ "env_ffi.c" ],
+)

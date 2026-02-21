@@ -1,11 +1,12 @@
+///|
 /// Tests for tape context selection.
-
 test "select_messages empty entries" {
   let entries : Array[TapeEntry] = []
   let msgs = select_messages(entries)
   inspect(msgs.length(), content="0")
 }
 
+///|
 test "select_messages single user message" {
   let entries = [TapeEntry::message("user", "hello")]
   let msgs = select_messages(entries)
@@ -19,6 +20,7 @@ test "select_messages single user message" {
   }
 }
 
+///|
 test "select_messages skips entries before anchor" {
   let entries = [
     TapeEntry::message("user", "old message"),
@@ -35,6 +37,7 @@ test "select_messages skips entries before anchor" {
   }
 }
 
+///|
 test "select_messages injects anchor state as handoff_context" {
   let state : Map[String, Json] = {}
   state["summary"] = "did stuff".to_json()
@@ -56,6 +59,7 @@ test "select_messages injects anchor state as handoff_context" {
   }
 }
 
+///|
 test "select_messages drops orphan tool_call without tool_result" {
   let call_json : Map[String, Json] = {}
   call_json["id"] = "call_1".to_json()
@@ -74,6 +78,7 @@ test "select_messages drops orphan tool_call without tool_result" {
   inspect(msgs.length(), content="2")
 }
 
+///|
 test "select_messages pairs tool_call with tool_result" {
   let call_json : Map[String, Json] = {}
   call_json["id"] = "call_1".to_json()
@@ -91,7 +96,8 @@ test "select_messages pairs tool_call with tool_result" {
   inspect(msgs.length(), content="3")
   // Second message should be assistant with tool_calls
   match msgs[1] {
-    { "role": String(r), "tool_calls": Array(_), .. } => inspect(r, content="assistant")
+    { "role": String(r), "tool_calls": Array(_), .. } =>
+      inspect(r, content="assistant")
     _ => fail("expected assistant message with tool_calls")
   }
   // Third message should be tool result
@@ -104,6 +110,7 @@ test "select_messages pairs tool_call with tool_result" {
   }
 }
 
+///|
 test "extract_anchor_context with all fields" {
   let state : Map[String, Json] = {}
   state["summary"] = "done A".to_json()
@@ -119,17 +126,20 @@ test "extract_anchor_context with all fields" {
   inspect(result.contains("Current task: build feature"), content="true")
 }
 
+///|
 test "extract_anchor_context with empty state" {
   let result = extract_anchor_context(Json::null())
   inspect(result, content="")
 }
 
+///|
 test "truncate_tool_output short text passes through" {
   let text = "line1\nline2\nline3"
   let result = truncate_tool_output(text)
   inspect(result, content="line1\nline2\nline3")
 }
 
+///|
 test "truncate_tool_output long text gets truncated" {
   let lines : Array[String] = []
   for i = 0; i < 100; i = i + 1 {
@@ -144,6 +154,7 @@ test "truncate_tool_output long text gets truncated" {
   inspect(result.contains("line 80\n"), content="false")
 }
 
+///|
 test "validate_tool_call valid call" {
   let call : Map[String, Json] = {}
   call["id"] = "call_1".to_json()
@@ -154,6 +165,7 @@ test "validate_tool_call valid call" {
   inspect(validate_tool_call(Json::object(call)), content="true")
 }
 
+///|
 test "validate_tool_call invalid arguments" {
   let call : Map[String, Json] = {}
   call["id"] = "call_1".to_json()
@@ -164,6 +176,7 @@ test "validate_tool_call invalid arguments" {
   inspect(validate_tool_call(Json::object(call)), content="false")
 }
 
+///|
 test "validate_tool_call missing id" {
   let call : Map[String, Json] = {}
   let func : Map[String, Json] = {}
@@ -173,6 +186,7 @@ test "validate_tool_call missing id" {
   inspect(validate_tool_call(Json::object(call)), content="false")
 }
 
+///|
 test "validate_tool_call empty name" {
   let call : Map[String, Json] = {}
   call["id"] = "call_1".to_json()

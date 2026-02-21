@@ -1,0 +1,13 @@
+import {
+  "moonbitlang/async" @async,
+  "duobei/cub/app" @app,
+  "duobei/cub/cli" @cli,
+  "duobei/cub/config" @config,
+  "duobei/cub/channels" @channels,
+  "duobei/cub/log" @log,
+  "moonbitlang/core/env",
+}
+
+options(
+  "is-main": true,
+)

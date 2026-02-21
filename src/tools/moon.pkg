@@ -1,0 +1,12 @@
+import {
+  "moonbitlang/async" @async,
+  "moonbitlang/async/fs" @fs,
+  "moonbitlang/async/process" @process,
+  "duobei/cub/tape" @tape,
+  "duobei/cub/config" @config,
+  "moonbitlang/core/encoding/utf8",
+}
+
+options(
+  "native-stub": [ "web_ffi.c" ],
+)

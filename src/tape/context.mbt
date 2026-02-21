@@ -1,5 +1,6 @@
 /// Tape context: convert tape entries to LLM chat messages.
 
+///|
 /// Convert tape entries to chat messages for the LLM.
 /// Only processes entries AFTER the last anchor (anchor-aware context selection).
 /// If the last anchor has state, injects it as the first system message.
@@ -68,6 +69,7 @@ pub fn select_messages(entries : Array[TapeEntry]) -> Array[Json] {
   messages
 }
 
+///|
 /// Extract human-readable context from anchor state payload.
 pub fn extract_anchor_context(payload : Json) -> String {
   let parts : Array[String] = []
@@ -96,6 +98,7 @@ pub fn extract_anchor_context(payload : Json) -> String {
   parts.join("\n")
 }
 
+///|
 /// Append a message entry directly as a chat message.
 fn append_message_entry(messages : Array[Json], entry : TapeEntry) -> Unit {
   match entry.payload {
@@ -104,6 +107,7 @@ fn append_message_entry(messages : Array[Json], entry : TapeEntry) -> Unit {
   }
 }
 
+///|
 /// Build a tool_call assistant message (without appending).
 /// Returns (message_json, normalized_calls).
 fn build_tool_call_message(entry : TapeEntry) -> (Json?, Array[Json]) {
@@ -119,11 +123,12 @@ fn build_tool_call_message(entry : TapeEntry) -> (Json?, Array[Json]) {
   }
 }
 
+///|
 /// Append tool_result entries, correlating with pending tool calls.
 fn append_tool_result_entry(
   messages : Array[Json],
   pending_calls : Array[Json],
-  entry : TapeEntry
+  entry : TapeEntry,
 ) -> Unit {
   let results = match entry.payload {
     { "results": Array(rs), .. } => rs
@@ -134,11 +139,12 @@ fn append_tool_result_entry(
   }
 }
 
+///|
 /// Build a single tool result message.
 fn build_tool_result_message(
   result : Json,
   pending_calls : Array[Json],
-  index : Int
+  index : Int,
 ) -> Json {
   let msg : Map[String, Json] = {}
   msg["role"] = "tool".to_json()
@@ -163,6 +169,7 @@ fn build_tool_result_message(
   Json::object(msg)
 }
 
+///|
 /// Normalize tool calls from a payload, skipping calls with invalid arguments.
 fn normalize_tool_calls(payload : Json) -> Array[Json] {
   match payload {
@@ -179,10 +186,15 @@ fn normalize_tool_calls(payload : Json) -> Array[Json] {
   }
 }
 
+///|
 /// Validate a tool call JSON: must have id, function.name, and parseable arguments.
 pub fn validate_tool_call(call : Json) -> Bool {
   match call {
-    { "id": String(id), "function": { "name": String(name), "arguments": String(args), .. }, .. } => {
+    {
+      "id": String(id),
+      "function": { "name": String(name), "arguments": String(args), .. },
+      ..
+    } => {
       if id.is_empty() || name.is_empty() {
         return false
       }
@@ -199,9 +211,11 @@ pub fn validate_tool_call(call : Json) -> Bool {
   }
 }
 
+///|
 /// Max lines to keep in a tool result when it appears in history.
 let tool_result_max_lines : Int = 80
 
+///|
 /// Render a tool result to string, truncating if too long.
 fn render_tool_result(result : Json) -> String {
   let text = match result {
@@ -211,6 +225,7 @@ fn render_tool_result(result : Json) -> String {
   truncate_tool_output(text)
 }
 
+///|
 /// Truncate tool output to max lines, appending a note if truncated.
 pub fn truncate_tool_output(text : String) -> String {
   let lines = text.split("\n")

@@ -1,5 +1,6 @@
 /// Input command detection.
 
+///|
 /// Detect whether one line should be treated as a command.
 pub fn detect_line_command(line : String) -> DetectedCommand? {
   let stripped = line.trim().to_string()

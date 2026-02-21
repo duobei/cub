@@ -1,12 +1,13 @@
 /// Bootstrap: build_runtime factory stub.
 
+///|
 /// Build the application runtime.
 pub fn build_runtime(
   workspace : String,
-  model~ : String? = None,
-  max_tokens~ : Int? = None,
-  allowed_tools~ : Array[String]? = None,
-  allowed_skills~ : Array[String]? = None
+  model? : String? = None,
+  max_tokens? : Int? = None,
+  allowed_tools? : Array[String]? = None,
+  allowed_skills? : Array[String]? = None,
 ) -> AppRuntime {
   ignore(workspace)
   ignore(model)

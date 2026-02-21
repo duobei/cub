@@ -1,9 +1,11 @@
 /// Application settings loaded from environment variables and .env files.
 
+///|
 /// FFI: copy env var into buffer, returns length or -1 if not set.
 #borrow(name, buf)
 extern "C" fn cub_getenv(name : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_getenv"
 
+///|
 /// Get an environment variable by name. Returns None if not set.
 pub fn getenv(name : String) -> String? {
   let name_bytes = string_to_cstr(name)
@@ -21,29 +23,27 @@ pub fn getenv(name : String) -> String? {
   Some(@utf8.decode_lossy(buf[:len]))
 }
 
+///|
 /// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
 pub fn string_to_cstr(s : String) -> Bytes {
   let utf8 = @utf8.encode(s)
   let len = utf8.length()
   // Build with extra byte for null terminator
-  Bytes::makei(len + 1, fn(i) {
-    if i < len { utf8[i] } else { b'\x00' }
-  })
+  Bytes::makei(len + 1, fn(i) { if i < len { utf8[i] } else { b'\x00' } })
 }
 
+///|
 /// Collect all relevant environment variables into a Map.
 pub fn collect_env_vars() -> Map[String, String] {
   let env : Map[String, String] = {}
   let keys = [
-    "CUB_MODEL", "CUB_API_KEY", "CUB_API_BASE", "CUB_OLLAMA_API_KEY",
-    "CUB_OLLAMA_API_BASE", "LLM_API_KEY", "OPENROUTER_API_KEY",
-    "CUB_MAX_TOKENS", "CUB_MODEL_TIMEOUT_SECONDS", "CUB_SYSTEM_PROMPT",
-    "CUB_HOME", "CUB_WORKSPACE_PATH", "CUB_TAPE_NAME", "CUB_MAX_STEPS",
-    "CUB_PROACTIVE_RESPONSE", "CUB_TELEGRAM_ENABLED", "CUB_TELEGRAM_TOKEN",
-    "CUB_TELEGRAM_ALLOW_FROM", "CUB_TELEGRAM_ALLOW_CHATS", "CUB_TELEGRAM_PROXY",
-    "CUB_DISCORD_ENABLED", "CUB_DISCORD_TOKEN", "CUB_DISCORD_ALLOW_FROM",
-    "CUB_DISCORD_ALLOW_CHANNELS", "CUB_DISCORD_COMMAND_PREFIX", "CUB_DISCORD_PROXY",
-    "HOME", "PWD",
+    "CUB_MODEL", "CUB_API_KEY", "CUB_API_BASE", "CUB_OLLAMA_API_KEY", "CUB_OLLAMA_API_BASE",
+    "LLM_API_KEY", "OPENROUTER_API_KEY", "CUB_MAX_TOKENS", "CUB_MODEL_TIMEOUT_SECONDS",
+    "CUB_SYSTEM_PROMPT", "CUB_HOME", "CUB_WORKSPACE_PATH", "CUB_TAPE_NAME", "CUB_MAX_STEPS",
+    "CUB_PROACTIVE_RESPONSE", "CUB_TELEGRAM_ENABLED", "CUB_TELEGRAM_TOKEN", "CUB_TELEGRAM_ALLOW_FROM",
+    "CUB_TELEGRAM_ALLOW_CHATS", "CUB_TELEGRAM_PROXY", "CUB_DISCORD_ENABLED", "CUB_DISCORD_TOKEN",
+    "CUB_DISCORD_ALLOW_FROM", "CUB_DISCORD_ALLOW_CHANNELS", "CUB_DISCORD_COMMAND_PREFIX",
+    "CUB_DISCORD_PROXY", "HOME", "PWD",
   ]
   for key in keys {
     match getenv(key) {
@@ -54,6 +54,7 @@ pub fn collect_env_vars() -> Map[String, String] {
   env
 }
 
+///|
 /// Runtime settings for cub.
 pub struct Settings {
   model : String
@@ -86,6 +87,7 @@ pub struct Settings {
   allowed_skills : Array[String]
 } derive(Show)
 
+///|
 /// Create default settings.
 pub fn Settings::default() -> Settings {
   {
@@ -120,14 +122,15 @@ pub fn Settings::default() -> Settings {
   }
 }
 
+///|
 /// Create a new Settings with optional overrides applied.
 pub fn Settings::with_overrides(
   self : Settings,
-  model~ : String? = None,
-  max_tokens~ : Int? = None,
-  system_prompt~ : String? = None,
-  allowed_tools~ : Array[String]? = None,
-  allowed_skills~ : Array[String]? = None
+  model? : String? = None,
+  max_tokens? : Int? = None,
+  system_prompt? : String? = None,
+  allowed_tools? : Array[String]? = None,
+  allowed_skills? : Array[String]? = None,
 ) -> Settings {
   {
     ..self,
@@ -154,6 +157,7 @@ pub fn Settings::with_overrides(
   }
 }
 
+///|
 /// Resolve the API key with cascade: api_key > llm_api_key > openrouter_api_key > env vars.
 pub fn Settings::resolved_api_key(self : Settings) -> String? {
   if self.api_key is Some(k) {
@@ -174,6 +178,7 @@ pub fn Settings::resolved_api_key(self : Settings) -> String? {
   None
 }
 
+///|
 /// Resolve home directory, default to ~/.cub.
 pub fn Settings::resolve_home(self : Settings) -> String {
   match self.home {
@@ -185,11 +190,13 @@ pub fn Settings::resolve_home(self : Settings) -> String {
   }
 }
 
+///|
 /// Get an optional env var.
 fn get_env(env : Map[String, String], key : String) -> String? {
   env.get(key)
 }
 
+///|
 /// Get an env var as bool.
 pub fn get_env_bool(env : Map[String, String], key : String) -> Bool? {
   match env.get(key) {
@@ -201,19 +208,16 @@ pub fn get_env_bool(env : Map[String, String], key : String) -> Bool? {
   }
 }
 
+///|
 /// Get an env var as int.
 pub fn get_env_int(env : Map[String, String], key : String) -> Int? {
   match env.get(key) {
-    Some(s) =>
-      try {
-        Some(@strconv.parse_int(s))
-      } catch {
-        _ => None
-      }
+    Some(s) => Some(@strconv.parse_int(s)) catch { _ => None }
     None => None
   }
 }
 
+///|
 /// Parse a comma-separated list from an env var.
 pub fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
   match env.get(key) {
@@ -221,7 +225,7 @@ pub fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
       let trimmed = s.trim(chars=" \t").to_string()
       // Try JSON array first
       if trimmed.length() >= 2 && trimmed[0] == '['.to_int().to_uint16() {
-        let parsed = try { @json.parse(trimmed) } catch { _ => Json::null() }
+        let parsed = @json.parse(trimmed) catch { _ => Json::null() }
         match parsed {
           Array(items) => {
             let result : Array[String] = []
@@ -260,6 +264,7 @@ pub fn get_env_list(env : Map[String, String], key : String) -> Array[String] {
   }
 }
 
+///|
 /// Parse a single dotenv line into (key, value). Returns None on skip.
 pub fn parse_dotenv_line(line : StringView) -> (String, String)? {
   let trimmed = line.trim(chars=" \t\r")
@@ -301,6 +306,7 @@ pub fn parse_dotenv_line(line : StringView) -> (String, String)? {
   }
 }
 
+///|
 /// Parse a simple .env file content into key-value pairs.
 pub fn parse_dotenv(content : String) -> Map[String, String] {
   let result : Map[String, String] = {}
@@ -313,8 +319,9 @@ pub fn parse_dotenv(content : String) -> Map[String, String] {
   result
 }
 
+///|
 /// Load settings from environment variables (with CUB_ prefix) and optional .env file.
-pub async fn load_settings(workspace_path~ : String? = None) -> Settings {
+pub async fn load_settings(workspace_path? : String? = None) -> Settings {
   let env = collect_env_vars()
   // Try loading .env file
   let dotenv = try {
@@ -340,19 +347,26 @@ pub async fn load_settings(workspace_path~ : String? = None) -> Settings {
     ollama_api_base: get_env(combined, "CUB_OLLAMA_API_BASE"),
     llm_api_key: get_env(combined, "LLM_API_KEY"),
     openrouter_api_key: get_env(combined, "OPENROUTER_API_KEY"),
-    max_tokens: get_env_int(combined, "CUB_MAX_TOKENS").unwrap_or(defaults.max_tokens),
-    model_timeout_seconds: match get_env_int(combined, "CUB_MODEL_TIMEOUT_SECONDS") {
+    max_tokens: get_env_int(combined, "CUB_MAX_TOKENS").unwrap_or(
+      defaults.max_tokens,
+    ),
+    model_timeout_seconds: match
+      get_env_int(combined, "CUB_MODEL_TIMEOUT_SECONDS") {
       Some(v) => Some(v)
       None => defaults.model_timeout_seconds
     },
-    system_prompt: get_env(combined, "CUB_SYSTEM_PROMPT").unwrap_or(defaults.system_prompt),
+    system_prompt: get_env(combined, "CUB_SYSTEM_PROMPT").unwrap_or(
+      defaults.system_prompt,
+    ),
     home: get_env(combined, "CUB_HOME"),
     workspace_path: match workspace_path {
       Some(p) => Some(p)
       None => get_env(combined, "CUB_WORKSPACE_PATH")
     },
     tape_name: get_env(combined, "CUB_TAPE_NAME").unwrap_or(defaults.tape_name),
-    max_steps: get_env_int(combined, "CUB_MAX_STEPS").unwrap_or(defaults.max_steps),
+    max_steps: get_env_int(combined, "CUB_MAX_STEPS").unwrap_or(
+      defaults.max_steps,
+    ),
     proactive_response: get_env_bool(combined, "CUB_PROACTIVE_RESPONSE").unwrap_or(
       defaults.proactive_response,
     ),
@@ -362,11 +376,19 @@ pub async fn load_settings(workspace_path~ : String? = None) -> Settings {
     telegram_token: get_env(combined, "CUB_TELEGRAM_TOKEN"),
     telegram_allow_from: {
       let l = get_env_list(combined, "CUB_TELEGRAM_ALLOW_FROM")
-      if l.length() > 0 { l } else { defaults.telegram_allow_from }
+      if l.length() > 0 {
+        l
+      } else {
+        defaults.telegram_allow_from
+      }
     },
     telegram_allow_chats: {
       let l = get_env_list(combined, "CUB_TELEGRAM_ALLOW_CHATS")
-      if l.length() > 0 { l } else { defaults.telegram_allow_chats }
+      if l.length() > 0 {
+        l
+      } else {
+        defaults.telegram_allow_chats
+      }
     },
     telegram_proxy: get_env(combined, "CUB_TELEGRAM_PROXY"),
     discord_enabled: get_env_bool(combined, "CUB_DISCORD_ENABLED").unwrap_or(
@@ -375,11 +397,19 @@ pub async fn load_settings(workspace_path~ : String? = None) -> Settings {
     discord_token: get_env(combined, "CUB_DISCORD_TOKEN"),
     discord_allow_from: {
       let l = get_env_list(combined, "CUB_DISCORD_ALLOW_FROM")
-      if l.length() > 0 { l } else { defaults.discord_allow_from }
+      if l.length() > 0 {
+        l
+      } else {
+        defaults.discord_allow_from
+      }
     },
     discord_allow_channels: {
       let l = get_env_list(combined, "CUB_DISCORD_ALLOW_CHANNELS")
-      if l.length() > 0 { l } else { defaults.discord_allow_channels }
+      if l.length() > 0 {
+        l
+      } else {
+        defaults.discord_allow_channels
+      }
     },
     discord_command_prefix: get_env(combined, "CUB_DISCORD_COMMAND_PREFIX").unwrap_or(
       defaults.discord_command_prefix,

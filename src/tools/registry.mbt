@@ -1,54 +1,70 @@
 /// Unified tool registry.
 
+///|
 /// ToolRegistry manages tool registration and execution.
 pub struct ToolRegistry {
   tools : Map[String, ToolDescriptor]
   allowed_tools : Array[String]?
 }
 
+///|
 /// Create a new ToolRegistry.
-pub fn ToolRegistry::new(allowed_tools~ : Array[String]? = None) -> ToolRegistry {
+pub fn ToolRegistry::new(
+  allowed_tools? : Array[String]? = None,
+) -> ToolRegistry {
   { tools: Map::new(), allowed_tools }
 }
 
+///|
 /// Register a tool.
 pub fn ToolRegistry::register(
   self : ToolRegistry,
   name : String,
   short_description : String,
-  detail~ : String = "",
-  parameters~ : Json = Json::object(Map::new()),
-  source~ : String = "builtin",
-  handler~ : async (Json) -> String
+  detail? : String = "",
+  parameters? : Json = Json::object(Map::new()),
+  source? : String = "builtin",
+  handler~ : async (Json) -> String,
 ) -> Unit {
   // Check allowed_tools filter
   match self.allowed_tools {
-    Some(allowed) =>
-      if not(allowed.contains(name)) {
-        return
-      }
+    Some(allowed) => if not(allowed.contains(name)) { return }
     None => ()
   }
-  let tool : Tool = { name, description: short_description, parameters, handler }
-  let descriptor : ToolDescriptor = { name, short_description, detail, tool, source }
+  let tool : Tool = {
+    name,
+    description: short_description,
+    parameters,
+    handler,
+  }
+  let descriptor : ToolDescriptor = {
+    name,
+    short_description,
+    detail,
+    tool,
+    source,
+  }
   self.tools[name] = descriptor
 }
 
+///|
 /// Check if a tool exists.
 pub fn ToolRegistry::has(self : ToolRegistry, name : String) -> Bool {
   self.tools.contains(name)
 }
 
+///|
 /// Get all descriptors.
 pub fn ToolRegistry::descriptors(self : ToolRegistry) -> Array[ToolDescriptor] {
   self.tools.values().collect()
 }
 
+///|
 /// Execute a tool by name.
 pub async fn ToolRegistry::execute(
   self : ToolRegistry,
   name : String,
-  kwargs~ : Json = Json::object(Map::new())
+  kwargs? : Json = Json::object(Map::new()),
 ) -> String {
   guard self.tools.get(name) is Some(descriptor) else {
     fail("unknown tool: \{name}")
@@ -56,6 +72,7 @@ pub async fn ToolRegistry::execute(
   (descriptor.tool.handler)(kwargs)
 }
 
+///|
 /// Get model-compatible tool list (OpenAI function-calling format).
 pub fn ToolRegistry::model_tools(self : ToolRegistry) -> Array[Json] {
   let tools : Array[Json] = []
@@ -73,10 +90,11 @@ pub fn ToolRegistry::model_tools(self : ToolRegistry) -> Array[Json] {
   tools
 }
 
+///|
 /// Get compact row summaries for all tools.
 pub fn ToolRegistry::compact_rows(
   self : ToolRegistry,
-  for_model~ : Bool = false
+  for_model? : Bool = false,
 ) -> Array[String] {
   let rows : Array[String] = []
   for _, descriptor in self.tools {
@@ -90,11 +108,12 @@ pub fn ToolRegistry::compact_rows(
   rows
 }
 
+///|
 /// Get detailed description for a tool.
 pub fn ToolRegistry::detail(
   self : ToolRegistry,
   name : String,
-  for_model~ : Bool = false
+  for_model? : Bool = false,
 ) -> String {
   ignore(for_model)
   match self.tools.get(name) {
@@ -103,11 +122,13 @@ pub fn ToolRegistry::detail(
   }
 }
 
+///|
 /// Convert dot-separated name to model-compatible underscore name.
 pub fn to_model_name(name : String) -> String {
   name.replace(old=".", new="_")
 }
 
+///|
 /// Convert model name back to dot-separated name.
 pub fn from_model_name(model_name : String, registry : ToolRegistry) -> String {
   if registry.has(model_name) {

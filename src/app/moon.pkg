@@ -1,0 +1,14 @@
+import {
+  "duobei/cub/config" @config,
+  "duobei/cub/tape" @tape,
+  "duobei/cub/llm" @llm,
+  "duobei/cub/tools" @tools,
+  "duobei/cub/core" @core,
+  "duobei/cub/skills" @skills,
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+}
+
+options(
+  "native-stub": [ "file_ffi.c" ],
+)

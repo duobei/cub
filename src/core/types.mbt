@@ -1,5 +1,6 @@
 /// Shared core types.
 
+///|
 /// A detected command parsed from a line.
 pub struct DetectedCommand {
   kind : String
@@ -8,6 +9,7 @@ pub struct DetectedCommand {
   args_tokens : Array[String]
 } derive(Show)
 
+///|
 /// Result of one command execution.
 pub struct CommandExecutionResult {
   command : String
@@ -17,11 +19,13 @@ pub struct CommandExecutionResult {
   elapsed_ms : Int
 } derive(Show)
 
+///|
 /// Format as XML command block.
 pub fn CommandExecutionResult::block(self : CommandExecutionResult) -> String {
   "<command name=\"\{self.name}\" status=\"\{self.status}\" elapsed_ms=\"\{self.elapsed_ms}\">\n\{self.output}\n</command>"
 }
 
+///|
 /// Routing outcome for user input.
 pub struct UserRouteResult {
   enter_model : Bool
@@ -30,6 +34,7 @@ pub struct UserRouteResult {
   exit_requested : Bool
 } derive(Show)
 
+///|
 /// Routing outcome for assistant output.
 pub struct AssistantRouteResult {
   visible_text : String
@@ -37,6 +42,7 @@ pub struct AssistantRouteResult {
   exit_requested : Bool
 } derive(Show)
 
+///|
 /// Result of one model turn loop.
 pub struct ModelTurnResult {
   visible_text : String
@@ -46,6 +52,7 @@ pub struct ModelTurnResult {
   command_followups : Int
 } derive(Show)
 
+///|
 /// Result of the full agent loop for one input.
 pub struct LoopResult {
   immediate_output : String

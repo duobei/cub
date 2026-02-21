@@ -1,5 +1,6 @@
 /// Skill discovery and loading.
 
+///|
 /// Metadata for a discovered skill.
 pub struct SkillMetadata {
   name : String
@@ -9,22 +10,25 @@ pub struct SkillMetadata {
   source : String
 } derive(Show)
 
+///|
 /// FFI: list directory entries into buffer, returns total size or -1.
 #borrow(path, buf)
 extern "C" fn cub_skills_list_dir(
   path : Bytes,
   buf : Bytes,
-  buf_size : Int
+  buf_size : Int,
 ) -> Int = "cub_skills_list_dir"
 
+///|
 /// FFI: read file into buffer, returns file size or -1.
 #borrow(path, buf)
 extern "C" fn cub_skills_read_file(
   path : Bytes,
   buf : Bytes,
-  buf_size : Int
+  buf_size : Int,
 ) -> Int = "cub_skills_read_file"
 
+///|
 /// Read a file synchronously via C FFI two-pass pattern.
 fn read_file_sync(path : String) -> String {
   let path_bytes = @config.string_to_cstr(path)
@@ -40,6 +44,7 @@ fn read_file_sync(path : String) -> String {
   @utf8.decode_lossy(buf[:actual])
 }
 
+///|
 /// List directory entries synchronously via C FFI two-pass pattern.
 fn list_dir_sync(path : String) -> Array[String] {
   let path_bytes = @config.string_to_cstr(path)
@@ -63,6 +68,7 @@ fn list_dir_sync(path : String) -> Array[String] {
   entries
 }
 
+///|
 /// Discover skills from workspace and global paths.
 /// Three-level discovery: workspace/.agent/skills/, ~/.agent/skills/, builtin.
 /// First-match-wins deduplication by name.
@@ -85,6 +91,7 @@ pub fn discover_skills(workspace : String) -> Array[SkillMetadata] {
   skills
 }
 
+///|
 /// Get HOME directory via environment variable pattern.
 fn get_home_dir() -> String {
   // Use the same FFI pattern as config/settings.mbt
@@ -97,6 +104,7 @@ fn get_home_dir() -> String {
   home
 }
 
+///|
 /// Read HOME from /proc/self/environ (Linux-specific).
 fn read_env_home() -> String {
   let content = read_file_sync("/proc/self/environ")
@@ -125,7 +133,7 @@ fn read_env_home() -> String {
           while end < content.length() && content[end].to_int() != 0 {
             end += 1
           }
-          return try { content[start:end].to_string() } catch { _ => "" }
+          return content[start:end].to_string() catch { _ => "" }
         }
       }
     }
@@ -134,12 +142,13 @@ fn read_env_home() -> String {
   ""
 }
 
+///|
 /// Scan a skills directory for subdirectories containing SKILL.md.
 fn scan_skills_dir(
   dir : String,
   source : String,
   seen : Map[String, Bool],
-  skills : Array[SkillMetadata]
+  skills : Array[SkillMetadata],
 ) -> Unit {
   let entries = list_dir_sync(dir)
   for entry in entries {
@@ -171,22 +180,21 @@ fn scan_skills_dir(
         skill_metadata[k] = v
       }
     }
-    skills.push(
-      {
-        name,
-        description,
-        location: skill_dir,
-        metadata: skill_metadata,
-        source,
-      },
-    )
+    skills.push({
+      name,
+      description,
+      location: skill_dir,
+      metadata: skill_metadata,
+      source,
+    })
   }
 }
 
+///|
 /// Add builtin skills.
 fn add_builtin_skills(
   seen : Map[String, Bool],
-  skills : Array[SkillMetadata]
+  skills : Array[SkillMetadata],
 ) -> Unit {
   // Regular skills
   let builtins : Array[(String, String)] = [
@@ -202,21 +210,25 @@ fn add_builtin_skills(
     let key = name.to_lower()
     if not(seen.contains(key)) {
       seen[key] = true
-      skills.push(
-        {
-          name,
-          description: desc,
-          location: "builtin:\{name}",
-          metadata: {},
-          source: "builtin",
-        },
-      )
+      skills.push({
+        name,
+        description: desc,
+        location: "builtin:\{name}",
+        metadata: {},
+        source: "builtin",
+      })
     }
   }
   // Channel skills
   let channel_builtins : Array[(String, String, String)] = [
-    ("discord", "Discord bot integration: message formatting, embeds, reactions", "discord"),
-    ("telegram", "Telegram bot integration: message formatting, commands, inline keyboards", "telegram"),
+    (
+      "discord", "Discord bot integration: message formatting, embeds, reactions",
+      "discord",
+    ),
+    (
+      "telegram", "Telegram bot integration: message formatting, commands, inline keyboards",
+      "telegram",
+    ),
   ]
   for triple in channel_builtins {
     let (name, desc, channel) = triple
@@ -225,19 +237,18 @@ fn add_builtin_skills(
       seen[key] = true
       let meta : Map[String, String] = {}
       meta["metadata.channel"] = channel
-      skills.push(
-        {
-          name,
-          description: desc,
-          location: "builtin:\{name}",
-          metadata: meta,
-          source: "builtin",
-        },
-      )
+      skills.push({
+        name,
+        description: desc,
+        location: "builtin:\{name}",
+        metadata: meta,
+        source: "builtin",
+      })
     }
   }
 }
 
+///|
 /// Parse YAML-like frontmatter from a SKILL.md file.
 /// Returns (metadata_map, body_text).
 pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
@@ -267,7 +278,8 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
   while i < content.length() {
     // Check if line starts with ---
     let at_line_start = i == 0 || content[i - 1].to_int() == '\n'.to_int()
-    if at_line_start && i + 2 < content.length() &&
+    if at_line_start &&
+      i + 2 < content.length() &&
       content[i].to_int() == '-'.to_int() &&
       content[i + 1].to_int() == '-'.to_int() &&
       content[i + 2].to_int() == '-'.to_int() {
@@ -280,25 +292,19 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
     return (meta, content)
   }
   // Extract frontmatter text and body
-  let fm_text = try {
-    content[fm_start:end_pos].to_string()
-  } catch {
+  let fm_text = content[fm_start:end_pos].to_string() catch {
     _ => return (meta, content)
   }
   // Body starts after the closing --- line
   let mut body_start = end_pos + 3
   while body_start < content.length() &&
-    content[body_start].to_int() != '\n'.to_int() {
+        content[body_start].to_int() != '\n'.to_int() {
     body_start += 1
   }
   if body_start < content.length() {
     body_start += 1
   }
-  let body = try {
-    content[body_start:].to_string()
-  } catch {
-    _ => ""
-  }
+  let body = content[body_start:].to_string() catch { _ => "" }
   // Parse frontmatter key: value pairs
   let mut current_nested_prefix = ""
   for line in fm_text.split("\n") {
@@ -309,16 +315,16 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
     }
     // Check if this is a nested block header (e.g., "metadata:")
     let is_indented = line_str.length() > 0 &&
-      (line_str[0].to_int() == ' '.to_int() ||
-      line_str[0].to_int() == '\t'.to_int())
-    if not(is_indented) && trimmed[trimmed.length() - 1].to_int() ==
-      ':'.to_int() {
+      (
+        line_str[0].to_int() == ' '.to_int() ||
+        line_str[0].to_int() == '\t'.to_int()
+      )
+    if not(is_indented) &&
+      trimmed[trimmed.length() - 1].to_int() == ':'.to_int() {
       // Check if there's no value after the colon (block header)
       let colon_idx = find_char(trimmed, ':')
       if colon_idx >= 0 && colon_idx == trimmed.length() - 1 {
-        current_nested_prefix = try {
-          trimmed[:colon_idx].to_string()
-        } catch {
+        current_nested_prefix = trimmed[:colon_idx].to_string() catch {
           _ => ""
         }
         continue
@@ -327,16 +333,12 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
     // Parse key: value
     let colon_idx = find_char(trimmed, ':')
     if colon_idx > 0 {
-      let key = try {
-        trimmed[:colon_idx].to_string().trim().to_string()
-      } catch {
-        _ => continue
-      }
-      let value = try {
-        trimmed[(colon_idx + 1):].to_string().trim().to_string()
-      } catch {
-        _ => continue
-      }
+      let key = trimmed[:colon_idx].to_string().trim().to_string() catch {
+          _ => continue
+        }
+      let value = trimmed[colon_idx + 1:].to_string().trim().to_string() catch {
+          _ => continue
+        }
       if is_indented && current_nested_prefix.length() > 0 {
         meta["\{current_nested_prefix}.\{key}"] = value
       } else {
@@ -348,6 +350,7 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
   (meta, body)
 }
 
+///|
 /// Find the first occurrence of a char in a string. Returns -1 if not found.
 fn find_char(s : String, ch : Char) -> Int {
   let target = ch.to_int()
@@ -359,6 +362,7 @@ fn find_char(s : String, ch : Char) -> Int {
   -1
 }
 
+///|
 /// Load the full SKILL.md body for a skill name.
 /// Searches workspace, global, and builtin skill locations.
 pub fn load_skill_body(name : String, workspace : String) -> String? {
@@ -398,6 +402,7 @@ pub fn load_skill_body(name : String, workspace : String) -> String? {
   None
 }
 
+///|
 /// Load body for a builtin skill.
 fn load_builtin_skill_body(name : String) -> String {
   match name {
@@ -413,6 +418,7 @@ fn load_builtin_skill_body(name : String) -> String {
   }
 }
 
+///|
 /// Body for the builtin cub skill.
 fn cub_skill_body() -> String {
   let body =
@@ -429,6 +435,7 @@ fn cub_skill_body() -> String {
   body
 }
 
+///|
 /// Body for the builtin gh skill.
 fn gh_skill_body() -> String {
   let body =
@@ -474,6 +481,7 @@ fn gh_skill_body() -> String {
   body
 }
 
+///|
 /// Body for the builtin commit skill.
 fn commit_skill_body() -> String {
   let body =
@@ -512,6 +520,7 @@ fn commit_skill_body() -> String {
   body
 }
 
+///|
 /// Body for the builtin review skill.
 fn review_skill_body() -> String {
   let body =
@@ -557,6 +566,7 @@ fn review_skill_body() -> String {
   body
 }
 
+///|
 /// Body for the builtin skill-creator skill.
 fn skill_creator_skill_body() -> String {
   let body =
@@ -600,6 +610,7 @@ fn skill_creator_skill_body() -> String {
   body
 }
 
+///|
 /// Body for the builtin skill-installer skill.
 fn skill_installer_skill_body() -> String {
   let body =
@@ -634,6 +645,7 @@ fn skill_installer_skill_body() -> String {
   body
 }
 
+///|
 /// Body for the builtin telegram channel skill.
 fn telegram_skill_body() -> String {
   let body =
@@ -667,6 +679,7 @@ fn telegram_skill_body() -> String {
   body
 }
 
+///|
 /// Body for the builtin discord channel skill.
 fn discord_skill_body() -> String {
   let body =

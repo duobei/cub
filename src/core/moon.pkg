@@ -1,0 +1,7 @@
+import {
+  "moonbitlang/async" @async,
+  "duobei/cub/tape" @tape,
+  "duobei/cub/llm" @llm,
+  "duobei/cub/tools" @tools,
+  "duobei/cub/skills" @skills,
+}

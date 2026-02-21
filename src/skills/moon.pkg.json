@@ -1,7 +1,0 @@
-{
-  "import": [
-    { "path": "duobei/cub/config", "alias": "config" },
-    "moonbitlang/core/encoding/utf8"
-  ],
-  "native-stub": ["skills_ffi.c"]
-}

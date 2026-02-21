@@ -1,5 +1,6 @@
 /// Forward-only agent loop.
 
+///|
 /// Deterministic single-session loop built on an endless tape.
 pub struct AgentLoop {
   router : InputRouter
@@ -7,19 +8,21 @@ pub struct AgentLoop {
   tape : @tape.TapeService
 }
 
+///|
 /// Create a new AgentLoop.
 pub fn AgentLoop::new(
   router : InputRouter,
   model_runner : ModelRunner,
-  tape : @tape.TapeService
+  tape : @tape.TapeService,
 ) -> AgentLoop {
   { router, model_runner, tape }
 }
 
+///|
 /// Handle one input turn.
 pub async fn AgentLoop::handle_input(
   self : AgentLoop,
-  raw : String
+  raw : String,
 ) -> LoopResult {
   let route = self.router.route_user(raw)
   if route.exit_requested {

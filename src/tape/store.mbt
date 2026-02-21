@@ -1,5 +1,6 @@
 /// Persistent tape store implementation (JSONL-based, append-only).
 
+///|
 /// Helper for one tape file.
 pub struct TapeFile {
   path : String
@@ -7,11 +8,13 @@ pub struct TapeFile {
   mut read_offset : Int
 }
 
+///|
 /// Create a new TapeFile.
 pub fn TapeFile::new(path : String) -> TapeFile {
   { path, read_entries: [], read_offset: 0 }
 }
 
+///|
 /// Get the next entry ID.
 fn TapeFile::next_id(self : TapeFile) -> Int {
   if self.read_entries.length() > 0 {
@@ -21,27 +24,26 @@ fn TapeFile::next_id(self : TapeFile) -> Int {
   }
 }
 
+///|
 /// Reset internal state.
 fn TapeFile::reset_state(self : TapeFile) -> Unit {
   self.read_entries = []
   self.read_offset = 0
 }
 
+///|
 /// Reset the tape file (delete and reset state).
 pub async fn TapeFile::reset(self : TapeFile) -> Unit {
-  try {
-    @fs.remove(self.path)
-  } catch {
+  @fs.remove(self.path) catch {
     _ => ()
   }
   self.reset_state()
 }
 
+///|
 /// Read all entries from the JSONL file.
 pub async fn TapeFile::read(self : TapeFile) -> Array[TapeEntry] {
-  let content = try {
-    @fs.read_file(self.path).text()
-  } catch {
+  let content = @fs.read_file(self.path).text() catch {
     _ => {
       self.reset_state()
       return []
@@ -73,29 +75,26 @@ pub async fn TapeFile::read(self : TapeFile) -> Array[TapeEntry] {
     if trimmed.is_empty() {
       continue
     }
-    let parsed = try {
-      @json.parse(trimmed.to_string())
-    } catch {
-      _ => continue
-    }
-    let entry : TapeEntry = try {
-      @json.from_json(parsed)
-    } catch {
-      _ => continue
-    }
+    let parsed = @json.parse(trimmed.to_string()) catch { _ => continue }
+    let entry : TapeEntry = @json.from_json(parsed) catch { _ => continue }
     self.read_entries.push(entry)
   }
   self.read_offset = content.length()
   self.read_entries.copy()
 }
 
+///|
 /// Append a single entry.
 pub async fn TapeFile::append(self : TapeFile, entry : TapeEntry) -> Unit {
   self.append_many([entry])
 }
 
+///|
 /// Append multiple entries with auto-incrementing IDs.
-pub async fn TapeFile::append_many(self : TapeFile, entries : Array[TapeEntry]) -> Unit {
+pub async fn TapeFile::append_many(
+  self : TapeFile,
+  entries : Array[TapeEntry],
+) -> Unit {
   if entries.is_empty() {
     return
   }
@@ -116,44 +115,36 @@ pub async fn TapeFile::append_many(self : TapeFile, entries : Array[TapeEntry]) 
     next += 1
   }
   let text = buf.to_string()
-  try {
-    @fs.write_file(self.path, text, append=true, create=0o644, truncate=false)
-  } catch {
+  @fs.write_file(self.path, text, append=true, create=0o644, truncate=false) catch {
     _ => ()
   }
   self.read_offset += text.length()
 }
 
+///|
 /// Archive the tape file with a .bak suffix.
 pub async fn TapeFile::archive(self : TapeFile) -> String? {
-  let content = try {
-    @fs.read_file(self.path).text()
-  } catch {
-    _ => return None
-  }
+  let content = @fs.read_file(self.path).text() catch { _ => return None }
   if content.is_empty() {
     return None
   }
   let archive_path = "\{self.path}.bak"
-  try {
-    @fs.write_file(archive_path, content, create=0o644)
-  } catch {
+  @fs.write_file(archive_path, content, create=0o644) catch {
     _ => return None
   }
-  try {
-    @fs.remove(self.path)
-  } catch {
+  @fs.remove(self.path) catch {
     _ => ()
   }
   Some(archive_path)
 }
 
+///|
 /// FNV-1a hash for workspace isolation.
 pub fn fnv1a_hash(input : String) -> String {
   let mut hash : UInt64 = 14695981039346656037UL
   let prime : UInt64 = 1099511628211UL
   for ch in input {
-    hash = hash.lxor(ch.to_uint().to_uint64())
+    hash = hash ^ ch.to_uint().to_uint64()
     hash = hash * prime
   }
   let hex_chars = "0123456789abcdef"
@@ -166,6 +157,7 @@ pub fn fnv1a_hash(input : String) -> String {
   buf.to_string()
 }
 
+///|
 /// URL-encode a string for tape file names.
 pub fn url_encode(s : String) -> String {
   let buf = StringBuilder::new()
@@ -188,6 +180,7 @@ pub fn url_encode(s : String) -> String {
   buf.to_string()
 }
 
+///|
 /// Append-only JSONL tape store.
 pub struct FileTapeStore {
   home : String
@@ -196,21 +189,21 @@ pub struct FileTapeStore {
   tape_files : Map[String, TapeFile]
 }
 
+///|
 /// Create a new FileTapeStore.
 pub async fn FileTapeStore::new(
   home : String,
-  workspace_path : String
+  workspace_path : String,
 ) -> FileTapeStore {
   let workspace_hash = fnv1a_hash(workspace_path)
   let tape_root = "\{home}/tapes"
-  try {
-    @fs.mkdir(tape_root, permission=0o755, recursive=true)
-  } catch {
+  @fs.mkdir(tape_root, permission=0o755, recursive=true) catch {
     _ => ()
   }
   { home, tape_root, workspace_hash, tape_files: {} }
 }
 
+///|
 /// Get or create a TapeFile for a tape name.
 fn FileTapeStore::tape_file(self : FileTapeStore, name : String) -> TapeFile {
   match self.tape_files.get(name) {
@@ -225,36 +218,41 @@ fn FileTapeStore::tape_file(self : FileTapeStore, name : String) -> TapeFile {
   }
 }
 
+///|
 /// Reset a tape.
 pub async fn FileTapeStore::reset(self : FileTapeStore, name : String) -> Unit {
   self.tape_file(name).reset()
 }
 
+///|
 /// Read entries from a tape.
 pub async fn FileTapeStore::read(
   self : FileTapeStore,
-  name : String
+  name : String,
 ) -> Array[TapeEntry] {
   self.tape_file(name).read()
 }
 
+///|
 /// Append an entry to a tape.
 pub async fn FileTapeStore::append(
   self : FileTapeStore,
   name : String,
-  entry : TapeEntry
+  entry : TapeEntry,
 ) -> Unit {
   self.tape_file(name).append(entry)
 }
 
+///|
 /// Archive a tape.
 pub async fn FileTapeStore::archive(
   self : FileTapeStore,
-  name : String
+  name : String,
 ) -> String? {
   self.tape_file(name).archive()
 }
 
+///|
 /// List all known tape names.
 pub fn FileTapeStore::list_tapes(self : FileTapeStore) -> Array[String] {
   let names : Array[String] = []

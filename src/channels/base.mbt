@@ -1,5 +1,6 @@
 /// Channel base types.
 
+///|
 /// A message from a channel.
 pub struct ChannelMessage {
   channel : String
@@ -7,4 +8,3 @@ pub struct ChannelMessage {
   prompt : String
   metadata : Json
 } derive(Show)
-

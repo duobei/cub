@@ -1,11 +1,17 @@
 /// Skill prompt rendering.
 
+///|
 /// Format a skill entry as a list item.
 fn format_skill_entry(skill : SkillMetadata) -> String {
-  let desc = if skill.description.length() > 0 { ": \{skill.description}" } else { "" }
+  let desc = if skill.description.length() > 0 {
+    ": \{skill.description}"
+  } else {
+    ""
+  }
   "- \{skill.name}\{desc} [\{skill.source}]"
 }
 
+///|
 /// Render skill prompt section for system prompt.
 /// Produces <channel_skills> and <available_skills> blocks.
 pub fn render_skill_prompt(skills : Array[SkillMetadata]) -> String {
@@ -24,11 +30,14 @@ pub fn render_skill_prompt(skills : Array[SkillMetadata]) -> String {
   }
   if not(regular_skills.is_empty()) {
     let lines = regular_skills.map(format_skill_entry).join("\n")
-    blocks.push("<available_skills>\nUse '$name' hint to expand a skill's instructions.\n\n\{lines}\n</available_skills>")
+    blocks.push(
+      "<available_skills>\nUse '$name' hint to expand a skill's instructions.\n\n\{lines}\n</available_skills>",
+    )
   }
   blocks.join("\n\n")
 }
 
+///|
 /// Render expanded skill body blocks for activated skills.
 pub fn render_expanded_skills(expanded : Map[String, String]) -> String {
   if expanded.is_empty() {

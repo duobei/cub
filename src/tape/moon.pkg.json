@@ -1,6 +1,0 @@
-{
-  "import": [
-    { "path": "moonbitlang/async/fs", "alias": "fs" },
-    "moonbitlang/core/json"
-  ]
-}

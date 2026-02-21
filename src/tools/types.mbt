@@ -1,5 +1,6 @@
 /// Tool types for the tool system.
 
+///|
 /// A tool definition.
 pub struct Tool {
   name : String
@@ -8,6 +9,7 @@ pub struct Tool {
   handler : async (Json) -> String raise Error
 }
 
+///|
 /// Implement Show for Tool.
 pub impl Show for Tool with output(self, logger) {
   logger.write_string("Tool(")
@@ -15,6 +17,7 @@ pub impl Show for Tool with output(self, logger) {
   logger.write_string(")")
 }
 
+///|
 /// A tool descriptor with metadata.
 pub struct ToolDescriptor {
   name : String
@@ -24,6 +27,7 @@ pub struct ToolDescriptor {
   source : String
 } derive(Show)
 
+///|
 /// Tool execution context passed to tool handlers.
 pub struct ToolContext {
   tape : @tape.TapeService
@@ -31,11 +35,12 @@ pub struct ToolContext {
   session_id : String
 }
 
+///|
 /// Create a new ToolContext.
 pub fn ToolContext::new(
   tape : @tape.TapeService,
   workspace : String,
-  session_id~ : String = "cli"
+  session_id? : String = "cli",
 ) -> ToolContext {
   { tape, workspace, session_id }
 }

@@ -1,11 +1,13 @@
 /// Command parsing helpers.
 
+///|
 /// Parsed command arguments.
 pub struct ParsedArgs {
   kwargs : Map[String, String]
   positional : Array[String]
 } derive(Show)
 
+///|
 /// Split command text into words using simple shell-like rules.
 /// Handles double-quoted strings and backslash escapes.
 pub fn parse_command_words(text : String) -> Array[String] {
@@ -53,6 +55,7 @@ pub fn parse_command_words(text : String) -> Array[String] {
   words
 }
 
+///|
 /// Parse ',name ...' command line into name and args tokens.
 pub fn parse_internal_command(line : String) -> (String, Array[String]) {
   let trimmed = line.trim().to_string()
@@ -61,7 +64,9 @@ pub fn parse_internal_command(line : String) -> (String, Array[String]) {
   }
   // Strip leading comma
   let body = if trimmed[0] == ','.to_int().to_uint16() {
-    try { trimmed[1:].to_string() } catch { _ => "" }
+    trimmed[1:].to_string() catch {
+      _ => ""
+    }
   } else {
     trimmed
   }
@@ -78,6 +83,7 @@ pub fn parse_internal_command(line : String) -> (String, Array[String]) {
   (name, args)
 }
 
+///|
 /// Parse tool arguments from tokens: supports key=value, --key value, --key, and positional.
 pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
   let kwargs : Map[String, String] = {}
@@ -86,12 +92,12 @@ pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
   while idx < tokens.length() {
     let token = tokens[idx]
     if token.length() >= 2 && token.has_prefix("--") {
-      let key = try { token[2:].to_string() } catch { _ => token }
+      let key = token[2:].to_string() catch { _ => token }
       // Check for --key=value
       let eq_pos = find_char(key, '=')
       if eq_pos >= 0 {
-        let k = try { key[:eq_pos].to_string() } catch { _ => key }
-        let v = try { key[eq_pos + 1:].to_string() } catch { _ => "" }
+        let k = key[:eq_pos].to_string() catch { _ => key }
+        let v = key[eq_pos + 1:].to_string() catch { _ => "" }
         kwargs[k] = v
         idx += 1
         continue
@@ -110,8 +116,8 @@ pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
     // Check for key=value
     let eq_pos = find_char(token, '=')
     if eq_pos > 0 {
-      let k = try { token[:eq_pos].to_string() } catch { _ => token }
-      let v = try { token[eq_pos + 1:].to_string() } catch { _ => "" }
+      let k = token[:eq_pos].to_string() catch { _ => token }
+      let v = token[eq_pos + 1:].to_string() catch { _ => "" }
       kwargs[k] = v
       idx += 1
       continue
@@ -122,7 +128,7 @@ pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
   { kwargs, positional }
 }
 
-
+///|
 /// Helper: find character position in string, returns -1 if not found.
 fn find_char(s : String, ch : Char) -> Int {
   let target = ch.to_int().to_uint16()

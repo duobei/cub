@@ -1,8 +1,0 @@
-{
-  "import": [
-    { "path": "moonbitlang/async/fs", "alias": "fs" },
-    "moonbitlang/core/encoding/utf8",
-    "moonbitlang/core/strconv"
-  ],
-  "native-stub": ["env_ffi.c"]
-}

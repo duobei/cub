@@ -1,0 +1,9 @@
+import {
+  "duobei/cub/app" @app,
+  "duobei/cub/config" @config,
+  "moonbitlang/core/encoding/utf8" @utf8,
+}
+
+options(
+  "native-stub": [ "readline_ffi.c" ],
+)
