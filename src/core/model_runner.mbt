@@ -417,10 +417,9 @@ fn runtime_contract() -> String {
     #|7) After completing complex tasks, reflect and save useful patterns via memory.save.
     #|8) For repeated workflows, create reusable skills via skill.create.
     #|9) Update AGENTS.md via agents.update to evolve workspace behavior over time.
-    #|10) Use git.status/diff/log/commit for structured git operations instead of bash.
+    #|10) Use $git skill hint for git operations; use $project-analyze to understand the workspace.
     #|11) Use schedule.add to create timed tasks; schedule.list/remove to manage them.
     #|12) Use agent.spawn to delegate complex subtasks to a child agent process.
-    #|13) Use project.analyze to understand workspace language, framework, and build commands.
     #|</runtime_contract>
     #|<context_contract>
     #|Context is managed via tape anchors. Only entries after the last anchor are visible.

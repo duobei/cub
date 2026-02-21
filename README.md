@@ -112,11 +112,6 @@ cub version                show version
 | `schedule.remove` | Remove a scheduled task |
 | `schedule.list` | List scheduled tasks |
 | `agent.spawn` | Spawn a sub-agent for complex tasks |
-| `project.analyze` | Analyze workspace language and structure |
-| `git.status` | Show git working tree status |
-| `git.diff` | Show git diff (staged/unstaged) |
-| `git.log` | Show recent git commits |
-| `git.commit` | Create git commit (requires confirmation) |
 | `skill.install` | Install a skill from URL |
 | `done` | Signal task completion |
 
@@ -164,6 +159,8 @@ The agent can also create skills at runtime via `skill.create` tool, enabling se
 | `review` | regular | Code review checklist and structured findings |
 | `skill-creator` | regular | Guide for creating new skills |
 | `skill-installer` | regular | Install community skills |
+| `git` | regular | Git operations: status, diff, log, commit |
+| `project-analyze` | regular | Analyze project language, framework, build commands |
 | `discord` | channel | Discord message formatting and behavior guidelines |
 | `telegram` | channel | Telegram formatting and inline keyboard guidelines |
 

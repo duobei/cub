@@ -158,18 +158,6 @@ test "to_model_name converts agent.spawn" {
   inspect(@tools.to_model_name("agent.spawn"), content="agent_spawn")
 }
 
-///|
-test "to_model_name converts project.analyze" {
-  inspect(@tools.to_model_name("project.analyze"), content="project_analyze")
-}
-
-///|
-test "to_model_name converts git tool names" {
-  inspect(@tools.to_model_name("git.status"), content="git_status")
-  inspect(@tools.to_model_name("git.diff"), content="git_diff")
-  inspect(@tools.to_model_name("git.log"), content="git_log")
-  inspect(@tools.to_model_name("git.commit"), content="git_commit")
-}
 
 ///|
 test "parse_interval_seconds valid intervals" {
@@ -198,55 +186,47 @@ test "parse_interval_seconds edge cases" {
 test "from_model_name converts new tools back" {
   let reg = @tools.ToolRegistry::new()
   reg.register("schedule.add", "add schedule", handler=fn(_args) { "ok" })
-  reg.register("git.status", "git status", handler=fn(_args) { "ok" })
   reg.register("agent.spawn", "spawn agent", handler=fn(_args) { "ok" })
   inspect(@tools.from_model_name("schedule_add", reg), content="schedule.add")
-  inspect(@tools.from_model_name("git_status", reg), content="git.status")
   inspect(@tools.from_model_name("agent_spawn", reg), content="agent.spawn")
 }
 
 ///|
 test "ToolRegistry registers new tools with confirmation" {
   let reg = @tools.ToolRegistry::new()
-  reg.register("git.commit", "commit", requires_confirmation=true, handler=fn(
-    _args,
-  ) {
-    "ok"
-  })
   reg.register("agent.spawn", "spawn", requires_confirmation=true, handler=fn(
     _args,
   ) {
     "ok"
   })
-  reg.register("git.status", "status", handler=fn(_args) { "ok" })
-  inspect(reg.needs_confirmation("git.commit"), content="true")
+  reg.register("schedule.add", "add schedule", handler=fn(_args) { "ok" })
   inspect(reg.needs_confirmation("agent.spawn"), content="true")
-  inspect(reg.needs_confirmation("git.status"), content="false")
+  inspect(reg.needs_confirmation("schedule.add"), content="false")
 }
 
 ///|
 test "ToolRegistry model_tools includes new tools" {
   let reg = @tools.ToolRegistry::new()
   reg.register("schedule.add", "add schedule", handler=fn(_args) { "ok" })
-  reg.register("git.status", "git status", handler=fn(_args) { "ok" })
+  reg.register("agent.spawn", "spawn agent", handler=fn(_args) { "ok" })
   let tools = reg.model_tools()
   inspect(tools.length(), content="2")
   // Check that dot names are converted to underscores
   let mut has_schedule = false
-  let mut has_git = false
+  let mut has_spawn = false
   for t in tools {
     match t {
       { "function": { "name": String(n), .. }, .. } => {
         if n == "schedule_add" {
           has_schedule = true
         }
-        if n == "git_status" {
-          has_git = true
+        if n == "agent_spawn" {
+          has_spawn = true
         }
       }
       _ => ()
     }
   }
   inspect(has_schedule, content="true")
-  inspect(has_git, content="true")
+  inspect(has_spawn, content="true")
 }

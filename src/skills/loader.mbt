@@ -204,6 +204,11 @@ fn add_builtin_skills(
     ("review", "Code review checklist and structured findings"),
     ("skill-creator", "Guide for creating new SKILL.md skills"),
     ("skill-installer", "Install community skills via npx @anthropic/skills"),
+    ("git", "Git operations: status, diff, log, commit via bash"),
+    (
+      "project-analyze",
+      "Analyze project structure, detect language/framework/build/test commands",
+    ),
   ]
   for pair in builtins {
     let (name, desc) = pair
@@ -414,6 +419,8 @@ fn load_builtin_skill_body(name : String) -> String {
     "skill-installer" => skill_installer_skill_body()
     "discord" => discord_skill_body()
     "telegram" => telegram_skill_body()
+    "git" => git_skill_body()
+    "project-analyze" => project_analyze_skill_body()
     _ => ""
   }
 }
@@ -704,5 +711,97 @@ fn discord_skill_body() -> String {
     #|- Do not tag or mention users unless explicitly asked
     #|- Do not send empty messages
     #|- If a tool call produces very long output, summarize it
+  body
+}
+
+///|
+/// Body for the builtin git skill.
+fn git_skill_body() -> String {
+  let body =
+    #|# Git Operations
+    #|
+    #|Use `bash` to run git commands. Always review changes before committing.
+    #|
+    #|## Common Workflows
+    #|
+    #|### Check Status
+    #|```bash
+    #|git status --porcelain
+    #|git diff --stat
+    #|```
+    #|
+    #|### View History
+    #|```bash
+    #|git log --oneline -10
+    #|git log --format="%h %an %ad %s" --date=short -10
+    #|git diff HEAD~1
+    #|```
+    #|
+    #|### Stage and Commit
+    #|```bash
+    #|git add <specific-files>    # prefer specific files over git add .
+    #|git diff --staged           # review staged changes
+    #|git commit -m "type(scope): description"
+    #|```
+    #|
+    #|### Branching
+    #|```bash
+    #|git branch -a
+    #|git checkout -b feature/name
+    #|git merge main
+    #|```
+    #|
+    #|## Conventional Commits
+    #|Format: `<type>(<scope>): <description>`
+    #|Types: feat, fix, docs, style, refactor, perf, test, chore
+    #|
+    #|## Rules
+    #|- Always review `git diff --staged` before committing
+    #|- Prefer specific file staging over `git add .`
+    #|- Keep subject under 72 characters, imperative mood
+    #|- Never commit secrets, debug code, or large binaries
+  body
+}
+
+///|
+/// Body for the builtin project-analyze skill.
+fn project_analyze_skill_body() -> String {
+  let body =
+    #|# Project Analysis
+    #|
+    #|When asked to analyze a project, use `fs.list` and `fs.read` to inspect the workspace.
+    #|
+    #|## Detection Steps
+    #|
+    #|1. **List root files**: `fs.list` at workspace root
+    #|2. **Detect language** by manifest file:
+    #|   - `moon.pkg.json` / `moon.pkg` → MoonBit (build: `moon build --target native`, test: `moon test --target native`)
+    #|   - `package.json` → JavaScript/TypeScript (build: `npm run build`, test: `npm test`)
+    #|   - `Cargo.toml` → Rust (build: `cargo build`, test: `cargo test`)
+    #|   - `go.mod` → Go (build: `go build ./...`, test: `go test ./...`)
+    #|   - `pyproject.toml` / `setup.py` → Python (test: `python -m pytest`)
+    #|   - `pom.xml` → Java/Maven, `build.gradle` → Java/Gradle
+    #|   - `Gemfile` → Ruby, `composer.json` → PHP
+    #|   - `CMakeLists.txt` → C/C++/CMake, `Makefile` → C/C++/Make
+    #|3. **Detect entry point**: check for `src/main/main.mbt`, `src/main.rs`, `main.go`, `src/index.ts`, etc.
+    #|4. **Check project files**: AGENTS.md, README.md, .git directory
+    #|
+    #|## Output Format
+    #|```
+    #|Project Analysis:
+    #|  Language: <detected>
+    #|  Framework: <if applicable>
+    #|  Entry point: <path>
+    #|  Build command: <command>
+    #|  Test command: <command>
+    #|  Git: yes/no
+    #|  AGENTS.md: present/not found
+    #|  README.md: present/not found
+    #|```
+    #|
+    #|## Tips
+    #|- If no manifest is found, check for common patterns (Dockerfile, docker-compose.yml)
+    #|- Read README.md for project-specific build instructions
+    #|- Save findings to memory via `memory.save` for future reference
   body
 }
