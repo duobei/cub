@@ -218,34 +218,67 @@ let tool_result_max_lines : Int = 80
 ///|
 /// Render a tool result to string, truncating if too long.
 fn render_tool_result(result : Json) -> String {
+  let tool_name = match result {
+    { "name": String(n), .. } => n
+    _ => ""
+  }
   let text = match result {
+    { "content": String(s), .. } => s
     String(s) => s
     _ => result.stringify()
   }
-  truncate_tool_output(text)
+  smart_truncate(text, tool_name)
 }
 
 ///|
-/// Truncate tool output to max lines, appending a note if truncated.
-pub fn truncate_tool_output(text : String) -> String {
-  let lines = text.split("\n")
-  let mut count = 0
-  for _line in lines {
-    count += 1
+/// Smart truncation based on tool type and content.
+pub fn smart_truncate(text : String, tool_name : String) -> String {
+  let lines : Array[String] = []
+  for line in text.split("\n") {
+    lines.push(line.to_string())
   }
+  let count = lines.length()
   if count <= tool_result_max_lines {
     return text
   }
-  // Keep first N lines
-  let kept : Array[String] = []
-  let mut i = 0
-  for line in text.split("\n") {
-    if i >= tool_result_max_lines {
-      break
-    }
-    kept.push(line.to_string())
-    i += 1
+  // Determine truncation strategy based on tool name
+  let (head, tail) = if tool_name.contains("fs_read") ||
+    tool_name.contains("fs.read") {
+    // Code files: keep head + tail for context
+    (40, 20)
+  } else if tool_name.contains("bash") {
+    // Logs/errors: errors usually at the end
+    (10, 30)
+  } else if tool_name.contains("grep") ||
+    tool_name.contains("fs_list") ||
+    tool_name.contains("fs.list") ||
+    tool_name.contains("fs_glob") ||
+    tool_name.contains("fs.glob") {
+    // Search/listing results: keep more from the top
+    (60, 10)
+  } else {
+    // Default: keep first N lines
+    (tool_result_max_lines, 0)
   }
-  let joined = kept.join("\n")
-  "\{joined}\n[...truncated, \{count} lines total]"
+  if tail > 0 && count > head + tail {
+    let head_lines : Array[String] = []
+    for i = 0; i < head; i = i + 1 {
+      head_lines.push(lines[i])
+    }
+    let tail_lines : Array[String] = []
+    for i = count - tail; i < count; i = i + 1 {
+      tail_lines.push(lines[i])
+    }
+    let omitted = count - head - tail
+    let head_text = head_lines.join("\n")
+    let tail_text = tail_lines.join("\n")
+    "\{head_text}\n[...\{omitted} lines omitted...]\n\{tail_text}\n[\{count} lines total]"
+  } else {
+    let kept : Array[String] = []
+    for i = 0; i < head && i < count; i = i + 1 {
+      kept.push(lines[i])
+    }
+    let kept_text = kept.join("\n")
+    "\{kept_text}\n[...truncated, \{count} lines total]"
+  }
 }

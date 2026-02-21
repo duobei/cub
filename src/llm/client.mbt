@@ -577,6 +577,75 @@ pub async fn LLMClient::retry_chat(
 let context_budget_tokens : Int = 128000
 
 ///|
+/// Summarize chat messages into a compact handoff state.
+pub fn summarize_messages_for_handoff(
+  messages : Array[Json],
+) -> Map[String, Json] {
+  let state : Map[String, Json] = {}
+  // Collect user task descriptions (first and last user messages)
+  let user_msgs : Array[String] = []
+  let tool_names : Array[String] = []
+  let mut last_assistant = ""
+  for msg in messages {
+    match msg {
+      { "role": String("user"), "content": String(c), .. } => user_msgs.push(c)
+      { "role": String("assistant"), "content": String(c), .. } =>
+        if c.length() > 0 {
+          last_assistant = c
+        }
+      { "role": String("tool"), "name": String(n), .. } =>
+        if not(tool_names.contains(n)) {
+          tool_names.push(n)
+        }
+      _ => ()
+    }
+  }
+  // Task: first user message (the original request)
+  if user_msgs.length() > 0 {
+    let task = user_msgs[0]
+    let max_task = 500
+    let task_text = if task.length() > max_task {
+      "\{task[:max_task]}" catch {
+        _ => task
+      }
+    } else {
+      task
+    }
+    state["task"] = task_text.to_json()
+  }
+  // Summary: last assistant response (current state)
+  if last_assistant.length() > 0 {
+    let max_summary = 1000
+    let summary = if last_assistant.length() > max_summary {
+      "\{last_assistant[:max_summary]}" catch {
+        _ => last_assistant
+      }
+    } else {
+      last_assistant
+    }
+    state["summary"] = summary.to_json()
+  }
+  // Tools used
+  if tool_names.length() > 0 {
+    state["tools_used"] = tool_names.join(", ").to_json()
+  }
+  // Context: last user message if different from first
+  if user_msgs.length() > 1 {
+    let last_user = user_msgs[user_msgs.length() - 1]
+    let max_ctx = 300
+    let ctx = if last_user.length() > max_ctx {
+      "\{last_user[:max_ctx]}" catch {
+        _ => last_user
+      }
+    } else {
+      last_user
+    }
+    state["context"] = ctx.to_json()
+  }
+  state
+}
+
+///|
 /// Run a single tool-use cycle: chat → execute tools → return result.
 pub async fn LLMClient::run_tools(
   self : LLMClient,
@@ -591,9 +660,21 @@ pub async fn LLMClient::run_tools(
   // Record user message to tape
   tape.append(@tape.TapeEntry::message("user", prompt))
   // Get messages from tape
-  let messages = tape.read_messages()
-  // Estimate token usage and inject budget warning if needed
-  let estimated = estimate_tokens(messages, system_prompt)
+  let mut messages = tape.read_messages()
+  // Estimate token usage and manage context budget
+  let mut estimated = estimate_tokens(messages, system_prompt)
+  let critical_threshold = context_budget_tokens * 9 / 10 // 90%
+  // Auto-handoff at 90%: summarize and truncate context
+  if estimated > critical_threshold {
+    @log.warn(
+      "llm",
+      "context at ~\{estimated} tokens (>\{critical_threshold}), auto-handoff",
+    )
+    let state = summarize_messages_for_handoff(messages)
+    ignore(tape.handoff("auto/context_overflow", state=Some(state)))
+    messages = tape.read_messages()
+    estimated = estimate_tokens(messages, system_prompt)
+  }
   let threshold = context_budget_tokens * 4 / 5 // 80%
   let sp : String? = if system_prompt.length() > 0 {
     if estimated > threshold {

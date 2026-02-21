@@ -1,4 +1,4 @@
-/// Built-in tools: bash, fs.read, fs.write, fs.edit, web.fetch, web.search, done.
+/// Built-in tools: bash, fs.read, fs.write, fs.edit, fs.list, fs.glob, grep, web.fetch, web.search, done.
 
 ///|
 /// Default subprocess timeout in seconds.
@@ -14,8 +14,12 @@ pub fn register_builtin_tools(
   register_fs_read(registry, ctx)
   register_fs_write(registry, ctx)
   register_fs_edit(registry, ctx)
+  register_fs_list(registry, ctx)
+  register_fs_glob(registry, ctx)
+  register_grep(registry, ctx)
   register_web_fetch(registry, ctx)
   register_web_search(registry, ctx)
+  register_skill_install(registry, ctx)
   register_done(registry, ctx)
 }
 
@@ -382,6 +386,249 @@ fn find_substring_in(haystack : String, needle : String) -> Int {
 }
 
 ///|
+/// Register fs.list tool.
+fn register_fs_list(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["path"] = string_prop(
+    "Directory path (relative to workspace or absolute)",
+  )
+  let bool_prop : Map[String, Json] = Map::new()
+  bool_prop["type"] = "boolean".to_json()
+  bool_prop["description"] = "List recursively (default: false)".to_json()
+  bool_prop["default"] = false.to_json()
+  props["recursive"] = Json::object(bool_prop)
+  let params = make_params(props, ["path"])
+  registry.register(
+    "fs.list",
+    "List directory contents",
+    detail="List files and directories. Use recursive=true to list all files recursively.",
+    parameters=params,
+    handler=async fn(args) {
+      let path = match args {
+        { "path": String(p), .. } => resolve_path(workspace, p)
+        _ => workspace
+      }
+      let recursive = match args {
+        { "recursive": True, .. } => true
+        _ => false
+      }
+      list_directory(path, recursive)
+    },
+  )
+}
+
+///|
+/// List directory contents.
+async fn list_directory(path : String, recursive : Bool) -> String {
+  let (cmd, cmd_args) = if recursive {
+    ("find", [path, "-type", "f", "-not", "-path", "*/.*"])
+  } else {
+    ("ls", ["-1ap", path])
+  }
+  let (exit_code, stdout_data, stderr_data) = @async.with_timeout(15000, async fn() {
+    @process.collect_output(cmd, cmd_args)
+  }) catch {
+    e => fail("fs.list: \{e}")
+  }
+  let stdout_text = stdout_data.text() catch { _ => "" }
+  let stderr_text = stderr_data.text() catch { _ => "" }
+  if exit_code != 0 {
+    fail("fs.list: \{stderr_text}")
+  }
+  // Truncate at 200 entries
+  let lines : Array[String] = []
+  for line in stdout_text.split("\n") {
+    let s = line.to_string()
+    if s.is_empty() {
+      continue
+    }
+    lines.push(s)
+    if lines.length() >= 200 {
+      break
+    }
+  }
+  let total = stdout_text
+    .split("\n")
+    .fold(init=0, fn(acc, l) {
+      if l.to_string().is_empty() {
+        acc
+      } else {
+        acc + 1
+      }
+    })
+  let result = lines.join("\n")
+  if total > 200 {
+    "\{result}\n\n[showing 200 of \{total} entries]"
+  } else {
+    result
+  }
+}
+
+///|
+/// Register fs.glob tool.
+fn register_fs_glob(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["pattern"] = string_prop("File name pattern (e.g. *.mbt, *.json)")
+  props["path"] = string_prop("Base directory to search (default: workspace)")
+  let params = make_params(props, ["pattern"])
+  registry.register(
+    "fs.glob",
+    "Find files by name pattern",
+    detail="Search for files matching a glob pattern. Returns matching file paths.",
+    parameters=params,
+    handler=async fn(args) {
+      let pattern = match args {
+        { "pattern": String(p), .. } => p
+        _ => fail("fs.glob: missing 'pattern' argument")
+      }
+      let path = match args {
+        { "path": String(p), .. } => resolve_path(workspace, p)
+        _ => workspace
+      }
+      glob_files(path, pattern)
+    },
+  )
+}
+
+///|
+/// Find files matching a glob pattern.
+async fn glob_files(path : String, pattern : String) -> String {
+  let (exit_code, stdout_data, _stderr_data) = @async.with_timeout(15000, async fn() {
+    @process.collect_output("find", [path, "-type", "f", "-name", pattern])
+  }) catch {
+    e => fail("fs.glob: \{e}")
+  }
+  let stdout_text = stdout_data.text() catch { _ => "" }
+  if exit_code != 0 || stdout_text.trim().to_string().is_empty() {
+    return "no matches found"
+  }
+  // Truncate at 200 results
+  let lines : Array[String] = []
+  for line in stdout_text.split("\n") {
+    let s = line.to_string()
+    if s.is_empty() {
+      continue
+    }
+    lines.push(s)
+    if lines.length() >= 200 {
+      break
+    }
+  }
+  let total = stdout_text
+    .split("\n")
+    .fold(init=0, fn(acc, l) {
+      if l.to_string().is_empty() {
+        acc
+      } else {
+        acc + 1
+      }
+    })
+  let result = lines.join("\n")
+  if total > 200 {
+    "\{result}\n\n[showing 200 of \{total} matches]"
+  } else {
+    result
+  }
+}
+
+///|
+/// Register grep tool.
+fn register_grep(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["pattern"] = string_prop("Search pattern (regex)")
+  props["path"] = string_prop("Directory to search (default: workspace)")
+  props["include"] = string_prop("File glob filter (e.g. *.mbt)")
+  props["max_results"] = int_prop("Max matches to return", default_val=Some(50))
+  let params = make_params(props, ["pattern"])
+  registry.register(
+    "grep",
+    "Search file contents by pattern",
+    detail="Search for a regex pattern in files. Returns matching lines with file paths and line numbers.",
+    parameters=params,
+    handler=async fn(args) {
+      let pattern = match args {
+        { "pattern": String(p), .. } => p
+        _ => fail("grep: missing 'pattern' argument")
+      }
+      let path = match args {
+        { "path": String(p), .. } => resolve_path(workspace, p)
+        _ => workspace
+      }
+      let file_glob : String? = match args {
+        { "include": String(i), .. } => Some(i)
+        _ => None
+      }
+      let max_results = match args {
+        { "max_results": Number(n, ..), .. } => n.to_int()
+        _ => 50
+      }
+      grep_files(path, pattern, file_glob, max_results)
+    },
+  )
+}
+
+///|
+/// Search file contents by regex pattern.
+async fn grep_files(
+  path : String,
+  pattern : String,
+  file_glob : String?,
+  max_results : Int,
+) -> String {
+  let grep_args : Array[String] = ["-rn", "--color=never"]
+  match file_glob {
+    Some(fg) => grep_args.push("--include=\{fg}")
+    None => ()
+  }
+  grep_args.push(pattern)
+  grep_args.push(path)
+  let (exit_code, stdout_data, stderr_data) = @async.with_timeout(15000, async fn() {
+    @process.collect_output("grep", grep_args)
+  }) catch {
+    e => fail("grep: \{e}")
+  }
+  let stdout_text = stdout_data.text() catch { _ => "" }
+  let stderr_text = stderr_data.text() catch { _ => "" }
+  // grep returns 1 when no matches found (not an error)
+  if exit_code > 1 {
+    fail("grep: \{stderr_text}")
+  }
+  if stdout_text.trim().to_string().is_empty() {
+    return "no matches found"
+  }
+  // Truncate at max_results
+  let lines : Array[String] = []
+  for line in stdout_text.split("\n") {
+    let s = line.to_string()
+    if s.is_empty() {
+      continue
+    }
+    lines.push(s)
+    if lines.length() >= max_results {
+      break
+    }
+  }
+  let total = stdout_text
+    .split("\n")
+    .fold(init=0, fn(acc, l) {
+      if l.to_string().is_empty() {
+        acc
+      } else {
+        acc + 1
+      }
+    })
+  let result = lines.join("\n")
+  if total > max_results {
+    "\{result}\n\n[showing \{max_results} of \{total} matches]"
+  } else {
+    result
+  }
+}
+
+///|
 /// Register web.fetch tool.
 fn register_web_fetch(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   let props : Map[String, Json] = Map::new()
@@ -560,25 +807,106 @@ fn register_web_search(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   let params = make_params(props, ["query"])
   registry.register(
     "web.search",
-    "Search the web",
-    detail="Search the web using DuckDuckGo. Returns search URL and uses web.fetch to get results.",
+    "Search the web and return results",
+    detail="Search using DuckDuckGo and return top results with titles, URLs, and snippets.",
     parameters=params,
     handler=fn(args) raise {
       let query = match args {
         { "query": String(q), .. } => q
         _ => fail("web.search: missing 'query' argument")
       }
+      let max_results = match args {
+        { "max_results": Number(n, ..), .. } => n.to_int()
+        _ => 5
+      }
       let encoded = url_encode(query)
-      let search_url = "https://duckduckgo.com/?q=\{encoded}"
       let lite_url = "https://lite.duckduckgo.com/lite/?q=\{encoded}"
-      let result = StringBuilder::new()
-      result.write_string("Search URL: ")
-      result.write_string(search_url)
-      result.write_string("\n\nTo get results, use web.fetch with: ")
-      result.write_string(lite_url)
-      result.to_string()
+      let raw_html = fetch_url(lite_url)
+      parse_ddg_results(raw_html, max_results)
     },
   )
+}
+
+///|
+/// Parse DuckDuckGo Lite search results from HTML text.
+pub fn parse_ddg_results(html : String, max_results : Int) -> String {
+  let results : Array[String] = []
+  // DuckDuckGo Lite results are in <a> tags with class="result-link"
+  // or simple <a rel="nofollow"> links followed by snippet text.
+  // The stripped HTML (tags removed) contains: "N. Title URL snippet" pattern.
+  // Since we already stripped HTML tags, we parse the plain text.
+  // Look for numbered results: "1. Title  http://..."
+  let lines : Array[String] = []
+  for line in html.split("\n") {
+    let trimmed = line.to_string().trim().to_string()
+    if not(trimmed.is_empty()) {
+      lines.push(trimmed)
+    }
+  }
+  // Find lines that look like URLs (contain http:// or https://)
+  let mut i = 0
+  while i < lines.length() && results.length() < max_results {
+    let line = lines[i]
+    if line.contains("http://") || line.contains("https://") {
+      // This line likely contains a result URL
+      // Previous line might be the title, next line might be the snippet
+      let title = if i > 0 { lines[i - 1] } else { "" }
+      let url = extract_first_url(line)
+      let snippet = if i + 1 < lines.length() {
+        let next = lines[i + 1]
+        if not(next.contains("http://")) && not(next.contains("https://")) {
+          next
+        } else {
+          ""
+        }
+      } else {
+        ""
+      }
+      if not(url.is_empty()) &&
+        not(url.contains("duckduckgo.com")) &&
+        title.length() > 1 {
+        let n = results.length() + 1
+        let entry = if snippet.is_empty() {
+          "\{n}. \{title}\n   \{url}"
+        } else {
+          "\{n}. \{title}\n   \{url}\n   \{snippet}"
+        }
+        results.push(entry)
+      }
+    }
+    i += 1
+  }
+  if results.is_empty() {
+    "No results found."
+  } else {
+    results.join("\n\n")
+  }
+}
+
+///|
+/// Extract the first URL from a string.
+fn extract_first_url(s : String) -> String {
+  let mut start = find_substring_in(s, "https://")
+  if start < 0 {
+    start = find_substring_in(s, "http://")
+  }
+  if start < 0 {
+    return ""
+  }
+  // Find end of URL (space, quote, or end of string)
+  let buf = StringBuilder::new()
+  for j = start; j < s.length(); j = j + 1 {
+    let c = s[j].to_int()
+    if c == ' '.to_int() ||
+      c == '"'.to_int() ||
+      c == '\''.to_int() ||
+      c == '<'.to_int() ||
+      c == '>'.to_int() {
+      break
+    }
+    buf.write_char(c.unsafe_to_char())
+  }
+  buf.to_string()
 }
 
 ///|
@@ -606,6 +934,78 @@ fn url_encode(s : String) -> String {
     }
   }
   buf.to_string()
+}
+
+///|
+/// Register skill.install tool.
+fn register_skill_install(registry : ToolRegistry, ctx : ToolContext) -> Unit {
+  let workspace = ctx.workspace
+  let props : Map[String, Json] = Map::new()
+  props["url"] = string_prop("URL to a SKILL.md file")
+  props["name"] = string_prop("Override skill name (optional)")
+  props["scope"] = string_prop(
+    "Where to install: 'workspace' (default) or 'global'",
+  )
+  let params = make_params(props, ["url"])
+  registry.register(
+    "skill.install",
+    "Install a skill from a URL",
+    detail="Download a SKILL.md file from a URL and install it as a local skill.",
+    parameters=params,
+    handler=async fn(args) {
+      let url = match args {
+        { "url": String(u), .. } => u
+        _ => fail("skill.install: missing 'url'")
+      }
+      let scope = match args {
+        { "scope": String(s), .. } => s
+        _ => "workspace"
+      }
+      // Fetch the SKILL.md content
+      let content = fetch_url(url)
+      // Extract name from frontmatter or override
+      let skill_name = match args {
+        { "name": String(n), .. } => n
+        _ => extract_skill_name(content)
+      }
+      if skill_name.is_empty() {
+        fail("skill.install: could not determine skill name")
+      }
+      // Determine install path
+      let base_dir = if scope == "global" {
+        let home_dir = @config.getenv("HOME").unwrap_or("/tmp")
+        "\{home_dir}/.agent/skills"
+      } else {
+        "\{workspace}/.agent/skills"
+      }
+      let skill_dir = "\{base_dir}/\{skill_name}"
+      let skill_path = "\{skill_dir}/SKILL.md"
+      // Create directory and write file
+      write_file_content(skill_path, content)
+    },
+  )
+}
+
+///|
+/// Extract skill name from SKILL.md frontmatter.
+pub fn extract_skill_name(content : String) -> String {
+  // Look for "name: xxx" in frontmatter (between --- markers)
+  let mut in_frontmatter = false
+  for line in content.split("\n") {
+    let s = line.to_string().trim().to_string()
+    if s == "---" {
+      if in_frontmatter {
+        break
+      }
+      in_frontmatter = true
+      continue
+    }
+    if in_frontmatter && s.has_prefix("name:") {
+      let name = s[5:].to_string() catch { _ => "" }
+      return name.trim().to_string()
+    }
+  }
+  ""
 }
 
 ///|

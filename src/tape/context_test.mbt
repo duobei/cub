@@ -133,25 +133,106 @@ test "extract_anchor_context with empty state" {
 }
 
 ///|
-test "truncate_tool_output short text passes through" {
+test "smart_truncate short text passes through" {
   let text = "line1\nline2\nline3"
-  let result = truncate_tool_output(text)
+  let result = smart_truncate(text, "bash")
   inspect(result, content="line1\nline2\nline3")
 }
 
 ///|
-test "truncate_tool_output long text gets truncated" {
+test "smart_truncate default truncation" {
   let lines : Array[String] = []
   for i = 0; i < 100; i = i + 1 {
     lines.push("line \{i}")
   }
   let text = lines.join("\n")
-  let result = truncate_tool_output(text)
-  inspect(result.contains("[...truncated, 100 lines total]"), content="true")
-  // Should only keep first 80 lines
+  let result = smart_truncate(text, "unknown")
+  inspect(result.contains("100 lines total"), content="true")
   inspect(result.contains("line 0"), content="true")
-  inspect(result.contains("line 79"), content="true")
-  inspect(result.contains("line 80\n"), content="false")
+}
+
+///|
+test "smart_truncate bash keeps tail for errors" {
+  let lines : Array[String] = []
+  for i = 0; i < 100; i = i + 1 {
+    lines.push("line \{i}")
+  }
+  let text = lines.join("\n")
+  let result = smart_truncate(text, "bash")
+  // bash: head=10, tail=30, should keep last 30 lines
+  inspect(result.contains("line 99"), content="true")
+  inspect(result.contains("lines omitted"), content="true")
+}
+
+///|
+test "smart_truncate fs.read keeps head and tail" {
+  let lines : Array[String] = []
+  for i = 0; i < 100; i = i + 1 {
+    lines.push("line \{i}")
+  }
+  let text = lines.join("\n")
+  let result = smart_truncate(text, "fs_read")
+  // fs_read: head=40, tail=20, should keep both
+  inspect(result.contains("line 0"), content="true")
+  inspect(result.contains("line 99"), content="true")
+  inspect(result.contains("lines omitted"), content="true")
+}
+
+///|
+test "smart_truncate grep keeps top 60" {
+  let lines : Array[String] = []
+  for i = 0; i < 100; i = i + 1 {
+    lines.push("match \{i}")
+  }
+  let text = lines.join("\n")
+  let result = smart_truncate(text, "grep")
+  // grep: head=60, tail=10
+  inspect(result.contains("match 0"), content="true")
+  inspect(result.contains("match 59"), content="true")
+  inspect(result.contains("match 99"), content="true")
+  inspect(result.contains("lines omitted"), content="true")
+}
+
+///|
+test "smart_truncate fs.list keeps top 60" {
+  let lines : Array[String] = []
+  for i = 0; i < 100; i = i + 1 {
+    lines.push("file_\{i}.txt")
+  }
+  let text = lines.join("\n")
+  let result = smart_truncate(text, "fs_list")
+  inspect(result.contains("file_0.txt"), content="true")
+  inspect(result.contains("100 lines total"), content="true")
+}
+
+///|
+test "smart_truncate bash head=10 tail=30" {
+  let lines : Array[String] = []
+  for i = 0; i < 100; i = i + 1 {
+    lines.push("log \{i}")
+  }
+  let text = lines.join("\n")
+  let result = smart_truncate(text, "bash")
+  // head=10: line 0-9
+  inspect(result.contains("log 0"), content="true")
+  inspect(result.contains("log 9"), content="true")
+  // tail=30: line 70-99
+  inspect(result.contains("log 70"), content="true")
+  inspect(result.contains("log 99"), content="true")
+  // middle omitted
+  inspect(result.contains("60 lines omitted"), content="true")
+}
+
+///|
+test "smart_truncate exactly at limit passes through" {
+  let lines : Array[String] = []
+  for i = 0; i < 80; i = i + 1 {
+    lines.push("line \{i}")
+  }
+  let text = lines.join("\n")
+  let result = smart_truncate(text, "bash")
+  // 80 lines = exactly at limit, no truncation
+  inspect(result == text, content="true")
 }
 
 ///|

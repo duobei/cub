@@ -5,6 +5,7 @@ import {
   "duobei/cub/tools" @tools,
   "duobei/cub/core" @core,
   "duobei/cub/skills" @skills,
+  "duobei/cub/log" @log,
   "moonbitlang/core/json",
   "moonbitlang/core/encoding/utf8",
 }

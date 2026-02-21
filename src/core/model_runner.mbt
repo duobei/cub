@@ -414,6 +414,9 @@ fn runtime_contract() -> String {
     #|4) Never emit '<command ...>' blocks yourself; those are runtime-generated.
     #|5) When enough evidence is collected, return plain natural language answer.
     #|6) Use '$name' hints to request detail expansion for tools/skills when needed.
+    #|7) After completing complex tasks, reflect and save useful patterns via memory.save.
+    #|8) For repeated workflows, create reusable skills via skill.create.
+    #|9) Update AGENTS.md via agents.update to evolve workspace behavior over time.
     #|</runtime_contract>
     #|<context_contract>
     #|Context is managed via tape anchors. Only entries after the last anchor are visible.

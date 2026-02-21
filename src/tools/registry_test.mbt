@@ -71,10 +71,77 @@ test "ToolRegistry::model_tools generates OpenAI format" {
 }
 
 ///|
+test "to_model_name converts new tool names" {
+  inspect(@tools.to_model_name("fs.list"), content="fs_list")
+  inspect(@tools.to_model_name("fs.glob"), content="fs_glob")
+  inspect(@tools.to_model_name("grep"), content="grep")
+}
+
+///|
 test "ToolRegistry::compact_rows" {
   let reg = @tools.ToolRegistry::new()
   reg.register("bash", "run command", handler=fn(_args) { "ok" })
   let rows = reg.compact_rows()
   inspect(rows.length(), content="1")
   inspect(rows[0], content="bash: run command")
+}
+
+///|
+test "to_model_name converts self-evolving tool names" {
+  inspect(@tools.to_model_name("skill.create"), content="skill_create")
+  inspect(@tools.to_model_name("skill.install"), content="skill_install")
+  inspect(@tools.to_model_name("agents.update"), content="agents_update")
+}
+
+///|
+test "extract_skill_name from valid frontmatter" {
+  let content = "---\nname: my-skill\ndescription: a test\n---\n\nbody"
+  inspect(@tools.extract_skill_name(content), content="my-skill")
+}
+
+///|
+test "extract_skill_name from empty content" {
+  inspect(@tools.extract_skill_name(""), content="")
+}
+
+///|
+test "extract_skill_name from content without frontmatter" {
+  inspect(@tools.extract_skill_name("no frontmatter here"), content="")
+}
+
+///|
+test "extract_skill_name with spaces around name" {
+  let content = "---\nname:   hello-world  \ndescription: test\n---\n"
+  inspect(@tools.extract_skill_name(content), content="hello-world")
+}
+
+///|
+test "parse_ddg_results respects max_results" {
+  let html = "T1\nhttps://a.com\nsnippet1\nT2\nhttps://b.com\nsnippet2\nT3\nhttps://c.com\nsnippet3"
+  let result = @tools.parse_ddg_results(html, 1)
+  inspect(result.contains("https://a.com"), content="true")
+  inspect(result.contains("https://c.com"), content="false")
+}
+
+///|
+test "parse_ddg_results skips duckduckgo URLs" {
+  let html = "DDG\nhttps://duckduckgo.com/something\nfoo\nReal\nhttps://example.com\nbar"
+  let result = @tools.parse_ddg_results(html, 5)
+  inspect(result.contains("duckduckgo.com"), content="false")
+  inspect(result.contains("example.com"), content="true")
+}
+
+///|
+test "parse_ddg_results no results" {
+  let result = @tools.parse_ddg_results("no links here", 5)
+  inspect(result, content="No results found.")
+}
+
+///|
+test "parse_ddg_results extracts URLs" {
+  let html = "Some intro\nExample Title\nhttps://example.com/page\nThis is a snippet about example.\nAnother Title\nhttps://another.org/docs\nAnother snippet."
+  let result = @tools.parse_ddg_results(html, 5)
+  inspect(result.contains("Example Title"), content="true")
+  inspect(result.contains("https://example.com/page"), content="true")
+  inspect(result.contains("Another Title"), content="true")
 }

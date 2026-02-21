@@ -81,6 +81,42 @@ fn resolve_api_key(settings : @config.Settings) -> String {
 }
 
 ///|
+/// Detect if Ollama is running locally and return the first available model.
+fn detect_ollama() -> String? {
+  // Fetch http://localhost:11434/api/tags via C FFI
+  let url_bytes = @config.string_to_cstr("http://localhost:11434/api/tags")
+  let len = cub_http_get(url_bytes, Bytes::new(0), 0)
+  if len <= 0 {
+    return None
+  }
+  let buf = Bytes::new(len)
+  let actual = cub_http_get(url_bytes, buf, len)
+  if actual <= 0 {
+    return None
+  }
+  let text = @utf8.decode_lossy(buf[:actual])
+  // Parse JSON to extract first model name
+  let json = @json.parse(text) catch { _ => return None }
+  match json {
+    { "models": Array(models), .. } =>
+      if models.length() > 0 {
+        match models[0] {
+          { "name": String(name), .. } => Some("ollama:\{name}")
+          _ => None
+        }
+      } else {
+        None
+      }
+    _ => None
+  }
+}
+
+///|
+/// FFI: simple HTTP GET (for Ollama detection).
+#borrow(url, buf)
+extern "C" fn cub_http_get(url : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_http_get"
+
+///|
 /// Create a new session with all components wired up.
 fn AppRuntime::create_session(
   self : AppRuntime,
@@ -109,12 +145,23 @@ fn AppRuntime::create_session(
   )
   // Create tool view
   let tool_view = @tools.ProgressiveToolView::new(registry)
-  // Create LLM client
+  // Create LLM client — auto-detect Ollama if no API key configured
   let api_key = resolve_api_key(self.settings)
+  let (model, api_base) = if api_key.is_empty() {
+    match detect_ollama() {
+      Some(ollama_model) => {
+        @log.info("app", "no API key, auto-detected Ollama: \{ollama_model}")
+        (ollama_model, Some("http://localhost:11434/v1"))
+      }
+      None => (self.settings.model, self.settings.api_base)
+    }
+  } else {
+    (self.settings.model, self.settings.api_base)
+  }
   let llm = @llm.LLMClient::new(
-    self.settings.model,
+    model,
     api_key,
-    api_base=self.settings.api_base,
+    api_base~,
     max_tokens=self.settings.max_tokens,
     confirm_fn=self.confirm_fn,
     on_chunk=self.on_chunk,
@@ -134,7 +181,7 @@ fn AppRuntime::create_session(
       filter_skills(skills, self.settings.allowed_skills)
     },
     fn(name) { @skills.load_skill_body(name, ws) },
-    self.settings.model,
+    model,
     self.settings.max_steps,
     self.settings.max_tokens,
     timeout,
@@ -231,6 +278,74 @@ fn filter_skills(
 }
 
 ///|
+/// Export tape entries to readable markdown format.
+fn export_tape_to_markdown(entries : Array[@tape.TapeEntry]) -> String {
+  let buf = StringBuilder::new()
+  buf.write_string("# Tape Export\n\n")
+  for entry in entries {
+    match entry.kind {
+      "message" =>
+        match entry.payload {
+          { "role": String(role), "content": String(content), .. } => {
+            let heading = if role == "user" { "User" } else { "Assistant" }
+            buf.write_string("### \{heading}\n\{content}\n\n")
+          }
+          _ => ()
+        }
+      "tool_call" =>
+        match entry.payload {
+          { "calls": Array(calls), .. } =>
+            for call in calls {
+              match call {
+                {
+                  "function": {
+                    "name": String(name),
+                    "arguments": String(args),
+                    ..
+                  },
+                  ..
+                } =>
+                  buf.write_string(
+                    "### Tool Call: \{name}\n```json\n\{args}\n```\n\n",
+                  )
+                _ => ()
+              }
+            }
+          _ => ()
+        }
+      "tool_result" =>
+        match entry.payload {
+          { "results": Array(results), .. } =>
+            for result in results {
+              let content = match result {
+                { "content": String(c), .. } => c
+                _ => result.stringify()
+              }
+              let max_len = 500
+              let truncated = if content.length() > max_len {
+                "\{content[:max_len]}\n[...truncated]" catch {
+                  _ => content
+                }
+              } else {
+                content
+              }
+              buf.write_string("### Result\n```\n\{truncated}\n```\n\n")
+            }
+          _ => ()
+        }
+      "anchor" =>
+        match entry.payload {
+          { "name": String(name), .. } =>
+            buf.write_string("---\n**Handoff: \{name}**\n\n")
+          _ => ()
+        }
+      _ => ()
+    }
+  }
+  buf.to_string()
+}
+
+///|
 /// Read AGENTS.md from workspace root, returns empty string if not found.
 fn read_agents_md(workspace : String) -> String {
   let path = "\{workspace}/AGENTS.md"
@@ -266,6 +381,39 @@ extern "C" fn cub_read_file(path : Bytes, buf : Bytes, buf_size : Int) -> Int = 
 /// FFI: write data to file, returns bytes written or -1 on error.
 #borrow(path, data)
 extern "C" fn cub_write_file(path : Bytes, data : Bytes, data_len : Int) -> Int = "cub_write_file"
+
+///|
+/// FFI: recursively create directories.
+#borrow(path)
+extern "C" fn cub_mkdir_p(path : Bytes) -> Int = "cub_mkdir_p"
+
+///|
+/// Create directory recursively (sync).
+fn mkdir_p_sync(path : String) -> Bool {
+  let path_bytes = @config.string_to_cstr(path)
+  cub_mkdir_p(path_bytes) == 0
+}
+
+///|
+/// Write file content synchronously. Creates parent directories.
+fn write_file_sync(path : String, content : String) -> Bool {
+  // Create parent directory
+  let mut last_slash = -1
+  for i, ch in path {
+    if ch == '/' {
+      last_slash = i
+    }
+  }
+  if last_slash > 0 {
+    let parent = path[:last_slash].to_string() catch { _ => "" }
+    if not(parent.is_empty()) {
+      ignore(mkdir_p_sync(parent))
+    }
+  }
+  let path_bytes = @config.string_to_cstr(path)
+  let content_utf8 = @utf8.encode(content)
+  cub_write_file(path_bytes, content_utf8, content_utf8.length()) >= 0
+}
 
 ///|
 /// FFI: list directory entries as newline-separated string.
@@ -529,6 +677,13 @@ fn register_tape_tools(
     }
     tape.reset(archive~)
   })
+  // ,tape.export
+  registry.register("tape.export", "Export tape to markdown", handler=async fn(
+    _args,
+  ) {
+    let entries = tape.read_entries()
+    export_tape_to_markdown(entries)
+  })
   // ,skills.list
   let ws_for_skills = workspace
   let skill_filter = allowed_skills
@@ -643,6 +798,110 @@ fn register_tape_tools(
         "memory.save: write failed"
       } else {
         "saved to MEMORY.md"
+      }
+    },
+  )
+  // ,skill.create
+  let skill_ws = workspace
+  let skill_home = home
+  let sc_props : Map[String, Json] = Map::new()
+  sc_props["name"] = @tools.string_prop(
+    "Skill name (lowercase, hyphens, e.g. 'code-review')",
+  )
+  sc_props["description"] = @tools.string_prop(
+    "Short description for skill discovery",
+  )
+  sc_props["body"] = @tools.string_prop(
+    "Full SKILL.md body content (instructions for the agent)",
+  )
+  sc_props["scope"] = @tools.string_prop(
+    "Where to create: 'workspace' (default) or 'global'",
+  )
+  let sc_params = @tools.make_params(sc_props, ["name", "description", "body"])
+  registry.register(
+    "skill.create",
+    "Create a new reusable skill (writes SKILL.md)",
+    parameters=sc_params,
+    handler=fn(args) {
+      let name = match args {
+        { "name": String(n), .. } => n
+        _ => return "skill.create: missing 'name'"
+      }
+      let description = match args {
+        { "description": String(d), .. } => d
+        _ => return "skill.create: missing 'description'"
+      }
+      let body = match args {
+        { "body": String(b), .. } => b
+        _ => return "skill.create: missing 'body'"
+      }
+      let scope = match args {
+        { "scope": String(s), .. } => s
+        _ => "workspace"
+      }
+      let base_dir = if scope == "global" {
+        "\{skill_home}/skills"
+      } else {
+        "\{skill_ws}/.agent/skills"
+      }
+      let skill_dir = "\{base_dir}/\{name}"
+      let skill_path = "\{skill_dir}/SKILL.md"
+      let content = "---\nname: \{name}\ndescription: \{description}\n---\n\n\{body}\n"
+      if write_file_sync(skill_path, content) {
+        "created skill: \{name} at \{skill_path}"
+      } else {
+        "skill.create: failed to write \{skill_path}"
+      }
+    },
+  )
+  // ,agents.update
+  let agents_ws = workspace
+  let au_props : Map[String, Json] = Map::new()
+  au_props["content"] = @tools.string_prop(
+    "Full new content for AGENTS.md (replaces existing)",
+  )
+  au_props["append"] = @tools.string_prop(
+    "Content to append to AGENTS.md (alternative to full replace)",
+  )
+  let au_params = @tools.make_params(au_props, [])
+  registry.register(
+    "agents.update",
+    "Update workspace AGENTS.md to evolve agent behavior",
+    parameters=au_params,
+    handler=fn(args) {
+      let path = "\{agents_ws}/AGENTS.md"
+      match args {
+        { "content": String(c), .. } => {
+          // Safety: max 10KB
+          if c.length() > 10240 {
+            return "agents.update: content too large (max 10KB)"
+          }
+          if write_file_sync(path, c) {
+            "updated AGENTS.md (full replace)"
+          } else {
+            "agents.update: write failed"
+          }
+        }
+        { "append": String(a), .. } => {
+          if a.length() > 10240 {
+            return "agents.update: content too large (max 10KB)"
+          }
+          let existing = read_file_sync(path)
+          let new_content = if existing.is_empty() {
+            a
+          } else {
+            "\{existing}\n\n\{a}"
+          }
+          if new_content.length() > 10240 {
+            return "agents.update: total content would exceed 10KB"
+          }
+          if write_file_sync(path, new_content) {
+            "appended to AGENTS.md"
+          } else {
+            "agents.update: write failed"
+          }
+        }
+        _ => "agents.update: provide 'content' (full replace) or 'append'"
       }
     },
   )
