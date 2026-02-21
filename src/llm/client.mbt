@@ -91,10 +91,7 @@ pub fn LLMClient::new(
   max_tokens~ : Int = 1024
 ) -> LLMClient {
   let (provider, model_id) = parse_model_spec(model)
-  let base = match api_base {
-    Some(b) => b
-    None => provider_base_url(provider)
-  }
+  let base = api_base.unwrap_or(provider_base_url(provider))
   { model_id, provider, api_key, api_base: base, extra_headers, max_tokens }
 }
 
@@ -218,11 +215,11 @@ pub async fn LLMClient::chat(
   let actual_max_tokens = if max_tokens > 0 { max_tokens } else { self.max_tokens }
   let body = self.build_request_body(messages, tools, actual_max_tokens, system_prompt)
   let body_str = body.stringify()
-  let url = self.api_base + "/chat/completions"
+  let url = "\{self.api_base}/chat/completions"
   // Build headers
   let headers : Map[String, String] = Map::new()
   headers["Content-Type"] = "application/json"
-  headers["Authorization"] = "Bearer " + self.api_key
+  headers["Authorization"] = "Bearer \{self.api_key}"
   // OpenRouter-specific headers
   if self.provider == "openrouter" {
     headers["X-Title"] = "cub"
@@ -241,7 +238,7 @@ pub async fn LLMClient::chat(
         text: "",
         tool_calls: [],
         finish_reason: "error",
-        error: Some("HTTP error: " + e.to_string()),
+        error: Some("HTTP error: \{e}"),
       }
     }
   }
@@ -249,13 +246,13 @@ pub async fn LLMClient::chat(
     let error_text = try {
       response_data.text()
     } catch {
-      _ => "HTTP " + response.code.to_string()
+      _ => "HTTP \{response.code}"
     }
     return {
       text: "",
       tool_calls: [],
       finish_reason: "error",
-      error: Some("API error (\{response.code}): " + error_text),
+      error: Some("API error (\{response.code}): \{error_text}"),
     }
   }
   let response_text = try {
@@ -266,7 +263,7 @@ pub async fn LLMClient::chat(
         text: "",
         tool_calls: [],
         finish_reason: "error",
-        error: Some("Failed to read response: " + e.to_string()),
+        error: Some("Failed to read response: \{e}"),
       }
     }
   }
@@ -278,7 +275,7 @@ pub async fn LLMClient::chat(
         text: "",
         tool_calls: [],
         finish_reason: "error",
-        error: Some("Failed to parse JSON: " + e.to_string()),
+        error: Some("Failed to parse JSON: \{e}"),
       }
     }
   }
@@ -317,7 +314,7 @@ pub async fn LLMClient::run_tools(
     }
   }
   // If no tool calls, return text
-  if response.tool_calls.length() == 0 {
+  if response.tool_calls.is_empty() {
     // Record assistant message
     tape.append(@tape.TapeEntry::message("assistant", response.text))
     return {
@@ -329,10 +326,7 @@ pub async fn LLMClient::run_tools(
     }
   }
   // Record assistant tool calls
-  let call_jsons : Array[Json] = []
-  for tc in response.tool_calls {
-    call_jsons.push(tc.to_json())
-  }
+  let call_jsons = response.tool_calls.map(fn(tc) { tc.to_json() })
   tape.append(@tape.TapeEntry::tool_call(call_jsons))
   // Execute each tool call
   let result_jsons : Array[Json] = []
@@ -345,7 +339,7 @@ pub async fn LLMClient::run_tools(
     let result_text = try {
       execute_tool(tc.function_.name, args)
     } catch {
-      e => "Error: " + e.to_string()
+      e => "Error: \{e}"
     }
     let result_obj : Map[String, Json] = Map::new()
     result_obj["tool_call_id"] = tc.id.to_json()

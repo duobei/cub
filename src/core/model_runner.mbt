@@ -157,7 +157,7 @@ pub async fn ModelRunner::run(
     }
     // We got text back — check if empty
     let assistant_text = chat_result.text
-    if assistant_text.trim().to_string().length() == 0 {
+    if assistant_text.trim().to_string().is_empty() {
       let empty_data : Map[String, Json] = Map::new()
       empty_data["step"] = step.to_json()
       self.tape.append_event("loop.step.empty", Json::object(empty_data))
@@ -180,7 +180,7 @@ pub async fn ModelRunner::run(
     fin_data["exit_requested"] = route.exit_requested.to_json()
     self.tape.append_event("loop.step.finish", Json::object(fin_data))
     // If no follow-up needed, we're done
-    if route.next_prompt.length() == 0 {
+    if route.next_prompt.is_empty() {
       break
     }
     current_prompt = route.next_prompt
@@ -188,7 +188,7 @@ pub async fn ModelRunner::run(
   }
   // Check max steps
   if step >= self.max_steps && error is None {
-    error = Some("max_steps_reached=" + self.max_steps.to_string())
+    error = Some("max_steps_reached=\{self.max_steps}")
     let max_data : Map[String, Json] = Map::new()
     max_data["max_steps"] = self.max_steps.to_json()
     self.tape.append_event("loop.max_steps", Json::object(max_data))
@@ -209,10 +209,7 @@ async fn ModelRunner::chat(
     let tool_name = @tools.from_model_name(name, self.registry)
     self.registry.execute(tool_name, kwargs=args)
   }
-  let timeout = match self.model_timeout_seconds {
-    Some(t) => t
-    None => 120
-  }
+  let timeout = self.model_timeout_seconds.unwrap_or(120)
   let result = try {
     @async.with_timeout(
       timeout * 1000,
@@ -232,7 +229,7 @@ async fn ModelRunner::chat(
       return {
         text: "",
         error: Some(
-          "model_timeout: no response within " + timeout.to_string() + "s",
+          "model_timeout: no response within \{timeout}s",
         ),
         followup_prompt: None,
       }
@@ -242,65 +239,31 @@ async fn ModelRunner::chat(
 
 /// Render the full system prompt.
 fn ModelRunner::render_system_prompt(self : ModelRunner) -> String {
-  let blocks : Array[String] = []
-  if self.base_system_prompt.length() > 0 {
-    blocks.push(self.base_system_prompt)
-  }
-  let ws_prompt = (self.get_workspace_system_prompt)()
-  if ws_prompt.length() > 0 {
-    blocks.push(ws_prompt)
-  }
-  blocks.push(runtime_contract())
-  let tool_block = @tools.render_tool_prompt_block(self.tool_view)
-  if tool_block.length() > 0 {
-    blocks.push(tool_block)
-  }
-  // Skills prompt
-  let skills = (self.list_skills)()
-  let skill_block = @skills.render_skill_prompt(skills)
-  if skill_block.length() > 0 {
-    blocks.push(skill_block)
-  }
-  // Expanded skill bodies (activated via $hint)
-  let expanded_block = @skills.render_expanded_skills(self.expanded_skills)
-  if expanded_block.length() > 0 {
-    blocks.push(expanded_block)
-  }
+  let blocks : Array[String] = [
+    self.base_system_prompt,
+    (self.get_workspace_system_prompt)(),
+    runtime_contract(),
+    @tools.render_tool_prompt_block(self.tool_view),
+    @skills.render_skill_prompt((self.list_skills)()),
+    @skills.render_expanded_skills(self.expanded_skills),
+  ]
   join_blocks(blocks)
 }
 
 /// Join non-empty blocks with double newlines.
 fn join_blocks(blocks : Array[String]) -> String {
-  let buf = StringBuilder::new()
-  let mut first = true
-  for block in blocks {
-    if block.trim().to_string().length() == 0 {
-      continue
-    }
-    if not(first) {
-      buf.write_string("\n\n")
-    }
-    buf.write_string(block)
-    first = false
-  }
-  buf.to_string()
+  blocks
+    .filter(fn(b) { not(b.trim().to_string().is_empty()) })
+    .join("\n\n")
 }
 
 /// Join visible parts with double newlines.
 fn join_visible_parts(parts : Array[String]) -> String {
-  let buf = StringBuilder::new()
-  let mut first = true
-  for part in parts {
-    if part.length() == 0 {
-      continue
-    }
-    if not(first) {
-      buf.write_string("\n\n")
-    }
-    buf.write_string(part)
-    first = false
-  }
-  buf.to_string().trim().to_string()
+  parts
+    .filter(fn(p) { not(p.is_empty()) })
+    .join("\n\n")
+    .trim()
+    .to_string()
 }
 
 /// Internal chat result (before being returned as ModelTurnResult).
@@ -317,10 +280,7 @@ fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
     @llm.ToolAutoKind::Tools =>
       { text: "", error: None, followup_prompt: Some(tool_continue_prompt) }
     @llm.ToolAutoKind::Error => {
-      let err_msg = match output.error {
-        Some(e) => e
-        None => "unknown error"
-      }
+      let err_msg = output.error.unwrap_or("unknown error")
       { text: "", error: Some(err_msg), followup_prompt: None }
     }
   }
@@ -365,16 +325,17 @@ fn is_api_bad_request(err : String) -> Bool {
 
 /// The runtime contract injected into every system prompt.
 fn runtime_contract() -> String {
-  "<runtime_contract>\n" +
-  "1) Use tool calls for all actions (file ops, shell, web, tape, skills).\n" +
-  "2) Do not emit comma-prefixed commands in normal flow; use tool calls instead.\n" +
-  "3) If a compatibility fallback is required, runtime can still parse comma commands.\n" +
-  "4) Never emit '<command ...>' blocks yourself; those are runtime-generated.\n" +
-  "5) When enough evidence is collected, return plain natural language answer.\n" +
-  "6) Use '$name' hints to request detail expansion for tools/skills when needed.\n" +
-  "</runtime_contract>\n" +
-  "<context_contract>\n" +
-  "Excessively long context may cause model call failures. In this case, you SHOULD first use " +
-  "tape.handoff tool to shorten the length of the retrieved history. The current limit is 200k tokens." +
-  "</context_contract>"
+  let contract =
+    #|<runtime_contract>
+    #|1) Use tool calls for all actions (file ops, shell, web, tape, skills).
+    #|2) Do not emit comma-prefixed commands in normal flow; use tool calls instead.
+    #|3) If a compatibility fallback is required, runtime can still parse comma commands.
+    #|4) Never emit '<command ...>' blocks yourself; those are runtime-generated.
+    #|5) When enough evidence is collected, return plain natural language answer.
+    #|6) Use '$name' hints to request detail expansion for tools/skills when needed.
+    #|</runtime_contract>
+    #|<context_contract>
+    #|Excessively long context may cause model call failures. In this case, you SHOULD first use tape.handoff tool to shorten the length of the retrieved history. The current limit is 200k tokens.
+    #|</context_contract>
+  contract
 }

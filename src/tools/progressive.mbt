@@ -24,11 +24,7 @@ pub fn ProgressiveToolView::note_selected(
 pub fn ProgressiveToolView::all_tools(
   self : ProgressiveToolView
 ) -> Array[String] {
-  let names : Array[String] = []
-  for d in self.registry.descriptors() {
-    names.push(d.name)
-  }
-  names
+  self.registry.descriptors().map(fn(d) { d.name })
 }
 
 /// Reset expanded state.
@@ -54,37 +50,23 @@ pub fn ProgressiveToolView::note_hint(
 /// Render compact tool listing block.
 pub fn ProgressiveToolView::compact_block(self : ProgressiveToolView) -> String {
   let rows = self.registry.compact_rows(for_model=true)
-  if rows.length() == 0 {
+  if rows.is_empty() {
     return ""
   }
-  let buf = StringBuilder::new()
-  buf.write_string("<tools>\n")
-  for row in rows {
-    buf.write_string("- ")
-    buf.write_string(row)
-    buf.write_char('\n')
-  }
-  buf.write_string("</tools>")
-  buf.to_string()
+  "<tools>\n" + rows.map(fn(r) { "- \{r}" }).join("\n") + "\n</tools>"
 }
 
 /// Render expanded tool details block for tools that have been selected/hinted.
 pub fn ProgressiveToolView::expanded_block(
   self : ProgressiveToolView
 ) -> String {
-  if self.expanded.length() == 0 {
+  if self.expanded.is_empty() {
     return ""
   }
-  let buf = StringBuilder::new()
-  buf.write_string("<tool_details>\n")
+  let entries : Array[String] = []
   for name, _ in self.expanded {
     let detail = self.registry.detail(name)
-    buf.write_string("## ")
-    buf.write_string(name)
-    buf.write_string(": ")
-    buf.write_string(detail)
-    buf.write_char('\n')
+    entries.push("## \{name}: \{detail}")
   }
-  buf.write_string("</tool_details>")
-  buf.to_string()
+  "<tool_details>\n" + entries.join("\n") + "\n</tool_details>"
 }

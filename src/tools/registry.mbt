@@ -41,11 +41,7 @@ pub fn ToolRegistry::has(self : ToolRegistry, name : String) -> Bool {
 
 /// Get all descriptors.
 pub fn ToolRegistry::descriptors(self : ToolRegistry) -> Array[ToolDescriptor] {
-  let result : Array[ToolDescriptor] = []
-  for _, d in self.tools {
-    result.push(d)
-  }
-  result
+  self.tools.values().collect()
 }
 
 /// Execute a tool by name.
@@ -103,21 +99,13 @@ pub fn ToolRegistry::detail(
   ignore(for_model)
   match self.tools.get(name) {
     Some(d) => d.short_description
-    None => "unknown tool: " + name
+    None => "unknown tool: \{name}"
   }
 }
 
 /// Convert dot-separated name to model-compatible underscore name.
 pub fn to_model_name(name : String) -> String {
-  let buf = StringBuilder::new()
-  for ch in name {
-    if ch == '.' {
-      buf.write_char('_')
-    } else {
-      buf.write_char(ch)
-    }
-  }
-  buf.to_string()
+  name.replace(old=".", new="_")
 }
 
 /// Convert model name back to dot-separated name.

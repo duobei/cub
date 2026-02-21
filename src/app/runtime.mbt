@@ -37,10 +37,7 @@ pub async fn AppRuntime::new(
   settings : @config.Settings,
   workspace : String
 ) -> AppRuntime {
-  let home = match settings.home {
-    Some(h) => h
-    None => workspace + "/.cub"
-  }
+  let home = settings.home.unwrap_or("\{workspace}/.cub")
   let store = @tape.FileTapeStore::new(home, workspace)
   { settings, workspace, sessions: {}, store }
 }
@@ -64,15 +61,10 @@ pub fn AppRuntime::get_session(
 fn resolve_api_key(settings : @config.Settings) -> String {
   match settings.api_key {
     Some(k) => k
-    None =>
-      match settings.openrouter_api_key {
-        Some(k) => k
-        None =>
-          match settings.llm_api_key {
-            Some(k) => k
-            None => ""
-          }
-      }
+    None => match settings.openrouter_api_key {
+      Some(k) => k
+      None => settings.llm_api_key.unwrap_or("")
+    }
   }
 }
 
@@ -82,7 +74,7 @@ fn AppRuntime::create_session(
   session_id : String
 ) -> SessionRuntime {
   // Create tape service
-  let tape_name = self.settings.tape_name + ":" + session_slug(session_id)
+  let tape_name = "\{self.settings.tape_name}:\{session_slug(session_id)}"
   let tape = @tape.TapeService::new(tape_name, self.store)
   // Create tool registry and register builtin tools
   let allowed = if self.settings.allowed_tools.length() > 0 {
@@ -91,7 +83,7 @@ fn AppRuntime::create_session(
     None
   }
   let registry = @tools.ToolRegistry::new(allowed_tools=allowed)
-  let tool_ctx = @tools.ToolContext::new(tape, self.workspace)
+  let tool_ctx = @tools.ToolContext::new(tape, self.workspace, session_id=session_id)
   @tools.register_builtin_tools(registry, tool_ctx)
   // Register tape tools
   register_tape_tools(registry, tape, self.workspace, allowed_skills=self.settings.allowed_skills)
@@ -117,18 +109,7 @@ fn AppRuntime::create_session(
     registry.model_tools(),
     fn() {
       let skills = @skills.discover_skills(ws)
-      let allowed = self.settings.allowed_skills
-      if allowed.length() == 0 {
-        skills
-      } else {
-        let filtered : Array[@skills.SkillMetadata] = []
-        for s in skills {
-          if allowed.contains(s.name) {
-            filtered.push(s)
-          }
-        }
-        filtered
-      }
+      filter_skills(skills, self.settings.allowed_skills)
     },
     fn(name) { @skills.load_skill_body(name, ws) },
     self.settings.model,
@@ -214,31 +195,25 @@ fn filter_skills(
   skills : Array[@skills.SkillMetadata],
   allowed : Array[String]
 ) -> Array[@skills.SkillMetadata] {
-  if allowed.length() == 0 {
+  if allowed.is_empty() {
     return skills
   }
-  let filtered : Array[@skills.SkillMetadata] = []
-  for s in skills {
-    if allowed.contains(s.name) {
-      filtered.push(s)
-    }
-  }
-  filtered
+  skills.filter(fn(s) { allowed.contains(s.name) })
 }
 
 /// Read AGENTS.md from workspace root, returns empty string if not found.
 fn read_agents_md(workspace : String) -> String {
-  let path = workspace + "/AGENTS.md"
+  let path = "\{workspace}/AGENTS.md"
   let text = read_file_sync(path)
-  if text.length() == 0 {
+  if text.is_empty() {
     return ""
   }
-  "<workspace_instructions>\n" + text + "\n</workspace_instructions>"
+  "<workspace_instructions>\n\{text}\n</workspace_instructions>"
 }
 
 /// Synchronous file read via C FFI two-pass pattern.
 fn read_file_sync(path : String) -> String {
-  let path_bytes = string_to_cstr(path)
+  let path_bytes = @config.string_to_cstr(path)
   let len = cub_read_file(path_bytes, Bytes::new(0), 0)
   if len <= 0 {
     return ""
@@ -249,15 +224,6 @@ fn read_file_sync(path : String) -> String {
     return ""
   }
   @utf8.decode_lossy(buf[:actual])
-}
-
-/// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
-fn string_to_cstr(s : String) -> Bytes {
-  let utf8 = @utf8.encode(s)
-  let len = utf8.length()
-  Bytes::makei(len + 1, fn(i) {
-    if i < len { utf8[i] } else { b'\x00' }
-  })
 }
 
 /// FFI: read file into buffer, returns size or -1 on error.
@@ -277,14 +243,7 @@ fn register_tape_tools(
     "Show available commands",
     handler=fn(_args) {
       let rows = registry.compact_rows()
-      let buf = StringBuilder::new()
-      buf.write_string("Available commands:\n")
-      for row in rows {
-        buf.write_string("  ,")
-        buf.write_string(row)
-        buf.write_char('\n')
-      }
-      buf.to_string()
+      "Available commands:\n" + rows.map(fn(r) { "  ,\{r}" }).join("\n")
     },
   )
   // ,tools
@@ -320,7 +279,7 @@ fn register_tape_tools(
         }
       }
       match found {
-        None => "tool not found: " + name
+        None => "tool not found: \{name}"
         Some(d) => {
           let buf = StringBuilder::new()
           buf.write_string("Tool: ")
@@ -383,7 +342,7 @@ fn register_tape_tools(
         _ => ()
       }
       ignore(tape.handoff(name, state=Some(state)))
-      "handoff: " + name
+      "handoff: \{name}"
     },
   )
   // ,anchors
@@ -392,17 +351,10 @@ fn register_tape_tools(
     "List anchor points",
     handler=async fn(_args) {
       let anchors = tape.anchors()
-      if anchors.length() == 0 {
+      if anchors.is_empty() {
         return "no anchors"
       }
-      let buf = StringBuilder::new()
-      for i, a in anchors {
-        if i > 0 {
-          buf.write_char('\n')
-        }
-        buf.write_string(a.name)
-      }
-      buf.to_string()
+      anchors.map(fn(a) { a.name }).join("\n")
     },
   )
   // ,tape.search
@@ -419,19 +371,10 @@ fn register_tape_tools(
         _ => return "tape.search: missing query"
       }
       let results = tape.search(query)
-      if results.length() == 0 {
+      if results.is_empty() {
         return "no results"
       }
-      let buf = StringBuilder::new()
-      for i, entry in results {
-        if i > 0 {
-          buf.write_char('\n')
-        }
-        buf.write_string(entry.kind)
-        buf.write_string(": ")
-        buf.write_string(entry.payload.stringify())
-      }
-      buf.to_string()
+      results.map(fn(e) { "\{e.kind}: \{e.payload.stringify()}" }).join("\n")
     },
   )
   // ,tape.reset
@@ -455,23 +398,14 @@ fn register_tape_tools(
     handler=fn(_args) {
       let all_skills = @skills.discover_skills(ws_for_skills)
       let skills = filter_skills(all_skills, skill_filter)
-      if skills.length() == 0 {
+      if skills.is_empty() {
         return "no skills found"
       }
-      let buf = StringBuilder::new()
-      buf.write_string("Available skills:\n")
-      for skill in skills {
-        buf.write_string("  ")
-        buf.write_string(skill.name)
-        if skill.description.length() > 0 {
-          buf.write_string(" — ")
-          buf.write_string(skill.description)
-        }
-        buf.write_string(" [")
-        buf.write_string(skill.source)
-        buf.write_string("]\n")
-      }
-      buf.to_string()
+      let lines = skills.map(fn(s) {
+        let desc = if s.description.length() > 0 { " — \{s.description}" } else { "" }
+        "  \{s.name}\{desc} [\{s.source}]"
+      })
+      "Available skills:\n" + lines.join("\n")
     },
   )
   // ,skills.describe
@@ -489,8 +423,8 @@ fn register_tape_tools(
         _ => return "skills.describe: missing name"
       }
       match @skills.load_skill_body(name, ws_for_describe) {
-        Some(body) => "skill: " + name + "\n\n" + body
-        None => "skill not found: " + name
+        Some(body) => "skill: \{name}\n\n\{body}"
+        None => "skill not found: \{name}"
       }
     },
   )

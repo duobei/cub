@@ -1,79 +1,42 @@
 /// Skill prompt rendering.
 
+/// Format a skill entry as a list item.
+fn format_skill_entry(skill : SkillMetadata) -> String {
+  let desc = if skill.description.length() > 0 { ": \{skill.description}" } else { "" }
+  "- \{skill.name}\{desc} [\{skill.source}]"
+}
+
 /// Render skill prompt section for system prompt.
 /// Produces <channel_skills> and <available_skills> blocks.
 pub fn render_skill_prompt(skills : Array[SkillMetadata]) -> String {
-  if skills.length() == 0 {
+  if skills.is_empty() {
     return ""
   }
-  let channel_skills : Array[SkillMetadata] = []
-  let regular_skills : Array[SkillMetadata] = []
-  for skill in skills {
-    if skill.metadata.contains("channel") || skill.metadata.contains("metadata.channel") {
-      channel_skills.push(skill)
-    } else {
-      regular_skills.push(skill)
-    }
+  let is_channel = fn(s : SkillMetadata) {
+    s.metadata.contains("channel") || s.metadata.contains("metadata.channel")
   }
-  let buf = StringBuilder::new()
-  // Channel skills block
-  if channel_skills.length() > 0 {
-    buf.write_string("<channel_skills>\n")
-    for skill in channel_skills {
-      buf.write_string("- ")
-      buf.write_string(skill.name)
-      if skill.description.length() > 0 {
-        buf.write_string(": ")
-        buf.write_string(skill.description)
-      }
-      buf.write_string(" [")
-      buf.write_string(skill.source)
-      buf.write_string("]\n")
-    }
-    buf.write_string("</channel_skills>")
+  let channel_skills = skills.filter(is_channel)
+  let regular_skills = skills.filter(fn(s) { not(is_channel(s)) })
+  let blocks : Array[String] = []
+  if not(channel_skills.is_empty()) {
+    let lines = channel_skills.map(format_skill_entry).join("\n")
+    blocks.push("<channel_skills>\n\{lines}\n</channel_skills>")
   }
-  // Regular skills block
-  if regular_skills.length() > 0 {
-    if channel_skills.length() > 0 {
-      buf.write_string("\n\n")
-    }
-    buf.write_string("<available_skills>\n")
-    buf.write_string(
-      "Use '$name' hint to expand a skill's instructions.\n\n",
-    )
-    for skill in regular_skills {
-      buf.write_string("- ")
-      buf.write_string(skill.name)
-      if skill.description.length() > 0 {
-        buf.write_string(": ")
-        buf.write_string(skill.description)
-      }
-      buf.write_string(" [")
-      buf.write_string(skill.source)
-      buf.write_string("]\n")
-    }
-    buf.write_string("</available_skills>")
+  if not(regular_skills.is_empty()) {
+    let lines = regular_skills.map(format_skill_entry).join("\n")
+    blocks.push("<available_skills>\nUse '$name' hint to expand a skill's instructions.\n\n\{lines}\n</available_skills>")
   }
-  buf.to_string()
+  blocks.join("\n\n")
 }
 
 /// Render expanded skill body blocks for activated skills.
 pub fn render_expanded_skills(expanded : Map[String, String]) -> String {
-  if expanded.length() == 0 {
+  if expanded.is_empty() {
     return ""
   }
-  let buf = StringBuilder::new()
-  let mut first = true
+  let entries : Array[String] = []
   for name, body in expanded {
-    if not(first) {
-      buf.write_string("\n\n")
-    }
-    buf.write_string("<skill name=\"")
-    buf.write_string(name)
-    buf.write_string("\">\n")
-    buf.write_string(body)
-    buf.write_string("\n</skill>")
-    first = false
+    entries.push("<skill name=\"\{name}\">\n\{body}\n</skill>")
   }
-  buf.to_string()
+  entries.join("\n\n")
 }
