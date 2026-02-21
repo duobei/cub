@@ -53,6 +53,7 @@ fn provider_base_url(provider : String) -> String {
     "openai" => "https://api.openai.com/v1"
     "deepseek" => "https://api.deepseek.com/v1"
     "ollama" => "http://localhost:11434/v1"
+    "minimax" => "https://api.minimaxi.com/v1"
     _ => "https://openrouter.ai/api/v1" // fallback
   }
 }
