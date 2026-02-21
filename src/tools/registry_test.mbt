@@ -158,7 +158,6 @@ test "to_model_name converts agent.spawn" {
   inspect(@tools.to_model_name("agent.spawn"), content="agent_spawn")
 }
 
-
 ///|
 test "parse_interval_seconds valid intervals" {
   inspect(@tools.parse_interval_seconds("30s"), content="30")

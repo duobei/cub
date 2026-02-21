@@ -206,8 +206,7 @@ fn add_builtin_skills(
     ("skill-installer", "Install community skills via npx @anthropic/skills"),
     ("git", "Git operations: status, diff, log, commit via bash"),
     (
-      "project-analyze",
-      "Analyze project structure, detect language/framework/build/test commands",
+      "project-analyze", "Analyze project structure, detect language/framework/build/test commands",
     ),
   ]
   for pair in builtins {
