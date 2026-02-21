@@ -510,7 +510,7 @@ fn estimate_tokens(messages : Array[Json], system_prompt : String) -> Int {
 
 ///|
 /// Check if an error is retryable (connection errors, 429, 500-503).
-fn is_retryable_error(error : String) -> Bool {
+pub fn is_retryable_error(error : String) -> Bool {
   error.contains("HTTP error:") ||
   error.contains("API error (429)") ||
   error.contains("API error (500)") ||

@@ -160,11 +160,17 @@ async fn TelegramChannel::handle_update(
 
 ///|
 /// Escape text for Telegram HTML parse mode.
-fn escape_html(text : String) -> String {
-  text
-  .replace(old="&", new="&amp;")
-  .replace(old="<", new="&lt;")
-  .replace(old=">", new="&gt;")
+pub fn escape_html(text : String) -> String {
+  let buf = StringBuilder::new()
+  for ch in text {
+    match ch {
+      '&' => buf.write_string("&amp;")
+      '<' => buf.write_string("&lt;")
+      '>' => buf.write_string("&gt;")
+      _ => buf.write_char(ch)
+    }
+  }
+  buf.to_string()
 }
 
 ///|
