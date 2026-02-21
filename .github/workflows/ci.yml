@@ -18,6 +18,13 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
+      - name: Cache MoonBit dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.moon/registry
+          key: moonbit-deps-${{ hashFiles('moon.mod.json') }}
+          restore-keys: moonbit-deps-
+
       - name: Install dependencies
         run: moon update && moon install
 
