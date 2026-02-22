@@ -1180,9 +1180,10 @@ fn register_tape_tools(
           let (exit_code, _stdout_data, stderr_data) = @async.with_timeout(
             180_000,
             async fn() {
+              // Use bash -lc to ensure PATH includes ~/.moon/bin
               @process.collect_output(
-                "moon",
-                ["build", "--target", "wasm-gc"],
+                "bash",
+                ["-lc", "moon build --target wasm-gc"],
                 cwd=plugin_dir,
               )
             },
