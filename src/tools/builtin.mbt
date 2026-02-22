@@ -70,12 +70,47 @@ fn int_prop(description : String, default_val? : Int? = None) -> Json {
 }
 
 ///|
+/// Helper: check if a path contains traversal sequences.
+pub fn has_path_traversal(path : String) -> Bool {
+  if path.contains("..") {
+    return true
+  }
+  false
+}
+
+///|
+/// Helper: sanitize a name for use in file paths (skill names, etc).
+/// Rejects names containing path separators or traversal.
+pub fn sanitize_name(name : String) -> String? {
+  if name.is_empty() ||
+    has_path_traversal(name) ||
+    name.contains("/") ||
+    name.contains("\\") {
+    return None
+  }
+  Some(name)
+}
+
+///|
 /// Helper: resolve a path relative to workspace.
 fn resolve_path(workspace : String, path : String) -> String {
   if path.length() > 0 && path[0] == '/'.to_int().to_uint16() {
     path // absolute
   } else {
     "\{workspace}/\{path}"
+  }
+}
+
+///|
+/// Helper: resolve path with traversal check. Returns error string on failure.
+fn safe_resolve_path(
+  workspace : String,
+  path : String,
+) -> Result[String, String] {
+  if has_path_traversal(path) {
+    Err("rejected: path contains '..' traversal")
+  } else {
+    Ok(resolve_path(workspace, path))
   }
 }
 
@@ -184,9 +219,13 @@ fn register_fs_read(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     detail="Read file content with optional line offset and limit.",
     parameters=params,
     handler=async fn(args) {
-      let path = match args {
-        { "path": String(p), .. } => resolve_path(workspace, p)
+      let raw_path = match args {
+        { "path": String(p), .. } => p
         _ => fail("fs.read: missing 'path' argument")
+      }
+      let path = match safe_resolve_path(workspace, raw_path) {
+        Ok(p) => p
+        Err(e) => fail("fs.read: \{e}")
       }
       let offset = match args {
         { "offset": Number(n, ..), .. } => n.to_int()
@@ -245,9 +284,13 @@ fn register_fs_write(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     detail="Write content to a file. Creates parent directories if needed.",
     parameters=params,
     handler=async fn(args) {
-      let path = match args {
-        { "path": String(p), .. } => resolve_path(workspace, p)
+      let raw_path = match args {
+        { "path": String(p), .. } => p
         _ => fail("fs.write: missing 'path' argument")
+      }
+      let path = match safe_resolve_path(workspace, raw_path) {
+        Ok(p) => p
+        Err(e) => fail("fs.write: \{e}")
       }
       let content = match args {
         { "content": String(c), .. } => c
@@ -312,9 +355,13 @@ fn register_fs_edit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     detail="Find and replace exact text in a file. Use replace_all=true to replace all occurrences.",
     parameters=params,
     handler=async fn(args) {
-      let path = match args {
-        { "path": String(p), .. } => resolve_path(workspace, p)
+      let raw_path = match args {
+        { "path": String(p), .. } => p
         _ => fail("fs.edit: missing 'path' argument")
+      }
+      let path = match safe_resolve_path(workspace, raw_path) {
+        Ok(p) => p
+        Err(e) => fail("fs.edit: \{e}")
       }
       let old_string = match args {
         { "old_string": String(s), .. } => s
@@ -411,7 +458,11 @@ fn register_fs_list(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     parameters=params,
     handler=async fn(args) {
       let path = match args {
-        { "path": String(p), .. } => resolve_path(workspace, p)
+        { "path": String(p), .. } =>
+          match safe_resolve_path(workspace, p) {
+            Ok(rp) => rp
+            Err(e) => fail("fs.list: \{e}")
+          }
         _ => workspace
       }
       let recursive = match args {
@@ -489,7 +540,11 @@ fn register_fs_glob(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         _ => fail("fs.glob: missing 'pattern' argument")
       }
       let path = match args {
-        { "path": String(p), .. } => resolve_path(workspace, p)
+        { "path": String(p), .. } =>
+          match safe_resolve_path(workspace, p) {
+            Ok(rp) => rp
+            Err(e) => fail("fs.glob: \{e}")
+          }
         _ => workspace
       }
       glob_files(path, pattern)
@@ -559,7 +614,11 @@ fn register_grep(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         _ => fail("grep: missing 'pattern' argument")
       }
       let path = match args {
-        { "path": String(p), .. } => resolve_path(workspace, p)
+        { "path": String(p), .. } =>
+          match safe_resolve_path(workspace, p) {
+            Ok(rp) => rp
+            Err(e) => fail("grep: \{e}")
+          }
         _ => workspace
       }
       let file_glob : String? = match args {
@@ -975,6 +1034,11 @@ fn register_skill_install(registry : ToolRegistry, ctx : ToolContext) -> Unit {
       }
       if skill_name.is_empty() {
         fail("skill.install: could not determine skill name")
+      }
+      match sanitize_name(skill_name) {
+        None =>
+          fail("skill.install: invalid skill name (must not contain / or ..)")
+        Some(_) => ()
       }
       // Determine install path
       let base_dir = if scope == "global" {

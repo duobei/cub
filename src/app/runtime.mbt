@@ -246,7 +246,11 @@ pub async fn AppRuntime::handle_input(
   let due = self.check_due_schedules()
   for msg in due {
     @log.info("schedule", "executing due task: \{msg}")
-    ignore(self.get_session("schedule").handle_input(msg))
+    let result = self.get_session("schedule").handle_input(msg)
+    match result.error {
+      Some(e) => @log.warn("schedule", "task failed: \{e}")
+      None => ()
+    }
   }
   let session = self.get_session(session_id)
   session.handle_input(text)
@@ -862,6 +866,10 @@ fn register_tape_tools(
       let name = match args {
         { "name": String(n), .. } => n
         _ => return "skill.create: missing 'name'"
+      }
+      match @tools.sanitize_name(name) {
+        None => return "skill.create: invalid name (must not contain / or ..)"
+        Some(_) => ()
       }
       let description = match args {
         { "description": String(d), .. } => d
@@ -1561,6 +1569,10 @@ pub fn crystallize_skill(
   content : String,
 ) -> String? {
   let name = skill_name_from_content(content)
+  match @tools.sanitize_name(name) {
+    None => return None
+    Some(_) => ()
+  }
   let skill_dir = "\{workspace}/.agent/skills/\{name}"
   let skill_path = "\{skill_dir}/SKILL.md"
   // Don't overwrite existing skills

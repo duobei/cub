@@ -309,9 +309,13 @@ async fn DiscordChannel::handle_message_create(
       return
     }
     self.seen_messages[msg_id] = true
-    // Keep seen_messages bounded
+    // Keep seen_messages bounded — evict oldest half when full
     if self.seen_messages.length() > 1000 {
-      self.seen_messages.clear()
+      let keys = self.seen_messages.keys().collect()
+      let half = keys.length() / 2
+      for i = 0; i < half; i = i + 1 {
+        self.seen_messages.remove(keys[i])
+      }
     }
   }
   // Skip bot messages
@@ -400,6 +404,10 @@ fn DiscordChannel::check_permission(
       return "denied"
     }
   }
+  // If no channels configured, ignore all messages
+  if self.allow_channels.is_empty() {
+    return "ignored"
+  }
   // Check if message mentions cub or is a command
   if content.trim().to_string().length() > 0 &&
     content[0] == ','.to_int().to_uint16() {
@@ -408,10 +416,7 @@ fn DiscordChannel::check_permission(
   if content.to_lower().contains("cub") {
     return "ok"
   }
-  // If channel is in allowed list, accept all messages in it
-  if self.allow_channels.length() > 0 {
-    return "ok"
-  }
+  // Channel is in allowed list, accept all messages in it
   "ok"
 }
 
@@ -467,7 +472,13 @@ fn chunk_message(text : String, limit : Int) -> Array[String] {
   }
   let chunks : Array[String] = []
   let mut remaining = text
+  let mut safety = 0
   while remaining.length() > 0 {
+    safety = safety + 1
+    if safety > 100 {
+      chunks.push(remaining)
+      break
+    }
     if remaining.length() <= limit {
       chunks.push(remaining)
       break
