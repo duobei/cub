@@ -479,7 +479,7 @@ fn runtime_contract() -> String {
     #|10) Use $git skill hint for git operations; use $project-analyze to understand the workspace.
     #|11) Use schedule.add to create timed tasks; schedule.list/remove to manage them.
     #|12) Use agent.spawn to delegate complex subtasks to a child agent process.
-    #|13) Use tool.create to create reusable extension tools (script or WASM) that persist across sessions.
+    #|13) ALWAYS use tool.create to create extension tools. NEVER manually mkdir/write files under .agent/plugins/ or .agent/tools/. tool.create handles scaffolding, build, and hot-registration in one call.
     #|14) Use ext.list to see installed extensions; ext.remove to uninstall them.
     #|</runtime_contract>
     #|<context_contract>
