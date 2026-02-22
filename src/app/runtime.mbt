@@ -1180,10 +1180,12 @@ fn register_tape_tools(
           let (exit_code, _stdout_data, stderr_data) = @async.with_timeout(
             180_000,
             async fn() {
-              // Use bash -lc to ensure PATH includes ~/.moon/bin
+              // Use absolute path — systemd env lacks ~/.moon/bin in PATH
+              let user_home = @config.getenv("HOME").unwrap_or("/home/ubuntu")
+              let moon_bin = "\{user_home}/.moon/bin/moon"
               @process.collect_output(
-                "bash",
-                ["-lc", "moon build --target wasm-gc"],
+                moon_bin,
+                ["build", "--target", "wasm-gc"],
                 cwd=plugin_dir,
               )
             },
@@ -1778,8 +1780,11 @@ async fn run_extension(
   let (exit_code, stdout_data, stderr_data) = @async.with_timeout(timeout, async fn() {
     match ext_type {
       @ext.ExtType::Script => @process.collect_output(path, [args_str])
-      @ext.ExtType::Wasm =>
-        @process.collect_output("moonrun", [path, "--", args_str])
+      @ext.ExtType::Wasm => {
+        let user_home = @config.getenv("HOME").unwrap_or("/home/ubuntu")
+        let moonrun_bin = "\{user_home}/.moon/bin/moonrun"
+        @process.collect_output(moonrun_bin, [path, "--", args_str])
+      }
     }
   }) catch {
     _ => return "extension timeout after 30s"
