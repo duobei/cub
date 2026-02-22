@@ -1559,9 +1559,24 @@ fn is_ext_path(path : String) -> Bool {
 }
 
 ///|
-/// Check if a bash command targets extension directories.
+/// Check if a bash command writes to extension directories.
+/// Allows read-only ops (ls, cat, find) and moon build/run.
 fn is_ext_cmd(cmd : String) -> Bool {
-  (cmd.contains(".agent/plugins/") || cmd.contains(".agent/tools/")) &&
-    not(cmd.contains("moon build")) &&
-    not(cmd.contains("moon run"))
+  if not(cmd.contains(".agent/plugins/") || cmd.contains(".agent/tools/")) {
+    return false
+  }
+  // Allow build/run commands
+  if cmd.contains("moon build") || cmd.contains("moon run") {
+    return false
+  }
+  // Block write operations
+  cmd.contains("mkdir") ||
+    cmd.contains("cp ") ||
+    cmd.contains("mv ") ||
+    cmd.contains("rm ") ||
+    cmd.contains("touch ") ||
+    cmd.contains("tee ") ||
+    cmd.contains("echo ") ||
+    cmd.contains("cat >") ||
+    cmd.contains("cat >>")
 }

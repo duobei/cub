@@ -1048,7 +1048,7 @@ fn register_tape_tools(
   )
   tc_props["description"] = @tools.string_prop("Short description of the tool")
   tc_props["code"] = @tools.string_prop(
-    "Source code. For script: bash/python. For wasm: MoonBit main.mbt — MUST follow this template: fn main { let args = @env.args(); let input = if args.length() > 1 { args[1] } else { \"{}\" }; let parsed = @json.parse(input) catch { _ => ... }; /* your logic */; println(output_json) }. Use @json.parse, Json pattern matching, String/Int operations. Do NOT use to_array() or undefined methods.",
+    "Source code. For script: bash/python. For wasm: MoonBit code — do NOT include 'import' or 'options' (auto-generated). Start directly with 'fn main { let args = @env.args(); let input = if args.length() > 1 { args[1] } else { \"{}\" }; let parsed = @json.parse(input) catch { _ => ... }; /* logic */; println(result_json) }'. Available: @json.parse, @env.args, String methods, Int/Double math.",
   )
   tc_props["parameters"] = @tools.string_prop(
     "Optional JSON Schema for tool parameters (as JSON string)",
@@ -1160,8 +1160,9 @@ fn register_tape_tools(
             #|  "is-main": true,
             #|)
           ignore(write_file_sync("\{src_dir}/moon.pkg", pkg_content))
-          // Write main.mbt
-          if not(write_file_sync("\{src_dir}/main.mbt", code)) {
+          // Write main.mbt — strip import/options blocks (moon.pkg handles those)
+          let clean_code = strip_pkg_declarations(code)
+          if not(write_file_sync("\{src_dir}/main.mbt", clean_code)) {
             return "tool.create: failed to write source"
           }
           // Write plugin.json manifest
@@ -2310,4 +2311,45 @@ pub fn crystallize_skill(
   } else {
     None
   }
+}
+
+///|
+/// Strip package-level declarations (import/options blocks) from MoonBit code.
+/// These belong in moon.pkg, not in .mbt files.
+fn strip_pkg_declarations(code : String) -> String {
+  let lines : Array[String] = []
+  let mut skip = false
+  let mut brace_depth = 0
+  for part in code.split("\n") {
+    let line = part.to_string()
+    let trimmed = line.trim().to_string()
+    if not(skip) &&
+      (trimmed.has_prefix("import ") || trimmed == "import" || trimmed.has_prefix("options(") ||
+      trimmed.has_prefix("options (")) {
+      skip = true
+      brace_depth = 0
+    }
+    if skip {
+      for i = 0; i < trimmed.length(); i = i + 1 {
+        let ch = trimmed[i]
+        if ch == '{'.to_int().to_uint16() || ch == '('.to_int().to_uint16() {
+          brace_depth += 1
+        } else if ch == '}'.to_int().to_uint16() || ch == ')'.to_int().to_uint16() {
+          brace_depth -= 1
+          if brace_depth <= 0 {
+            skip = false
+          }
+        }
+      }
+      continue
+    }
+    if not(trimmed.is_empty()) || lines.length() > 0 {
+      lines.push(line)
+    }
+  }
+  // Trim leading empty lines
+  while lines.length() > 0 && lines[0].trim().to_string().is_empty() {
+    ignore(lines.remove(0))
+  }
+  lines.join("\n")
 }
