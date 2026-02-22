@@ -1,0 +1,92 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/tools"
+
+import {
+  "duobei/cub/tape",
+}
+
+// Values
+pub fn extract_skill_name(String) -> String
+
+pub fn from_model_name(String, ToolRegistry) -> String
+
+pub fn has_path_traversal(String) -> Bool
+
+pub fn is_safe_url(String) -> Bool
+
+pub fn make_params(Map[String, Json], Array[String]) -> Json
+
+pub fn parse_ddg_results(String, Int) -> String
+
+pub fn parse_interval_seconds(String) -> Int
+
+pub fn register_builtin_tools(ToolRegistry, ToolContext) -> Unit
+
+pub fn render_tool_prompt_block(ProgressiveToolView) -> String
+
+pub fn sanitize_name(String) -> String?
+
+pub fn string_prop(String) -> Json
+
+pub fn to_model_name(String) -> String
+
+// Errors
+
+// Types and methods
+pub struct ProgressiveToolView {
+  registry : ToolRegistry
+  expanded : Map[String, Bool]
+}
+pub fn ProgressiveToolView::all_tools(Self) -> Array[String]
+pub fn ProgressiveToolView::compact_block(Self) -> String
+pub fn ProgressiveToolView::expanded_block(Self) -> String
+pub fn ProgressiveToolView::new(ToolRegistry) -> Self
+pub fn ProgressiveToolView::note_hint(Self, String) -> Bool
+pub fn ProgressiveToolView::note_selected(Self, String) -> Unit
+pub fn ProgressiveToolView::reset(Self) -> Unit
+
+pub struct Tool {
+  name : String
+  description : String
+  parameters : Json
+  handler : async (Json) -> String
+  requires_confirmation : Bool
+}
+pub impl Show for Tool
+
+pub struct ToolContext {
+  tape : @tape.TapeService
+  workspace : String
+  session_id : String
+}
+pub fn ToolContext::new(@tape.TapeService, String, session_id? : String) -> Self
+
+pub struct ToolDescriptor {
+  name : String
+  short_description : String
+  detail : String
+  tool : Tool
+  source : String
+}
+pub impl Show for ToolDescriptor
+
+pub struct ToolRegistry {
+  tools : Map[String, ToolDescriptor]
+  allowed_tools : Array[String]?
+}
+pub fn ToolRegistry::compact_rows(Self, for_model? : Bool) -> Array[String]
+pub fn ToolRegistry::descriptors(Self) -> Array[ToolDescriptor]
+pub fn ToolRegistry::detail(Self, String, for_model? : Bool) -> String
+pub async fn ToolRegistry::execute(Self, String, kwargs? : Json) -> String
+pub fn ToolRegistry::has(Self, String) -> Bool
+pub fn ToolRegistry::is_serial(Self, String) -> Bool
+pub fn ToolRegistry::model_tools(Self) -> Array[Json]
+pub fn ToolRegistry::needs_confirmation(Self, String) -> Bool
+pub fn ToolRegistry::new(allowed_tools? : Array[String]?) -> Self
+pub fn ToolRegistry::register(Self, String, String, detail? : String, parameters? : Json, source? : String, requires_confirmation? : Bool, handler~ : async (Json) -> String) -> Unit
+pub fn ToolRegistry::unregister(Self, String) -> Unit
+
+// Type aliases
+
+// Traits
+

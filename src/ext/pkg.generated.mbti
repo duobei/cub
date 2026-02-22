@@ -1,0 +1,34 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/ext"
+
+// Values
+pub fn derive_tool_name(String) -> String
+
+pub fn discover_extensions(String, String) -> Array[ExtManifest]
+
+pub fn find_wasm_in_plugin(String) -> String
+
+// Errors
+
+// Types and methods
+pub struct ExtManifest {
+  name : String
+  ext_type : ExtType
+  description : String
+  path : String
+  parameters : Json
+  scope : String
+}
+pub impl Show for ExtManifest
+
+pub(all) enum ExtType {
+  Script
+  Wasm
+}
+pub impl Eq for ExtType
+pub impl Show for ExtType
+
+// Type aliases
+
+// Traits
+

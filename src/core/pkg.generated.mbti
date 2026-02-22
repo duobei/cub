@@ -1,0 +1,125 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/core"
+
+import {
+  "duobei/cub/llm",
+  "duobei/cub/skills",
+  "duobei/cub/tape",
+  "duobei/cub/tools",
+}
+
+// Values
+pub fn detect_line_command(String) -> DetectedCommand?
+
+pub fn parse_command_words(String) -> Array[String]
+
+pub fn parse_internal_command(String) -> (String, Array[String])
+
+pub fn parse_kv_arguments(Array[String]) -> ParsedArgs
+
+// Errors
+
+// Types and methods
+pub struct AgentLoop {
+  router : InputRouter
+  model_runner : ModelRunner
+  tape : @tape.TapeService
+  post_task_fn : async (Int, String?, Map[String, String]) -> Unit
+}
+pub async fn AgentLoop::handle_input(Self, String, image_urls? : Array[String]) -> LoopResult
+pub fn AgentLoop::new(InputRouter, ModelRunner, @tape.TapeService, post_task_fn? : async (Int, String?, Map[String, String]) -> Unit) -> Self
+
+pub struct AssistantRouteResult {
+  visible_text : String
+  next_prompt : String
+  exit_requested : Bool
+}
+pub impl Show for AssistantRouteResult
+
+pub struct CommandExecutionResult {
+  command : String
+  name : String
+  status : String
+  output : String
+  elapsed_ms : Int
+}
+pub fn CommandExecutionResult::block(Self) -> String
+pub impl Show for CommandExecutionResult
+
+pub struct DetectedCommand {
+  kind : String
+  raw : String
+  name : String
+  args_tokens : Array[String]
+}
+pub impl Show for DetectedCommand
+
+pub struct InputRouter {
+  registry : @tools.ToolRegistry
+  tool_view : @tools.ProgressiveToolView
+  tape : @tape.TapeService
+  workspace : String
+}
+pub fn InputRouter::new(@tools.ToolRegistry, @tools.ProgressiveToolView, @tape.TapeService, String) -> Self
+pub async fn InputRouter::route_assistant(Self, String) -> AssistantRouteResult
+pub async fn InputRouter::route_user(Self, String) -> UserRouteResult
+
+pub struct LoopResult {
+  immediate_output : String
+  assistant_output : String
+  exit_requested : Bool
+  steps : Int
+  error : String?
+}
+pub impl Show for LoopResult
+
+pub struct ModelRunner {
+  tape : @tape.TapeService
+  router : InputRouter
+  tool_view : @tools.ProgressiveToolView
+  list_skills : () -> Array[@skills.SkillMetadata]
+  load_skill_body : (String) -> String?
+  model : String
+  max_steps : Int
+  max_tokens : Int
+  model_timeout_seconds : Int?
+  base_system_prompt : String
+  get_workspace_system_prompt : () -> String
+  llm : @llm.LLMClient
+  llm_vision : @llm.LLMClient?
+  llm_fast : @llm.LLMClient?
+  registry : @tools.ToolRegistry
+  expanded_skills : Map[String, String]
+}
+pub fn ModelRunner::get_expanded_skills(Self) -> Map[String, String]
+pub fn ModelRunner::new(@tape.TapeService, InputRouter, @tools.ProgressiveToolView, () -> Array[@skills.SkillMetadata], (String) -> String?, String, Int, Int, Int?, String, () -> String, @llm.LLMClient, @tools.ToolRegistry, llm_vision? : @llm.LLMClient?, llm_fast? : @llm.LLMClient?) -> Self
+pub fn ModelRunner::reset_context(Self) -> Unit
+pub async fn ModelRunner::run(Self, String, image_urls? : Array[String]) -> ModelTurnResult
+
+pub struct ModelTurnResult {
+  visible_text : String
+  exit_requested : Bool
+  steps : Int
+  error : String?
+  command_followups : Int
+}
+pub impl Show for ModelTurnResult
+
+pub struct ParsedArgs {
+  kwargs : Map[String, String]
+  positional : Array[String]
+}
+pub impl Show for ParsedArgs
+
+pub struct UserRouteResult {
+  enter_model : Bool
+  model_prompt : String
+  immediate_output : String
+  exit_requested : Bool
+}
+pub impl Show for UserRouteResult
+
+// Type aliases
+
+// Traits
+

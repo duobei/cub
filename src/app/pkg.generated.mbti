@@ -1,0 +1,76 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/app"
+
+import {
+  "duobei/cub/config",
+  "duobei/cub/core",
+  "duobei/cub/mcp",
+  "duobei/cub/skills",
+  "duobei/cub/tape",
+  "duobei/cub/tools",
+}
+
+// Values
+pub fn add_learning(String, String, String, Int64) -> String?
+
+pub fn build_runtime(String, model? : String?, max_tokens? : Int?, allowed_tools? : Array[String]?, allowed_skills? : Array[String]?) -> AppRuntime
+
+pub fn crystallize_skill(String, String, String) -> String?
+
+pub fn decay_learnings(String, Int64) -> Unit
+
+pub fn extract_learnings_from_tape(Array[@tape.TapeEntry], Int, String?, String, Int64, workspace? : String) -> Unit
+
+pub fn learnings_similar(String, String) -> Bool
+
+pub fn read_learnings(String) -> Array[Json]
+
+pub fn read_skill_stats(String) -> Map[String, Json]
+
+pub fn render_learnings(String) -> String
+
+pub fn skill_name_from_content(String) -> String
+
+pub fn update_skill_stats(String, Map[String, String], Int, String?) -> Unit
+
+pub fn write_learnings(String, Array[Json]) -> Bool
+
+pub fn write_skill_stats(String, Map[String, Json]) -> Bool
+
+// Errors
+
+// Types and methods
+pub struct AppRuntime {
+  settings : @config.Settings
+  workspace : String
+  sessions : Map[String, SessionRuntime]
+  store : @tape.FileTapeStore
+  confirm_fn : ((String, String) -> Bool)?
+  on_chunk : ((String) -> Unit)?
+  mcp_clients : Array[@mcp.McpClient]
+}
+pub fn AppRuntime::check_due_schedules(Self) -> Array[String]
+pub fn AppRuntime::discover_skills(Self) -> Array[@skills.SkillMetadata]
+pub fn AppRuntime::get_session(Self, String) -> SessionRuntime
+pub async fn AppRuntime::handle_input(Self, String, String, image_urls? : Array[String]) -> @core.LoopResult
+pub fn AppRuntime::load_active_sessions(Self) -> Array[(String, String, String)]
+pub fn AppRuntime::load_skill_body(Self, String) -> String?
+pub async fn AppRuntime::new(@config.Settings, String, confirm_fn? : ((String, String) -> Bool)?, on_chunk? : ((String) -> Unit)?) -> Self
+pub fn AppRuntime::reset_session_context(Self, String) -> Unit
+pub fn AppRuntime::save_active_session(Self, String, String, String) -> Unit
+
+pub struct SessionRuntime {
+  session_id : String
+  agent_loop : @core.AgentLoop
+  tape : @tape.TapeService
+  model_runner : @core.ModelRunner
+  tool_view : @tools.ProgressiveToolView
+  registry : @tools.ToolRegistry
+}
+pub async fn SessionRuntime::handle_input(Self, String, image_urls? : Array[String]) -> @core.LoopResult
+pub fn SessionRuntime::reset_context(Self) -> Unit
+
+// Type aliases
+
+// Traits
+

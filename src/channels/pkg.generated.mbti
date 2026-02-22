@@ -1,0 +1,76 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/channels"
+
+// Values
+pub fn build_prompt_with_quote(String, String) -> String
+
+pub fn chunk_message(String, Int) -> Array[String]
+
+pub fn escape_html(String) -> String
+
+pub fn extract_referenced_content(Json) -> String
+
+pub fn markdown_to_html(String) -> String
+
+// Errors
+
+// Types and methods
+pub struct Attachment {
+  url : String
+  filename : String
+  content_type : String
+}
+pub impl Show for Attachment
+
+pub struct ChannelManager {
+  discord_channels : Array[DiscordChannel]
+  telegram_channels : Array[TelegramChannel]
+}
+pub fn ChannelManager::add_discord(Self, DiscordChannel) -> Unit
+pub fn ChannelManager::add_telegram(Self, TelegramChannel) -> Unit
+pub fn ChannelManager::new() -> Self
+pub async fn ChannelManager::run(Self, async (ChannelMessage) -> Unit) -> Unit
+
+pub struct ChannelMessage {
+  channel : String
+  session_id : String
+  prompt : String
+  metadata : Json
+  attachments : Array[String]
+  documents : Array[Attachment]
+}
+pub impl Show for ChannelMessage
+
+pub struct DiscordChannel {
+  token : String
+  allow_from : Array[String]
+  allow_channels : Array[String]
+  mut sequence : Int?
+  mut session_id : String
+  mut bot_user_id : String
+  seen_messages : Map[String, Bool]
+  mut heartbeat_acked : Bool
+}
+pub fn DiscordChannel::check_permission(Self, String, String, String, String) -> String
+pub fn DiscordChannel::name(Self) -> String
+pub fn DiscordChannel::new(String, allow_from? : Array[String], allow_channels? : Array[String]) -> Self
+pub async fn DiscordChannel::send_message(Self, String, String) -> Unit
+pub async fn DiscordChannel::send_typing(Self, String) -> Unit
+pub async fn DiscordChannel::start(Self, async (ChannelMessage) -> Unit) -> Unit
+
+pub struct TelegramChannel {
+  token : String
+  allow_from : Array[String]
+  allow_chats : Array[String]
+  mut last_update_id : Int
+}
+pub fn TelegramChannel::name(Self) -> String
+pub fn TelegramChannel::new(String, allow_from? : Array[String], allow_chats? : Array[String]) -> Self
+pub async fn TelegramChannel::send_message(Self, String, String) -> Unit
+pub async fn TelegramChannel::send_typing(Self, String) -> Unit
+pub async fn TelegramChannel::start(Self, async (ChannelMessage) -> Unit) -> Unit
+
+// Type aliases
+
+// Traits
+

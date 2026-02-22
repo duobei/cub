@@ -1,0 +1,47 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/mcp"
+
+// Values
+pub fn build_jsonrpc_request(Int, String, Json) -> String
+
+pub fn load_mcp_configs(String) -> Array[McpServerConfig]
+
+pub fn parse_jsonrpc_response(String) -> Json?
+
+// Errors
+
+// Types and methods
+pub struct McpClient {
+  config : McpServerConfig
+  mut slot : Int
+  mut request_id : Int
+  mut initialized : Bool
+  tools : Array[McpTool]
+}
+pub async fn McpClient::call_tool(Self, String, Json) -> String
+pub async fn McpClient::discover_tools(Self) -> Array[McpTool]
+pub fn McpClient::is_alive(Self) -> Bool
+pub fn McpClient::new(McpServerConfig) -> Self
+pub async fn McpClient::start(Self) -> Bool
+pub fn McpClient::stop(Self) -> Unit
+pub impl Show for McpClient
+
+pub struct McpServerConfig {
+  name : String
+  command : String
+  args : Array[String]
+  env : Map[String, String]
+}
+pub impl Show for McpServerConfig
+
+pub struct McpTool {
+  name : String
+  description : String
+  input_schema : Json
+}
+pub impl Show for McpTool
+
+// Type aliases
+
+// Traits
+

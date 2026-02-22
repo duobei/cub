@@ -1,0 +1,81 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/llm"
+
+import {
+  "duobei/cub/tape",
+}
+
+// Values
+pub fn is_retryable_error(String) -> Bool
+
+pub fn parse_model_spec(String) -> (String, String)
+
+pub fn summarize_messages_for_handoff(Array[Json]) -> Map[String, Json]
+
+pub fn supports_vision(String) -> Bool
+
+// Errors
+
+// Types and methods
+pub struct ChatResponse {
+  text : String
+  tool_calls : Array[ToolCallInfo]
+  finish_reason : String
+  error : String?
+}
+pub impl Show for ChatResponse
+
+pub struct LLMClient {
+  model_id : String
+  provider : String
+  api_key : String
+  api_base : String
+  extra_headers : Map[String, String]
+  max_tokens : Int
+  context_budget : Int
+  handoff_threshold : Int
+  confirm_fn : ((String, String) -> Bool)?
+  on_chunk : ((String) -> Unit)?
+}
+pub async fn LLMClient::chat(Self, Array[Json], tools? : Array[Json], max_tokens? : Int, system_prompt? : String?) -> ChatResponse
+pub async fn LLMClient::chat_streaming(Self, Array[Json], tools? : Array[Json], max_tokens? : Int, system_prompt? : String?) -> ChatResponse
+pub fn LLMClient::new(String, String, api_base? : String?, extra_headers? : Map[String, String], max_tokens? : Int, context_budget? : Int, handoff_threshold? : Int, confirm_fn? : ((String, String) -> Bool)?, on_chunk? : ((String) -> Unit)?) -> Self
+pub async fn LLMClient::retry_chat(Self, Array[Json], tools? : Array[Json], max_tokens? : Int, system_prompt? : String?) -> ChatResponse
+pub async fn LLMClient::run_tools(Self, @tape.Tape, String, system_prompt? : String, max_tokens? : Int, tools_json? : Array[Json], image_urls? : Array[String], needs_confirmation? : (String) -> Bool, is_serial? : (String) -> Bool, execute_tool~ : async (String, Json) -> String) -> ToolAutoResult
+
+pub enum ToolAutoKind {
+  Text
+  Tools
+  Error
+}
+pub impl Show for ToolAutoKind
+
+pub struct ToolAutoResult {
+  kind : ToolAutoKind
+  text : String
+  tool_calls : Array[Json]
+  tool_results : Array[Json]
+  error : String?
+  has_tool_errors : Bool
+}
+pub impl Show for ToolAutoResult
+
+pub struct ToolCallFunction {
+  name : String
+  arguments : String
+}
+pub impl Show for ToolCallFunction
+
+pub struct ToolCallInfo {
+  id : String
+  type_ : String
+  function_ : ToolCallFunction
+}
+pub fn ToolCallInfo::from_json(Json) -> Self?
+pub fn ToolCallInfo::to_json(Self) -> Json
+pub impl Show for ToolCallInfo
+
+// Type aliases
+
+// Traits
+

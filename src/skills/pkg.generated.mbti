@@ -1,0 +1,30 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/skills"
+
+// Values
+pub fn discover_skills(String) -> Array[SkillMetadata]
+
+pub fn load_skill_body(String, String) -> String?
+
+pub fn parse_frontmatter(String) -> (Map[String, String], String)
+
+pub fn render_expanded_skills(Map[String, String]) -> String
+
+pub fn render_skill_prompt(Array[SkillMetadata]) -> String
+
+// Errors
+
+// Types and methods
+pub struct SkillMetadata {
+  name : String
+  description : String
+  location : String
+  metadata : Map[String, String]
+  source : String
+}
+pub impl Show for SkillMetadata
+
+// Type aliases
+
+// Traits
+

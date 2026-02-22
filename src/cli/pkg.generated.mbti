@@ -1,0 +1,42 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/cli"
+
+import {
+  "duobei/cub/app",
+}
+
+// Values
+pub fn confirm_tool(String, String) -> Bool
+
+pub fn print_assistant(String) -> Unit
+
+pub fn print_colored(String, String) -> Unit
+
+pub fn print_command(String) -> Unit
+
+pub fn print_error(String) -> Unit
+
+pub fn print_info(String) -> Unit
+
+pub fn print_prompt() -> Unit
+
+pub fn print_shell_prompt() -> Unit
+
+pub fn print_welcome(String, String) -> Unit
+
+// Errors
+
+// Types and methods
+pub struct InteractiveCli {
+  runtime : @app.AppRuntime
+  mut session_id : String
+  mut shell_mode : Bool
+  history_path : String
+}
+pub fn InteractiveCli::new(@app.AppRuntime, session_id? : String) -> Self
+pub async fn InteractiveCli::run(Self) -> Unit
+
+// Type aliases
+
+// Traits
+

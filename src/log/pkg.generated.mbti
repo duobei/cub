@@ -1,0 +1,31 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/log"
+
+// Values
+pub fn debug(String, String) -> Unit
+
+pub fn error(String, String) -> Unit
+
+pub fn info(String, String) -> Unit
+
+pub fn log(LogLevel, String, String) -> Unit
+
+pub fn warn(String, String) -> Unit
+
+// Errors
+
+// Types and methods
+pub enum LogLevel {
+  Debug
+  Info
+  Warn
+  Error
+}
+pub fn LogLevel::to_string(Self) -> String
+pub impl Compare for LogLevel
+pub impl Eq for LogLevel
+
+// Type aliases
+
+// Traits
+

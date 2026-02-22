@@ -1,0 +1,71 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/config"
+
+// Values
+pub fn collect_env_vars() -> Map[String, String]
+
+pub fn get_env_bool(Map[String, String], String) -> Bool?
+
+pub fn get_env_int(Map[String, String], String) -> Int?
+
+pub fn get_env_list(Map[String, String], String) -> Array[String]
+
+pub fn getenv(String) -> String?
+
+pub async fn load_settings(workspace_path? : String?) -> Settings
+
+pub fn parse_dotenv(String) -> Map[String, String]
+
+pub fn parse_dotenv_line(StringView) -> (String, String)?
+
+pub fn string_to_cstr(String) -> Bytes
+
+// Errors
+
+// Types and methods
+pub struct Settings {
+  model : String
+  model_vision : String?
+  model_fast : String?
+  api_key : String?
+  api_base : String?
+  ollama_api_key : String?
+  ollama_api_base : String?
+  llm_api_key : String?
+  openrouter_api_key : String?
+  max_tokens : Int
+  model_timeout_seconds : Int?
+  system_prompt : String
+  home : String?
+  workspace_path : String?
+  tape_name : String
+  max_steps : Int
+  proactive_response : Bool
+  rate_limit_per_minute : Int
+  telegram_enabled : Bool
+  telegram_token : String?
+  telegram_allow_from : Array[String]
+  telegram_allow_chats : Array[String]
+  telegram_proxy : String?
+  discord_enabled : Bool
+  discord_token : String?
+  discord_allow_from : Array[String]
+  discord_allow_channels : Array[String]
+  discord_command_prefix : String
+  discord_proxy : String?
+  health_port : Int?
+  context_budget : Int
+  handoff_threshold : Int
+  allowed_tools : Array[String]
+  allowed_skills : Array[String]
+}
+pub fn Settings::default() -> Self
+pub fn Settings::resolve_home(Self) -> String
+pub fn Settings::resolved_api_key(Self) -> String?
+pub fn Settings::with_overrides(Self, model? : String?, max_tokens? : Int?, system_prompt? : String?, allowed_tools? : Array[String]?, allowed_skills? : Array[String]?) -> Self
+pub impl Show for Settings
+
+// Type aliases
+
+// Traits
+

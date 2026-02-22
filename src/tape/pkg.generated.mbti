@@ -1,0 +1,113 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "duobei/cub/tape"
+
+import {
+  "moonbitlang/core/json",
+}
+
+// Values
+pub fn extract_anchor_context(Json) -> String
+
+pub fn fnv1a_hash(String) -> String
+
+pub fn select_messages(Array[TapeEntry]) -> Array[Json]
+
+pub fn smart_truncate(String, String) -> String
+
+pub fn url_encode(String) -> String
+
+pub fn validate_tool_call(Json) -> Bool
+
+// Errors
+
+// Types and methods
+pub struct AnchorSummary {
+  name : String
+  state : Map[String, Json]
+}
+pub impl Show for AnchorSummary
+
+pub struct FileTapeStore {
+  home : String
+  tape_root : String
+  workspace_hash : String
+  tape_files : Map[String, TapeFile]
+}
+pub async fn FileTapeStore::append(Self, String, TapeEntry) -> Unit
+pub async fn FileTapeStore::archive(Self, String) -> String?
+pub fn FileTapeStore::list_tapes(Self) -> Array[String]
+pub async fn FileTapeStore::new(String, String) -> Self
+pub async fn FileTapeStore::read(Self, String) -> Array[TapeEntry]
+pub async fn FileTapeStore::reset(Self, String) -> Unit
+
+pub struct Tape {
+  name : String
+  store : FileTapeStore
+}
+pub async fn Tape::append(Self, TapeEntry) -> Unit
+pub async fn Tape::handoff(Self, String, state? : Map[String, Json]?) -> Array[TapeEntry]
+pub fn Tape::new(String, FileTapeStore) -> Self
+pub async fn Tape::read_entries(Self) -> Array[TapeEntry]
+pub async fn Tape::read_messages(Self) -> Array[Json]
+pub async fn Tape::reset(Self) -> Unit
+
+pub struct TapeEntry {
+  id : Int
+  kind : String
+  payload : Json
+  meta : Json
+}
+pub fn TapeEntry::anchor(String, state? : Map[String, Json]?) -> Self
+pub fn TapeEntry::event(String, data? : Json) -> Self
+pub fn TapeEntry::message(String, String) -> Self
+pub fn TapeEntry::message_with_images(String, String, Array[String]) -> Self
+pub fn TapeEntry::system(String) -> Self
+pub fn TapeEntry::tool_call(Array[Json]) -> Self
+pub fn TapeEntry::tool_result(Array[Json]) -> Self
+pub impl Show for TapeEntry
+pub impl ToJson for TapeEntry
+pub impl @json.FromJson for TapeEntry
+
+pub struct TapeFile {
+  path : String
+  mut read_entries : Array[TapeEntry]
+  mut read_offset : Int
+}
+pub async fn TapeFile::append(Self, TapeEntry) -> Unit
+pub async fn TapeFile::append_many(Self, Array[TapeEntry]) -> Unit
+pub async fn TapeFile::archive(Self) -> String?
+pub fn TapeFile::new(String) -> Self
+pub async fn TapeFile::read(Self) -> Array[TapeEntry]
+pub async fn TapeFile::reset(Self) -> Unit
+
+pub struct TapeInfo {
+  name : String
+  entries : Int
+  anchors : Int
+  last_anchor : String?
+  entries_since_last_anchor : Int
+}
+pub impl Show for TapeInfo
+
+pub struct TapeService {
+  store : FileTapeStore
+  current_tape_name : String
+  base_tape_name : String
+  done_requested : Bool
+}
+pub async fn TapeService::anchors(Self, limit? : Int) -> Array[AnchorSummary]
+pub async fn TapeService::append_event(Self, String, Json) -> Unit
+pub async fn TapeService::append_system(Self, String) -> Unit
+pub async fn TapeService::ensure_bootstrap_anchor(Self) -> Unit
+pub async fn TapeService::handoff(Self, String, state? : Map[String, Json]?) -> Array[TapeEntry]
+pub async fn TapeService::info(Self) -> TapeInfo
+pub fn TapeService::new(String, FileTapeStore) -> Self
+pub async fn TapeService::read_entries(Self) -> Array[TapeEntry]
+pub async fn TapeService::reset(Self, archive? : Bool) -> String
+pub async fn TapeService::search(Self, String, limit? : Int) -> Array[TapeEntry]
+pub fn TapeService::tape(Self) -> Tape
+
+// Type aliases
+
+// Traits
+
