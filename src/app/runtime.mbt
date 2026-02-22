@@ -1137,7 +1137,7 @@ fn register_tape_tools(
         }
         "wasm" => {
           let plugin_dir = "\{base_dir}/plugins/\{name}"
-          let src_dir = "\{plugin_dir}/src/main"
+          let src_dir = "\{plugin_dir}/cmd/main"
           ignore(mkdir_p_sync(src_dir))
           // Write moon.mod.json
           let mod_json : Map[String, Json] = {}
@@ -1149,8 +1149,16 @@ fn register_tape_tools(
               Json::object(mod_json).stringify(),
             ),
           )
-          // Write moon.pkg (empty for main)
-          ignore(write_file_sync("\{src_dir}/moon.pkg", "{}"))
+          // Write moon.pkg with is-main and imports
+          let pkg_content =
+            #|{
+            #|  "import": [
+            #|    "moonbitlang/core/json",
+            #|    "moonbitlang/core/env"
+            #|  ],
+            #|  "is-main": true
+            #|}
+          ignore(write_file_sync("\{src_dir}/moon.pkg", pkg_content))
           // Write main.mbt
           if not(write_file_sync("\{src_dir}/main.mbt", code)) {
             return "tool.create: failed to write source"
@@ -1168,7 +1176,7 @@ fn register_tape_tools(
           )
           // Build the WASM plugin
           let (exit_code, _stdout_data, stderr_data) = @async.with_timeout(
-            60_000,
+            180_000,
             async fn() {
               @process.collect_output(
                 "moon",
@@ -1177,7 +1185,7 @@ fn register_tape_tools(
               )
             },
           ) catch {
-            _ => return "tool.create: build timeout (60s)"
+            _ => return "tool.create: build timeout (180s)"
           }
           if exit_code != 0 {
             let stderr = stderr_data.text() catch { _ => "" }
