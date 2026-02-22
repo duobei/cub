@@ -88,6 +88,31 @@ pub async fn McpClient::start(self : McpClient) -> Bool {
 }
 
 ///|
+/// Maximum response size from MCP tool call (100KB).
+let mcp_max_response_size : Int = 102400
+
+///|
+/// Validate an MCP tool name: must be alphanumeric, dots, underscores, hyphens only.
+fn is_valid_tool_name(name : String) -> Bool {
+  if name.is_empty() || name.length() > 128 {
+    return false
+  }
+  for ch in name {
+    let c = ch.to_int()
+    let ok = (c >= 97 && c <= 122) || // a-z
+      (c >= 65 && c <= 90) || // A-Z
+      (c >= 48 && c <= 57) || // 0-9
+      c == 46 || // .
+      c == 95 || // _
+      c == 45 // -
+    if not(ok) {
+      return false
+    }
+  }
+  true
+}
+
+///|
 /// Discover tools from the MCP server.
 pub async fn McpClient::discover_tools(self : McpClient) -> Array[McpTool] {
   if not(self.initialized) {
@@ -101,6 +126,14 @@ pub async fn McpClient::discover_tools(self : McpClient) -> Array[McpTool] {
         let name = match tool {
           { "name": String(n), .. } => n
           _ => continue
+        }
+        // Sanitize tool name
+        if not(is_valid_tool_name(name)) {
+          @log.warn(
+            "mcp",
+            "\{self.config.name}: skipping tool with invalid name",
+          )
+          continue
         }
         let description = match tool {
           { "description": String(d), .. } => d
@@ -135,11 +168,16 @@ pub async fn McpClient::call_tool(
   if not(self.initialized) {
     return "error: MCP server not initialized"
   }
+  // Validate tool name
+  if not(is_valid_tool_name(name)) {
+    return "error: invalid tool name"
+  }
   let params : Map[String, Json] = {}
   params["name"] = name.to_json()
   params["arguments"] = arguments
+  // Call with timeout (30s is handled by send_request internally)
   let result = self.send_request("tools/call", Json::object(params))
-  match result {
+  let response = match result {
     Some({ "content": Array(parts), .. }) => {
       let texts : Array[String] = []
       for part in parts {
@@ -154,6 +192,14 @@ pub async fn McpClient::call_tool(
     Some(other) => other.stringify()
     None => "error: no response from MCP server"
   }
+  // Truncate oversized responses
+  if response.length() > mcp_max_response_size {
+    let truncated = response[:mcp_max_response_size].to_string() catch {
+      _ => response
+    }
+    return "\{truncated}\n[...truncated at 100KB]"
+  }
+  response
 }
 
 ///|
