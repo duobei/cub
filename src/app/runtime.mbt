@@ -2330,8 +2330,12 @@ fn strip_pkg_declarations(code : String) -> String {
     let line = part.to_string()
     let trimmed = line.trim().to_string()
     if not(skip) &&
-      (trimmed.has_prefix("import ") || trimmed == "import" || trimmed.has_prefix("options(") ||
-      trimmed.has_prefix("options (")) {
+      (
+        trimmed.has_prefix("import ") ||
+        trimmed == "import" ||
+        trimmed.has_prefix("options(") ||
+        trimmed.has_prefix("options (")
+      ) {
       skip = true
       brace_depth = 0
     }
@@ -2340,7 +2344,8 @@ fn strip_pkg_declarations(code : String) -> String {
         let ch = trimmed[i]
         if ch == '{'.to_int().to_uint16() || ch == '('.to_int().to_uint16() {
           brace_depth += 1
-        } else if ch == '}'.to_int().to_uint16() || ch == ')'.to_int().to_uint16() {
+        } else if ch == '}'.to_int().to_uint16() ||
+          ch == ')'.to_int().to_uint16() {
           brace_depth -= 1
           if brace_depth <= 0 {
             skip = false

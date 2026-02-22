@@ -1571,12 +1571,12 @@ fn is_ext_cmd(cmd : String) -> Bool {
   }
   // Block write operations
   cmd.contains("mkdir") ||
-    cmd.contains("cp ") ||
-    cmd.contains("mv ") ||
-    cmd.contains("rm ") ||
-    cmd.contains("touch ") ||
-    cmd.contains("tee ") ||
-    cmd.contains("echo ") ||
-    cmd.contains("cat >") ||
-    cmd.contains("cat >>")
+  cmd.contains("cp ") ||
+  cmd.contains("mv ") ||
+  cmd.contains("rm ") ||
+  cmd.contains("touch ") ||
+  cmd.contains("tee ") ||
+  cmd.contains("echo ") ||
+  cmd.contains("cat >") ||
+  cmd.contains("cat >>")
 }
