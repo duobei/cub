@@ -17,7 +17,7 @@ Inherited from Bub's philosophy:
 
 Extended by Cub:
 
-5. **Self-evolving agent** — creates skills, updates workspace rules, learns from experience.
+5. **Self-evolving agent** — zero-token learning extraction, confidence decay, auto-crystallization of skills from experience.
 6. **Multi-provider LLM** — one binary, any backend (OpenRouter, OpenAI, DeepSeek, MiniMax, Ollama).
 7. **Parallel tool execution** — non-confirmation tools run concurrently.
 8. **Smart context management** — tool-aware truncation and auto-handoff at 90% budget.
@@ -147,7 +147,7 @@ Instructions for the agent when this skill is activated.
 
 Skills are activated via `$name` hint syntax in user input (e.g., `$review check this code`).
 
-The agent can also create skills at runtime via `skill.create` tool, enabling self-evolution.
+The agent can also create skills at runtime via `skill.create` tool, or auto-crystallize them from repeated learnings (see [Self-Evolving Agent](#self-evolving-agent)).
 
 ### Built-in Skills
 
@@ -166,9 +166,24 @@ The agent can also create skills at runtime via `skill.create` tool, enabling se
 
 ## Self-Evolving Agent
 
-Cub is designed to learn and improve over time:
+Cub is designed to learn and improve over time through a zero-token self-evolution system:
 
-- **skill.create** — the agent creates reusable skills from successful workflows
+### Learning & Memory
+
+- **Learning extraction** — after each task, heuristic analysis of the tape detects anti-patterns (failures), efficient completions (≤3 steps), and repeated tool usage patterns. No LLM calls required.
+- **Dedup-as-reinforcement** — similar learnings increment a `reinforced` counter instead of duplicating, tracking how often a pattern recurs.
+- **Confidence decay** — learnings decay over time (`0.905^weeks`), pruning stale knowledge below 0.1 confidence.
+- **Memory recall** — high-confidence learnings (≥0.3) are injected into the system prompt with `[avoid]`, `[effective]`, or `[pattern]` tags.
+
+### Skill Evolution
+
+- **Skill tracking** — `skill_stats.json` records uses, successes, failures, and total steps per expanded skill.
+- **Skill crystallization** — when a learning is reinforced 3+ times, it auto-generates a `SKILL.md` in `.agent/skills/auto-*/`, turning recurring patterns into reusable skills.
+- **skill.create** — the agent creates reusable skills from successful workflows.
+- **skill.install** — install community skills from URL.
+
+### Workspace Adaptation
+
 - **agents.update** — modifies workspace AGENTS.md to evolve behavior rules
 - **memory.save** — persists useful patterns and facts across sessions
 - **startup protocol** — `.agent/startup.md` injects startup instructions into each session
