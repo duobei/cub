@@ -166,7 +166,7 @@ async fn DiscordChannel::connect_and_run(
       },
       allow_failure=true,
     )
-    self.event_loop(conn, handler)
+    self.event_loop(conn, handler, group)
     conn.close()
     @log.info("discord", "disconnected")
   })
@@ -231,10 +231,13 @@ async fn DiscordChannel::heartbeat_loop(
 
 ///|
 /// Event loop: receive and dispatch Gateway events.
+/// Handler is spawned in background so it doesn't block frame processing
+/// (prevents heartbeat ACK timeout during long tool executions).
 async fn DiscordChannel::event_loop(
   self : DiscordChannel,
   conn : @websocket.Conn,
   handler : async (ChannelMessage) -> Unit,
+  group : @async.TaskGroup[Unit],
 ) -> Unit {
   for {
     let text = read_text_message(conn) catch { _ => break }
@@ -249,7 +252,12 @@ async fn DiscordChannel::event_loop(
       _ => ()
     }
     match op {
-      _ if op == op_dispatch => self.handle_dispatch(json, handler)
+      _ if op == op_dispatch =>
+        // Spawn handler in background to keep event loop responsive
+        group.spawn_bg(
+          async fn() { self.handle_dispatch(json, handler) },
+          allow_failure=true,
+        )
       _ if op == op_heartbeat_ack => self.heartbeat_acked = true
       _ if op == op_heartbeat
       // Server requesting heartbeat
