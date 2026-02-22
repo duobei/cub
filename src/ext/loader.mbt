@@ -115,10 +115,10 @@ pub fn find_wasm_in_plugin(plugin_dir : String) -> String {
 /// Find the .wasm file in a plugin directory.
 /// Looks in _build subdirectories for main.wasm.
 fn find_wasm_file(plugin_dir : String) -> String {
-  // Common path: _build/target/wasm-gc/release/build/main/main.wasm
+  // Common path: _build/target/wasm/release/build/main/main.wasm
   let candidates = [
-    "\{plugin_dir}/_build/wasm-gc/release/build/cmd/main/main.wasm",
-    "\{plugin_dir}/_build/wasm-gc/debug/build/cmd/main/main.wasm",
+    "\{plugin_dir}/_build/wasm/release/build/cmd/main/main.wasm",
+    "\{plugin_dir}/_build/wasm/debug/build/cmd/main/main.wasm",
     "\{plugin_dir}/main.wasm",
   ]
   for path in candidates {

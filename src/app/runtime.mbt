@@ -1185,7 +1185,7 @@ fn register_tape_tools(
               let moon_bin = "\{user_home}/.moon/bin/moon"
               @process.collect_output(
                 moon_bin,
-                ["build", "--target", "wasm-gc"],
+                ["build", "--target", "wasm"],
                 cwd=plugin_dir,
               )
             },
