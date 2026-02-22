@@ -153,6 +153,36 @@ int32_t cub_http_get(const char *url, char *buf, int32_t buf_size) {
   return to_copy;
 }
 
+/* Make file executable (chmod +x). Returns 0 on success, -1 on error. */
+MOONBIT_FFI_EXPORT
+int32_t cub_chmod_x(const char *path) {
+  struct stat st;
+  if (stat(path, &st) != 0) return -1;
+  return chmod(path, st.st_mode | 0111) == 0 ? 0 : -1;
+}
+
+/* Delete a file or directory recursively. Returns 0 on success, -1 on error. */
+MOONBIT_FFI_EXPORT
+int32_t cub_remove_path(const char *path) {
+  struct stat st;
+  if (stat(path, &st) != 0) return -1;
+  if (S_ISDIR(st.st_mode)) {
+    /* Remove directory contents recursively */
+    DIR *d = opendir(path);
+    if (!d) return -1;
+    struct dirent *ent;
+    char child[4096];
+    while ((ent = readdir(d)) != NULL) {
+      if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) continue;
+      snprintf(child, sizeof(child), "%s/%s", path, ent->d_name);
+      cub_remove_path(child);
+    }
+    closedir(d);
+    return rmdir(path) == 0 ? 0 : -1;
+  }
+  return remove(path) == 0 ? 0 : -1;
+}
+
 /* List directory entries as newline-separated string. Two-pass pattern. */
 MOONBIT_FFI_EXPORT
 int32_t cub_list_dir(const char *path, char *buf, int32_t buf_size) {

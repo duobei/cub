@@ -159,6 +159,8 @@ fn AppRuntime::create_session(
   )
   // Register MCP tools
   register_mcp_tools(registry, self.mcp_clients)
+  // Register extension tools (script + WASM)
+  register_ext_tools(registry, home, self.workspace)
   // Create tool view
   let tool_view = @tools.ProgressiveToolView::new(registry)
   // Create LLM client — auto-detect Ollama if no API key configured
@@ -224,7 +226,6 @@ fn AppRuntime::create_session(
     tape,
     router,
     tool_view,
-    registry.model_tools(),
     fn() {
       let skills = @skills.discover_skills(ws)
       filter_skills(skills, self.settings.allowed_skills)
@@ -569,6 +570,23 @@ fn write_file_sync(path : String, content : String) -> Bool {
   let path_bytes = @config.string_to_cstr(path)
   let content_utf8 = @utf8.encode(content)
   cub_write_file(path_bytes, content_utf8, content_utf8.length()) >= 0
+}
+
+///|
+/// FFI: make file executable (chmod +x).
+#borrow(path)
+extern "C" fn cub_chmod_x(path : Bytes) -> Int = "cub_chmod_x"
+
+///|
+/// FFI: remove a file or directory recursively.
+#borrow(path)
+extern "C" fn cub_remove_path(path : Bytes) -> Int = "cub_remove_path"
+
+///|
+/// Remove a file or directory recursively.
+fn remove_path_sync(path : String) -> Bool {
+  let path_bytes = @config.string_to_cstr(path)
+  cub_remove_path(path_bytes) == 0
 }
 
 ///|
@@ -1017,6 +1035,253 @@ fn register_tape_tools(
       }
     },
   )
+  // ,tool.create
+  let tc_ws = workspace
+  let tc_home = home
+  let tc_registry = registry
+  let tc_props : Map[String, Json] = Map::new()
+  tc_props["name"] = @tools.string_prop(
+    "Tool name (lowercase, hyphens, e.g. 'check-pr')",
+  )
+  tc_props["type"] = @tools.string_prop(
+    "Tool type: 'script' (bash/python executable) or 'wasm' (MoonBit plugin)",
+  )
+  tc_props["description"] = @tools.string_prop("Short description of the tool")
+  tc_props["code"] = @tools.string_prop(
+    "Source code — script content or MoonBit main.mbt source",
+  )
+  tc_props["parameters"] = @tools.string_prop(
+    "Optional JSON Schema for tool parameters (as JSON string)",
+  )
+  tc_props["scope"] = @tools.string_prop(
+    "Where to create: 'workspace' (default) or 'global'",
+  )
+  let tc_params = @tools.make_params(tc_props, [
+    "name", "type", "description", "code",
+  ])
+  registry.register(
+    "tool.create",
+    "Create a new extension tool (script or WASM plugin) — self-extending",
+    parameters=tc_params,
+    requires_confirmation=true,
+    handler=async fn(args) {
+      let name = match args {
+        { "name": String(n), .. } => n
+        _ => return "tool.create: missing 'name'"
+      }
+      match @tools.sanitize_name(name) {
+        None => return "tool.create: invalid name (must not contain / or ..)"
+        Some(_) => ()
+      }
+      let type_str = match args {
+        { "type": String(t), .. } => t
+        _ => return "tool.create: missing 'type' (script or wasm)"
+      }
+      let description = match args {
+        { "description": String(d), .. } => d
+        _ => return "tool.create: missing 'description'"
+      }
+      let code = match args {
+        { "code": String(c), .. } => c
+        _ => return "tool.create: missing 'code'"
+      }
+      let scope = match args {
+        { "scope": String(s), .. } => s
+        _ => "workspace"
+      }
+      let params_json : Json = match args {
+        { "parameters": String(p), .. } => {
+          let parsed : Json = @json.parse(p) catch {
+            _ => return "tool.create: invalid parameters JSON"
+          }
+          parsed
+        }
+        _ => Json::object({})
+      }
+      let base_dir = if scope == "global" { tc_home } else { "\{tc_ws}/.agent" }
+      match type_str {
+        "script" => {
+          let tool_dir = "\{base_dir}/tools"
+          ignore(mkdir_p_sync(tool_dir))
+          let script_path = "\{tool_dir}/\{name}.sh"
+          if not(write_file_sync(script_path, code)) {
+            return "tool.create: failed to write script"
+          }
+          // Make executable
+          let path_bytes = @config.string_to_cstr(script_path)
+          if cub_chmod_x(path_bytes) != 0 {
+            return "tool.create: failed to chmod +x"
+          }
+          // Write manifest
+          let manifest : Map[String, Json] = {}
+          manifest["name"] = name.to_json()
+          manifest["description"] = description.to_json()
+          manifest["parameters"] = params_json
+          let manifest_path = "\{tool_dir}/\{name}.json"
+          ignore(
+            write_file_sync(manifest_path, Json::object(manifest).stringify()),
+          )
+          // Hot-register into registry
+          let tool_name = "ext.\{name}"
+          let ext_path = script_path
+          tc_registry.register(
+            tool_name,
+            description,
+            parameters=params_json,
+            source="extension",
+            handler=async fn(call_args) {
+              run_extension(@ext.ExtType::Script, ext_path, call_args)
+            },
+          )
+          "created script tool: \{tool_name} at \{script_path}"
+        }
+        "wasm" => {
+          let plugin_dir = "\{base_dir}/plugins/\{name}"
+          let src_dir = "\{plugin_dir}/src/main"
+          ignore(mkdir_p_sync(src_dir))
+          // Write moon.mod.json
+          let mod_json : Map[String, Json] = {}
+          mod_json["name"] = name.to_json()
+          mod_json["version"] = "0.1.0".to_json()
+          ignore(
+            write_file_sync(
+              "\{plugin_dir}/moon.mod.json",
+              Json::object(mod_json).stringify(),
+            ),
+          )
+          // Write moon.pkg (empty for main)
+          ignore(write_file_sync("\{src_dir}/moon.pkg", "{}"))
+          // Write main.mbt
+          if not(write_file_sync("\{src_dir}/main.mbt", code)) {
+            return "tool.create: failed to write source"
+          }
+          // Write plugin.json manifest
+          let manifest : Map[String, Json] = {}
+          manifest["name"] = name.to_json()
+          manifest["description"] = description.to_json()
+          manifest["parameters"] = params_json
+          ignore(
+            write_file_sync(
+              "\{plugin_dir}/plugin.json",
+              Json::object(manifest).stringify(),
+            ),
+          )
+          // Build the WASM plugin
+          let (exit_code, _stdout_data, stderr_data) = @async.with_timeout(
+            60_000,
+            async fn() {
+              @process.collect_output(
+                "moon",
+                ["build", "--target", "wasm-gc"],
+                cwd=plugin_dir,
+              )
+            },
+          ) catch {
+            _ => return "tool.create: build timeout (60s)"
+          }
+          if exit_code != 0 {
+            let stderr = stderr_data.text() catch { _ => "" }
+            return "tool.create: build failed:\n\{stderr}"
+          }
+          // Find the built wasm file
+          let wasm_path = @ext.find_wasm_in_plugin(plugin_dir)
+          if wasm_path.is_empty() {
+            return "tool.create: build succeeded but .wasm not found"
+          }
+          // Hot-register
+          let tool_name = "ext.\{name}"
+          let ext_wasm = wasm_path
+          tc_registry.register(
+            tool_name,
+            description,
+            parameters=params_json,
+            source="extension",
+            handler=async fn(call_args) {
+              run_extension(@ext.ExtType::Wasm, ext_wasm, call_args)
+            },
+          )
+          "created WASM tool: \{tool_name} (built at \{wasm_path})"
+        }
+        _ => "tool.create: type must be 'script' or 'wasm', got '\{type_str}'"
+      }
+    },
+  )
+  // ,ext.list
+  let el_home = home
+  let el_ws = workspace
+  registry.register(
+    "ext.list",
+    "List installed extension tools (scripts and WASM plugins)",
+    handler=fn(_args) {
+      let extensions = @ext.discover_extensions(el_home, el_ws)
+      if extensions.is_empty() {
+        return "no extensions installed"
+      }
+      let lines : Array[String] = ["Extensions:"]
+      for ext in extensions {
+        let type_tag = match ext.ext_type {
+          @ext.ExtType::Script => "script"
+          @ext.ExtType::Wasm => "wasm"
+        }
+        lines.push("  ext.\{ext.name} [\{type_tag}] [\{ext.scope}] \{ext.description}")
+      }
+      lines.join("\n")
+    },
+  )
+  // ,ext.remove
+  let er_home = home
+  let er_ws = workspace
+  let er_registry = registry
+  let er_props : Map[String, Json] = Map::new()
+  er_props["name"] = @tools.string_prop("Extension name (without ext. prefix)")
+  let er_params = @tools.make_params(er_props, ["name"])
+  registry.register(
+    "ext.remove",
+    "Remove an installed extension tool",
+    parameters=er_params,
+    requires_confirmation=true,
+    handler=fn(args) {
+      let name = match args {
+        { "name": String(n), .. } => n
+        _ => return "ext.remove: missing 'name'"
+      }
+      // Find the extension to determine path
+      let extensions = @ext.discover_extensions(er_home, er_ws)
+      let mut found : @ext.ExtManifest? = None
+      for ext in extensions {
+        if ext.name == name {
+          found = Some(ext)
+          break
+        }
+      }
+      let ext = match found {
+        Some(e) => e
+        None => return "ext.remove: extension '\{name}' not found"
+      }
+      // Remove files
+      match ext.ext_type {
+        @ext.ExtType::Script => {
+          remove_path_sync(ext.path) |> ignore
+          // Also remove manifest sidecar
+          let base = match ext.scope {
+            "workspace" => "\{er_ws}/.agent/tools"
+            _ => "\{er_home}/tools"
+          }
+          remove_path_sync("\{base}/\{name}.json") |> ignore
+        }
+        @ext.ExtType::Wasm => {
+          let base = match ext.scope {
+            "workspace" => "\{er_ws}/.agent/plugins"
+            _ => "\{er_home}/plugins"
+          }
+          remove_path_sync("\{base}/\{name}") |> ignore
+        }
+      }
+      // Unregister from registry
+      er_registry.unregister("ext.\{name}")
+      "removed extension: ext.\{name}"
+    },
+  )
   // ,agents.update
   let agents_ws = workspace
   let au_props : Map[String, Json] = Map::new()
@@ -1223,13 +1488,85 @@ fn register_tape_tools(
             _ => "[note]"
           }
           let conf_pct = (item.0 * 100.0).to_int()
-          lines.push(
-            "  \{tag} \{item.2} (conf:\{conf_pct}% x\{item.3})",
-          )
+          lines.push("  \{tag} \{item.2} (conf:\{conf_pct}% x\{item.3})")
         }
       }
       ignore(total)
       lines.join("\n")
+    },
+  )
+  // ,ext.list
+  let el_home = home
+  let el_ws = workspace
+  registry.register(
+    "ext.list",
+    "List installed extension tools (script + WASM)",
+    handler=fn(_args) {
+      let extensions = @ext.discover_extensions(el_home, el_ws)
+      if extensions.is_empty() {
+        return "no extensions installed"
+      }
+      let lines = extensions.map(fn(e) {
+        let type_str = match e.ext_type {
+          @ext.ExtType::Script => "script"
+          @ext.ExtType::Wasm => "wasm"
+        }
+        "  ext.\{e.name}  [\{type_str}]  \{e.description}  (\{e.scope})"
+      })
+      "Extensions:\n" + lines.join("\n")
+    },
+  )
+  // ,ext.remove
+  let er_home = home
+  let er_ws = workspace
+  let er_registry = registry
+  let er_props : Map[String, Json] = Map::new()
+  er_props["name"] = @tools.string_prop(
+    "Extension name to remove (without ext. prefix)",
+  )
+  er_props["scope"] = @tools.string_prop(
+    "Scope to remove from: 'workspace' (default) or 'global'",
+  )
+  let er_params = @tools.make_params(er_props, ["name"])
+  registry.register(
+    "ext.remove",
+    "Remove an installed extension tool",
+    parameters=er_params,
+    requires_confirmation=true,
+    handler=fn(args) {
+      let name = match args {
+        { "name": String(n), .. } => n
+        _ => return "ext.remove: missing 'name'"
+      }
+      match @tools.sanitize_name(name) {
+        None => return "ext.remove: invalid name"
+        Some(_) => ()
+      }
+      let scope = match args {
+        { "scope": String(s), .. } => s
+        _ => "workspace"
+      }
+      let base_dir = if scope == "global" { er_home } else { "\{er_ws}/.agent" }
+      // Try removing script tool
+      let script_path = "\{base_dir}/tools/\{name}.sh"
+      let manifest_path = "\{base_dir}/tools/\{name}.json"
+      let mut removed = false
+      if remove_path_sync(script_path) {
+        removed = true
+        ignore(remove_path_sync(manifest_path))
+      }
+      // Try removing WASM plugin directory
+      let plugin_dir = "\{base_dir}/plugins/\{name}"
+      if remove_path_sync(plugin_dir) {
+        removed = true
+      }
+      if removed {
+        // Unregister from registry
+        er_registry.unregister("ext.\{name}")
+        "removed extension: \{name} (\{scope})"
+      } else {
+        "ext.remove: extension '\{name}' not found in \{scope} scope"
+      }
     },
   )
   // ,quit
@@ -1390,6 +1727,56 @@ fn register_mcp_tools(
       )
     }
   }
+}
+
+// ── Extension tools (script + WASM) ──
+
+///|
+/// Register discovered extension tools into the registry.
+fn register_ext_tools(
+  registry : @tools.ToolRegistry,
+  home : String,
+  workspace : String,
+) -> Unit {
+  let extensions = @ext.discover_extensions(home, workspace)
+  for ext in extensions {
+    let tool_name = "ext.\{ext.name}"
+    let ext_type = ext.ext_type
+    let ext_path = ext.path
+    registry.register(
+      tool_name,
+      ext.description,
+      parameters=ext.parameters,
+      source="extension",
+      handler=async fn(args) { run_extension(ext_type, ext_path, args) },
+    )
+  }
+}
+
+///|
+/// Execute an extension (script or WASM plugin).
+async fn run_extension(
+  ext_type : @ext.ExtType,
+  path : String,
+  args : Json,
+) -> String {
+  let args_str = args.stringify()
+  let timeout = 30_000
+  let (exit_code, stdout_data, stderr_data) = @async.with_timeout(timeout, async fn() {
+    match ext_type {
+      @ext.ExtType::Script => @process.collect_output(path, [args_str])
+      @ext.ExtType::Wasm =>
+        @process.collect_output("moonrun", [path, "--", args_str])
+    }
+  }) catch {
+    _ => return "extension timeout after 30s"
+  }
+  let stdout = stdout_data.text() catch { _ => "" }
+  if exit_code != 0 {
+    let stderr = stderr_data.text() catch { _ => "" }
+    return "extension error (exit \{exit_code}): \{stderr}"
+  }
+  stdout
 }
 
 // ── Learning extraction and persistence ──
