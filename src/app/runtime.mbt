@@ -1697,9 +1697,27 @@ pub fn extract_learnings_from_tape(
   // Detect patterns
   match error {
     Some(err) => {
-      // Task failed — record anti-pattern
-      let tools_str = tool_names.join(", ")
-      let content = "Task failed after \{steps} steps using [\{tools_str}]: \{err}"
+      // Task failed — record anti-pattern with truncated tool list
+      let unique_tools : Array[String] = []
+      for name in tool_names {
+        if not(unique_tools.contains(name)) {
+          unique_tools.push(name)
+        }
+      }
+      let tools_display = if unique_tools.length() > 5 {
+        let first5 = unique_tools[:5].to_array()
+        first5.join(", ") + " (+\{unique_tools.length() - 5} more)"
+      } else {
+        unique_tools.join(", ")
+      }
+      // Truncate error message
+      let err_short = if err.length() > 100 {
+        let truncated = err[:100].to_string() catch { _ => err }
+        truncated + "..."
+      } else {
+        err
+      }
+      let content = "Task failed after \{steps} steps using [\{tools_display}]: \{err_short}"
       match add_learning(home, "anti_pattern", content, now_ms) {
         Some(c) =>
           if not(workspace.is_empty()) {
@@ -1711,9 +1729,20 @@ pub fn extract_learnings_from_tape(
     None => {
       // Task succeeded
       if steps <= 3 && tool_names.length() > 0 {
-        // Efficient completion
-        let tools_str = tool_names.join(" -> ")
-        let content = "Efficient: completed in \{steps} steps via \{tools_str}"
+        // Efficient completion — deduplicate and cap at 5 unique tools
+        let unique_tools : Array[String] = []
+        for name in tool_names {
+          if not(unique_tools.contains(name)) {
+            unique_tools.push(name)
+          }
+        }
+        let display = if unique_tools.length() > 5 {
+          let first5 = unique_tools[:5].to_array()
+          first5.join(", ") + " (+\{unique_tools.length() - 5} more)"
+        } else {
+          unique_tools.join(", ")
+        }
+        let content = "Efficient: completed in \{steps} steps via \{display}"
         match add_learning(home, "heuristic", content, now_ms) {
           Some(c) =>
             if not(workspace.is_empty()) {
@@ -1722,13 +1751,15 @@ pub fn extract_learnings_from_tape(
           None => ()
         }
       }
-      // Detect repeated consecutive tool usage (3+ same tool in a row)
+      // Detect repeated consecutive tool usage (5+ same tool in a row)
+      // Skip generic tools (bash, fs_read) — they're too common to be useful
+      let generic_tools = ["bash", "fs_read", "fs.read", "grep"]
       let mut run_start = 0
       for i = 1; i <= tool_names.length(); i = i + 1 {
         if i == tool_names.length() || tool_names[i] != tool_names[run_start] {
           let run_len = i - run_start
-          if run_len >= 3 {
-            let tool = tool_names[run_start]
+          let tool = tool_names[run_start]
+          if run_len >= 5 && not(generic_tools.contains(tool)) {
             let content = "Pattern: \{tool} called \{run_len} times consecutively"
             match add_learning(home, "preference", content, now_ms) {
               Some(c) =>
