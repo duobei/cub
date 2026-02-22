@@ -68,6 +68,14 @@ pub fn ModelRunner::reset_context(self : ModelRunner) -> Unit {
 }
 
 ///|
+/// Get the currently expanded skills map.
+pub fn ModelRunner::get_expanded_skills(
+  self : ModelRunner,
+) -> Map[String, String] {
+  self.expanded_skills
+}
+
+///|
 /// Run the model turn loop: chat → handle tool calls / commands → repeat.
 pub async fn ModelRunner::run(
   self : ModelRunner,

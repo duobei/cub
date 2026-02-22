@@ -6,6 +6,7 @@ pub struct AgentLoop {
   router : InputRouter
   model_runner : ModelRunner
   tape : @tape.TapeService
+  post_task_fn : async (Int, String?, Map[String, String]) -> Unit
 }
 
 ///|
@@ -14,8 +15,15 @@ pub fn AgentLoop::new(
   router : InputRouter,
   model_runner : ModelRunner,
   tape : @tape.TapeService,
+  post_task_fn? : async (Int, String?, Map[String, String]) -> Unit = fn(
+    _s,
+    _e,
+    _sk,
+  ) {
+
+  },
 ) -> AgentLoop {
-  { router, model_runner, tape }
+  { router, model_runner, tape, post_task_fn }
 }
 
 ///|
@@ -55,6 +63,12 @@ pub async fn AgentLoop::handle_input(
     None => ()
   }
   self.tape.append_event("loop.result", Json::object(result_data))
+  // Post-task learning extraction
+  (self.post_task_fn)(
+    model_result.steps,
+    model_result.error,
+    self.model_runner.get_expanded_skills(),
+  )
   {
     immediate_output: route.immediate_output,
     assistant_output: model_result.visible_text,
