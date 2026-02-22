@@ -50,6 +50,12 @@ pub fn ToolRegistry::register(
 }
 
 ///|
+/// Unregister a tool by name.
+pub fn ToolRegistry::unregister(self : ToolRegistry, name : String) -> Unit {
+  self.tools.remove(name)
+}
+
+///|
 /// Check if a tool exists.
 pub fn ToolRegistry::has(self : ToolRegistry, name : String) -> Bool {
   self.tools.contains(name)
@@ -76,10 +82,7 @@ pub fn ToolRegistry::needs_confirmation(
 ///|
 /// Check if a tool must run serially (not in parallel with other tools).
 /// This includes tools that need confirmation AND write-mutating tools.
-pub fn ToolRegistry::is_serial(
-  self : ToolRegistry,
-  name : String,
-) -> Bool {
+pub fn ToolRegistry::is_serial(self : ToolRegistry, name : String) -> Bool {
   if self.needs_confirmation(name) {
     return true
   }

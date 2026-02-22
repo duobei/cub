@@ -10,7 +10,6 @@ pub struct ModelRunner {
   tape : @tape.TapeService
   router : InputRouter
   tool_view : @tools.ProgressiveToolView
-  tools : Array[Json]
   list_skills : () -> Array[@skills.SkillMetadata]
   load_skill_body : (String) -> String?
   model : String
@@ -32,7 +31,6 @@ pub fn ModelRunner::new(
   tape : @tape.TapeService,
   router : InputRouter,
   tool_view : @tools.ProgressiveToolView,
-  tools : Array[Json],
   list_skills : () -> Array[@skills.SkillMetadata],
   load_skill_body : (String) -> String?,
   model : String,
@@ -50,7 +48,6 @@ pub fn ModelRunner::new(
     tape,
     router,
     tool_view,
-    tools,
     list_skills,
     load_skill_body,
     model,
@@ -316,7 +313,7 @@ async fn ModelRunner::chat(
       prompt,
       system_prompt~,
       max_tokens=self.max_tokens,
-      tools_json=self.tools,
+      tools_json=self.registry.model_tools(),
       image_urls~,
       needs_confirmation~,
       is_serial~,
@@ -335,7 +332,7 @@ async fn ModelRunner::chat(
           prompt,
           system_prompt~,
           max_tokens=self.max_tokens,
-          tools_json=self.tools,
+          tools_json=self.registry.model_tools(),
           image_urls~,
           needs_confirmation~,
           execute_tool~,
@@ -482,6 +479,8 @@ fn runtime_contract() -> String {
     #|10) Use $git skill hint for git operations; use $project-analyze to understand the workspace.
     #|11) Use schedule.add to create timed tasks; schedule.list/remove to manage them.
     #|12) Use agent.spawn to delegate complex subtasks to a child agent process.
+    #|13) Use tool.create to create reusable extension tools (script or WASM) that persist across sessions.
+    #|14) Use ext.list to see installed extensions; ext.remove to uninstall them.
     #|</runtime_contract>
     #|<context_contract>
     #|Context is managed via tape anchors. Only entries after the last anchor are visible.
