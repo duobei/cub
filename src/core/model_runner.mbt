@@ -80,8 +80,10 @@ pub fn ModelRunner::get_expanded_skills(
 pub async fn ModelRunner::run(
   self : ModelRunner,
   prompt : String,
+  image_urls? : Array[String] = [],
 ) -> ModelTurnResult {
   let mut current_prompt = prompt
+  let initial_image_urls = image_urls
   // Expand skill hints from the initial prompt
   self.expand_skill_hints(prompt)
   let mut step = 0
@@ -97,8 +99,13 @@ pub async fn ModelRunner::run(
     step_data["step"] = step.to_json()
     step_data["model"] = self.model.to_json()
     self.tape.append_event("loop.step.start", Json::object(step_data))
-    // Call the model
-    let chat_result = self.chat(current_prompt)
+    // Call the model (pass images only on first step)
+    let step_images : Array[String] = if step == 1 {
+      initial_image_urls
+    } else {
+      []
+    }
+    let chat_result = self.chat(current_prompt, image_urls=step_images)
     // Handle error — on API 400, try handoff to truncate bad history and retry once
     if chat_result.error is Some(err) {
       if is_api_bad_request(err) && step == 1 {
@@ -246,7 +253,11 @@ pub async fn ModelRunner::run(
 
 ///|
 /// Make a single chat call with tool execution.
-async fn ModelRunner::chat(self : ModelRunner, prompt : String) -> ChatResult {
+async fn ModelRunner::chat(
+  self : ModelRunner,
+  prompt : String,
+  image_urls? : Array[String] = [],
+) -> ChatResult {
   let system_prompt = self.render_system_prompt()
   let execute_tool : async (String, Json) -> String = async fn(name, args) {
     // Convert model name back to registry name
@@ -266,6 +277,7 @@ async fn ModelRunner::chat(self : ModelRunner, prompt : String) -> ChatResult {
       system_prompt~,
       max_tokens=self.max_tokens,
       tools_json=self.tools,
+      image_urls~,
       needs_confirmation~,
       execute_tool~,
     )
@@ -283,6 +295,7 @@ async fn ModelRunner::chat(self : ModelRunner, prompt : String) -> ChatResult {
           system_prompt~,
           max_tokens=self.max_tokens,
           tools_json=self.tools,
+          image_urls~,
           needs_confirmation~,
           execute_tool~,
         )

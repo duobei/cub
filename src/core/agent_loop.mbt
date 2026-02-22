@@ -31,6 +31,7 @@ pub fn AgentLoop::new(
 pub async fn AgentLoop::handle_input(
   self : AgentLoop,
   raw : String,
+  image_urls? : Array[String] = [],
 ) -> LoopResult {
   let route = self.router.route_user(raw)
   if route.exit_requested {
@@ -52,7 +53,7 @@ pub async fn AgentLoop::handle_input(
     }
   }
   // Enter model loop
-  let model_result = self.model_runner.run(route.model_prompt)
+  let model_result = self.model_runner.run(route.model_prompt, image_urls~)
   // Record loop result event
   let result_data : Map[String, Json] = Map::new()
   result_data["steps"] = model_result.steps.to_json()

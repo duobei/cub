@@ -345,7 +345,27 @@ async fn DiscordChannel::handle_message_create(
   if is_bot {
     return
   }
-  if content.trim().to_string().is_empty() {
+  // Extract image attachment URLs
+  let image_urls : Array[String] = []
+  match data {
+    { "attachments": Array(attachments), .. } =>
+      for att in attachments {
+        let url = match att {
+          { "url": String(u), .. } => u
+          _ => continue
+        }
+        let content_type = match att {
+          { "content_type": String(ct), .. } => ct
+          _ => ""
+        }
+        if content_type.has_prefix("image/") {
+          image_urls.push(url)
+        }
+      }
+    _ => ()
+  }
+  // Allow messages with images but no text
+  if content.trim().to_string().is_empty() && image_urls.is_empty() {
     return
   }
   // Get channel_id
@@ -393,6 +413,7 @@ async fn DiscordChannel::handle_message_create(
     session_id,
     prompt: content,
     metadata: Json::object(metadata),
+    attachments: image_urls,
   }
   handler(msg)
 }

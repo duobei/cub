@@ -84,7 +84,11 @@ fn main {
         }
         @log.info("cub", "starting message channels...")
         manager.run(async fn(msg) {
-          let result = runtime.handle_input(msg.session_id, msg.prompt)
+          let result = runtime.handle_input(
+            msg.session_id,
+            msg.prompt,
+            image_urls=msg.attachments,
+          )
           let output_parts : Array[String] = []
           if result.immediate_output.length() > 0 {
             output_parts.push(result.immediate_output)

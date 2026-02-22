@@ -41,6 +41,39 @@ pub fn TapeEntry::message(role : String, content : String) -> TapeEntry {
 }
 
 ///|
+/// Create a message entry with image attachments (OpenAI vision format).
+pub fn TapeEntry::message_with_images(
+  role : String,
+  text : String,
+  image_urls : Array[String],
+) -> TapeEntry {
+  let parts : Array[Json] = []
+  if text.length() > 0 {
+    let text_part : Map[String, Json] = {}
+    text_part["type"] = "text".to_json()
+    text_part["text"] = text.to_json()
+    parts.push(Json::object(text_part))
+  }
+  for url in image_urls {
+    let url_obj : Map[String, Json] = {}
+    url_obj["url"] = url.to_json()
+    let img_part : Map[String, Json] = {}
+    img_part["type"] = "image_url".to_json()
+    img_part["image_url"] = Json::object(url_obj)
+    parts.push(Json::object(img_part))
+  }
+  let payload : Map[String, Json] = Map::new()
+  payload["role"] = role.to_json()
+  payload["content"] = Json::array(parts)
+  {
+    id: 0,
+    kind: "message",
+    payload: Json::object(payload),
+    meta: Json::object(Map::new()),
+  }
+}
+
+///|
 /// Create a system message entry.
 pub fn TapeEntry::system(content : String) -> TapeEntry {
   TapeEntry::message("system", content)

@@ -106,10 +106,34 @@ async fn TelegramChannel::handle_update(
       }
     _ => return
   }
-  // Extract text
+  // Extract photo URLs
+  let image_urls : Array[String] = []
+  match message {
+    { "photo": Array(photos), .. } =>
+      if photos.length() > 0 {
+        // Take the largest photo (last in array)
+        let largest = photos[photos.length() - 1]
+        match largest {
+          { "file_id": String(fid), .. } => {
+            let photo_url = self.get_file_url(fid)
+            if photo_url.length() > 0 {
+              image_urls.push(photo_url)
+            }
+          }
+          _ => ()
+        }
+      }
+    _ => ()
+  }
+  // Extract text (or caption for photo messages)
   let text = match message {
     { "text": String(t), .. } => t
-    _ => return
+    { "caption": String(c), .. } => c
+    _ => ""
+  }
+  // Skip empty messages (no text and no images)
+  if text.is_empty() && image_urls.is_empty() {
+    return
   }
   // Extract chat_id and from_id
   let chat_id = match message {
@@ -154,8 +178,37 @@ async fn TelegramChannel::handle_update(
     session_id,
     prompt: text,
     metadata: Json::object(metadata),
+    attachments: image_urls,
   }
   handler(msg)
+}
+
+///|
+/// Get file URL from Telegram file_id via getFile API.
+async fn TelegramChannel::get_file_url(
+  self : TelegramChannel,
+  file_id : String,
+) -> String {
+  let url = "\{telegram_api_base}/bot\{self.token}/getFile?file_id=\{file_id}"
+  let headers : Map[String, String] = {}
+  headers["Content-Type"] = "application/json"
+  let (response, response_data) = @http.get(url, headers~) catch {
+    e => {
+      @log.error("telegram", "getFile error: \{e}")
+      return ""
+    }
+  }
+  if response.code != 200 {
+    @log.error("telegram", "getFile failed: HTTP \{response.code}")
+    return ""
+  }
+  let text = response_data.text() catch { _ => return "" }
+  let json = @json.parse(text) catch { _ => return "" }
+  match json {
+    { "ok": True, "result": { "file_path": String(fp), .. }, .. } =>
+      "\{telegram_api_base}/file/bot\{self.token}/\{fp}"
+    _ => ""
+  }
 }
 
 ///|

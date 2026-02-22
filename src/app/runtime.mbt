@@ -16,8 +16,9 @@ pub struct SessionRuntime {
 pub async fn SessionRuntime::handle_input(
   self : SessionRuntime,
   text : String,
+  image_urls? : Array[String] = [],
 ) -> @core.LoopResult {
-  self.agent_loop.handle_input(text)
+  self.agent_loop.handle_input(text, image_urls~)
 }
 
 ///|
@@ -241,6 +242,7 @@ pub async fn AppRuntime::handle_input(
   self : AppRuntime,
   session_id : String,
   text : String,
+  image_urls? : Array[String] = [],
 ) -> @core.LoopResult {
   // Check due schedules before handling input
   let due = self.check_due_schedules()
@@ -253,7 +255,7 @@ pub async fn AppRuntime::handle_input(
     }
   }
   let session = self.get_session(session_id)
-  session.handle_input(text)
+  session.handle_input(text, image_urls~)
 }
 
 ///|

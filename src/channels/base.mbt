@@ -7,4 +7,5 @@ pub struct ChannelMessage {
   session_id : String
   prompt : String
   metadata : Json
+  attachments : Array[String]
 } derive(Show)

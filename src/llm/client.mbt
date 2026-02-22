@@ -654,11 +654,18 @@ pub async fn LLMClient::run_tools(
   system_prompt? : String = "",
   max_tokens? : Int = 0,
   tools_json? : Array[Json] = [],
+  image_urls? : Array[String] = [],
   needs_confirmation? : (String) -> Bool = fn(_name) { false },
   execute_tool~ : async (String, Json) -> String,
 ) -> ToolAutoResult {
-  // Record user message to tape
-  tape.append(@tape.TapeEntry::message("user", prompt))
+  // Record user message to tape (with images if present)
+  if image_urls.length() > 0 {
+    tape.append(
+      @tape.TapeEntry::message_with_images("user", prompt, image_urls),
+    )
+  } else {
+    tape.append(@tape.TapeEntry::message("user", prompt))
+  }
   // Get messages from tape
   let mut messages = tape.read_messages()
   // Estimate token usage and manage context budget
