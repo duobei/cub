@@ -1048,7 +1048,7 @@ fn register_tape_tools(
   )
   tc_props["description"] = @tools.string_prop("Short description of the tool")
   tc_props["code"] = @tools.string_prop(
-    "Source code — script content or MoonBit main.mbt source",
+    "Source code. For script: bash/python. For wasm: MoonBit main.mbt — MUST follow this template: fn main { let args = @env.args(); let input = if args.length() > 1 { args[1] } else { \"{}\" }; let parsed = @json.parse(input) catch { _ => ... }; /* your logic */; println(output_json) }. Use @json.parse, Json pattern matching, String/Int operations. Do NOT use to_array() or undefined methods.",
   )
   tc_props["parameters"] = @tools.string_prop(
     "Optional JSON Schema for tool parameters (as JSON string)",
@@ -1061,7 +1061,7 @@ fn register_tape_tools(
   ])
   registry.register(
     "tool.create",
-    "Create a new extension tool (script or WASM plugin) — self-extending",
+    "PREFERRED way to create extension tools. Handles all scaffolding, build, and hot-registration in one step. Do NOT manually create files — always use this tool instead.",
     parameters=tc_params,
     requires_confirmation=true,
     handler=async fn(args) {

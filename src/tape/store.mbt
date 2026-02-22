@@ -102,12 +102,25 @@ pub async fn TapeFile::append_many(
   let _ = self.read()
   let buf = StringBuilder::new()
   let mut next = self.next_id()
+  let now = @async.now()
   for entry in entries {
+    // Inject timestamp into meta
+    let meta = match entry.meta {
+      Object(m) => {
+        m["ts"] = now.to_json()
+        Json::object(m)
+      }
+      _ => {
+        let m : Map[String, Json] = {}
+        m["ts"] = now.to_json()
+        Json::object(m)
+      }
+    }
     let stored : TapeEntry = {
       id: next,
       kind: entry.kind,
       payload: entry.payload,
-      meta: entry.meta,
+      meta,
     }
     buf.write_string(stored.to_json().stringify())
     buf.write_char('\n')
