@@ -204,6 +204,75 @@ test "ToolRegistry registers new tools with confirmation" {
 }
 
 ///|
+test "is_safe_url allows public URLs" {
+  inspect(@tools.is_safe_url("https://github.com/repo"), content="true")
+  inspect(@tools.is_safe_url("https://example.com/skill.md"), content="true")
+  inspect(@tools.is_safe_url("http://example.com"), content="true")
+}
+
+///|
+test "is_safe_url blocks localhost" {
+  inspect(@tools.is_safe_url("http://localhost/path"), content="false")
+}
+
+///|
+test "is_safe_url blocks loopback IP" {
+  inspect(@tools.is_safe_url("http://127.0.0.1/path"), content="false")
+}
+
+///|
+test "is_safe_url blocks ipv6 loopback" {
+  inspect(@tools.is_safe_url("http://[::1]/path"), content="false")
+}
+
+///|
+test "is_safe_url blocks private IPs" {
+  inspect(@tools.is_safe_url("http://10.0.0.1/path"), content="false")
+  inspect(@tools.is_safe_url("http://192.168.1.1/path"), content="false")
+  inspect(@tools.is_safe_url("http://172.16.0.1/path"), content="false")
+}
+
+///|
+test "is_safe_url blocks cloud metadata" {
+  inspect(@tools.is_safe_url("http://169.254.169.254/latest"), content="false")
+  inspect(
+    @tools.is_safe_url("http://metadata.google.internal/path"),
+    content="false",
+  )
+}
+
+///|
+test "is_safe_url rejects non-http URLs" {
+  inspect(@tools.is_safe_url("ftp://example.com"), content="false")
+  inspect(@tools.is_safe_url("file:///etc/passwd"), content="false")
+}
+
+///|
+test "sanitize_name allows valid names" {
+  inspect(@tools.sanitize_name("my-skill"), content="Some(\"my-skill\")")
+  inspect(@tools.sanitize_name("git"), content="Some(\"git\")")
+  inspect(
+    @tools.sanitize_name("auto-bash-called"),
+    content="Some(\"auto-bash-called\")",
+  )
+}
+
+///|
+test "sanitize_name rejects path traversal" {
+  inspect(@tools.sanitize_name("../etc"), content="None")
+  inspect(@tools.sanitize_name("a/b"), content="None")
+  inspect(@tools.sanitize_name("a\\b"), content="None")
+  inspect(@tools.sanitize_name(""), content="None")
+}
+
+///|
+test "has_path_traversal detects dot-dot" {
+  inspect(@tools.has_path_traversal("../etc/passwd"), content="true")
+  inspect(@tools.has_path_traversal("foo/../../bar"), content="true")
+  inspect(@tools.has_path_traversal("normal/path"), content="false")
+}
+
+///|
 test "ToolRegistry model_tools includes new tools" {
   let reg = @tools.ToolRegistry::new()
   reg.register("schedule.add", "add schedule", handler=fn(_args) { "ok" })

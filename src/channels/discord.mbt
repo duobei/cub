@@ -29,6 +29,13 @@ let _op_hello : Int = 10
 let op_heartbeat_ack : Int = 11
 
 ///|
+/// Discord Gateway intents.
+let intent_guilds : Int = 1 << 9 // 512
+
+///|
+let intent_message_content : Int = 1 << 15 // 32768
+
+///|
 /// Discord channel implementation.
 pub struct DiscordChannel {
   token : String
@@ -38,6 +45,7 @@ pub struct DiscordChannel {
   mut session_id : String
   mut bot_user_id : String
   seen_messages : Map[String, Bool]
+  mut heartbeat_acked : Bool
 }
 
 ///|
@@ -55,6 +63,7 @@ pub fn DiscordChannel::new(
     session_id: "",
     bot_user_id: "",
     seen_messages: {},
+    heartbeat_acked: true,
   }
 }
 
@@ -171,7 +180,7 @@ async fn DiscordChannel::send_identify(
   self : DiscordChannel,
   conn : @websocket.Conn,
 ) -> Unit {
-  let intents = 512 + 32768 // GUILDS + MESSAGE_CONTENT
+  let intents = intent_guilds + intent_message_content
   let payload : Map[String, Json] = Map::new()
   payload["op"] = op_identify.to_json()
   let d : Map[String, Json] = Map::new()
@@ -199,6 +208,12 @@ async fn DiscordChannel::heartbeat_loop(
 ) -> Unit {
   for {
     @async.sleep(interval_ms)
+    // Check if previous heartbeat was acknowledged
+    if not(self.heartbeat_acked) {
+      @log.warn("discord", "heartbeat ACK not received, reconnecting")
+      break
+    }
+    self.heartbeat_acked = false
     let payload : Map[String, Json] = Map::new()
     payload["op"] = op_heartbeat.to_json()
     match self.sequence {
@@ -235,7 +250,7 @@ async fn DiscordChannel::event_loop(
     }
     match op {
       _ if op == op_dispatch => self.handle_dispatch(json, handler)
-      _ if op == op_heartbeat_ack => () // OK
+      _ if op == op_heartbeat_ack => self.heartbeat_acked = true
       _ if op == op_heartbeat
       // Server requesting heartbeat
       => {
@@ -384,7 +399,7 @@ async fn DiscordChannel::handle_message_create(
 
 ///|
 /// Check permission for a message. Returns "ok", "denied", or "ignored".
-fn DiscordChannel::check_permission(
+pub fn DiscordChannel::check_permission(
   self : DiscordChannel,
   channel_id : String,
   author_id : String,
@@ -466,7 +481,7 @@ async fn read_text_message(conn : @websocket.Conn) -> String {
 
 ///|
 /// Chunk a message to fit within Discord's message limit.
-fn chunk_message(text : String, limit : Int) -> Array[String] {
+pub fn chunk_message(text : String, limit : Int) -> Array[String] {
   if text.length() <= limit {
     return [text]
   }

@@ -70,6 +70,85 @@ fn int_prop(description : String, default_val? : Int? = None) -> Json {
 }
 
 ///|
+/// Helper: parse a simple non-negative integer from string.
+fn parse_simple_int(s : String) -> Int {
+  let mut result = 0
+  for ch in s {
+    if ch >= '0' && ch <= '9' {
+      result = result * 10 + (ch.to_int() - '0'.to_int())
+    } else {
+      break
+    }
+  }
+  result
+}
+
+///|
+/// Helper: check if a URL points to a safe external host (not local/private).
+pub fn is_safe_url(url : String) -> Bool {
+  let lower = url.to_lower()
+  // Must be https
+  if not(lower.has_prefix("https://")) && not(lower.has_prefix("http://")) {
+    return false
+  }
+  // Extract host portion
+  let scheme_len = if lower.has_prefix("https://") { 8 } else { 7 }
+  let after_scheme = lower[scheme_len:].to_string() catch { _ => return false }
+  // Find end of host (before / or :, but handle [IPv6])
+  let mut host_end = after_scheme.length()
+  let in_bracket = after_scheme.length() > 0 &&
+    after_scheme[0] == '['.to_int().to_uint16()
+  for i = 0; i < after_scheme.length(); i = i + 1 {
+    let ch = after_scheme[i]
+    if in_bracket {
+      if ch == ']'.to_int().to_uint16() {
+        host_end = i + 1
+        break
+      }
+    } else if ch == '/'.to_int().to_uint16() || ch == ':'.to_int().to_uint16() {
+      host_end = i
+      break
+    }
+  }
+  let host = after_scheme[:host_end].to_string() catch { _ => return false }
+  // Block localhost and loopback
+  let blocked_hosts = [
+    "localhost", "[::1]", "169.254.169.254", "metadata.google.internal",
+  ]
+  for bh in blocked_hosts {
+    if host == bh {
+      return false
+    }
+  }
+  // Block private IP prefixes
+  let blocked_prefixes = ["127.", "10.", "192.168.", "0."]
+  for bp in blocked_prefixes {
+    if host.has_prefix(bp) {
+      return false
+    }
+  }
+  // Block 172.16-31.*
+  if host.has_prefix("172.") {
+    let parts = host.split(".")
+    let second : Array[String] = []
+    let mut count = 0
+    for p in parts {
+      if count == 1 {
+        second.push(p.to_string())
+      }
+      count += 1
+    }
+    if second.length() > 0 {
+      let n = parse_simple_int(second[0])
+      if n >= 16 && n <= 31 {
+        return false
+      }
+    }
+  }
+  true
+}
+
+///|
 /// Helper: check if a path contains traversal sequences.
 pub fn has_path_traversal(path : String) -> Bool {
   if path.contains("..") {
@@ -1024,6 +1103,10 @@ fn register_skill_install(registry : ToolRegistry, ctx : ToolContext) -> Unit {
       let scope = match args {
         { "scope": String(s), .. } => s
         _ => "workspace"
+      }
+      // Validate URL against SSRF
+      if not(is_safe_url(url)) {
+        fail("skill.install: URL blocked (local/private addresses not allowed)")
       }
       // Fetch the SKILL.md content
       let content = fetch_url(url)

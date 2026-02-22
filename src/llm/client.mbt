@@ -753,7 +753,10 @@ pub async fn LLMClient::run_tools(
         let slot = idx
         group.spawn_bg(async fn() {
           let args : Json = @json.parse(tc_args_str) catch {
-            _ => Json::object(Map::new())
+            _ => {
+              @log.warn("llm", "failed to parse tool args for \{tc_name}")
+              Json::object(Map::new())
+            }
           }
           let result_text = execute_tool(tc_name, args) catch {
             e => "Error: \{e}"
@@ -778,7 +781,10 @@ pub async fn LLMClient::run_tools(
     // Single parallel call or none — execute sequentially
     for tc in parallel_calls {
       let args : Json = @json.parse(tc.function_.arguments) catch {
-        _ => Json::object(Map::new())
+        _ => {
+          @log.warn("llm", "failed to parse tool args for \{tc.function_.name}")
+          Json::object(Map::new())
+        }
       }
       let result_text = execute_tool(tc.function_.name, args) catch {
         e => {

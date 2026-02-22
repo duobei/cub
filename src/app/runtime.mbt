@@ -489,6 +489,9 @@ fn list_dir_sync(path : String) -> Array[String] {
 /// Format: {workspace_hash}__{url_encoded_name}.jsonl → name
 fn decode_tape_filename(filename : String) -> String {
   // Strip .jsonl suffix
+  if filename.length() < 7 {
+    return filename
+  }
   let base = filename[:filename.length() - 6].to_string() catch {
     _ => return filename
   }

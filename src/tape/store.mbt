@@ -132,6 +132,11 @@ pub async fn TapeFile::archive(self : TapeFile) -> String? {
   @fs.write_file(archive_path, content, create=0o644) catch {
     _ => return None
   }
+  // Verify archive was written before removing original
+  let verify = @fs.read_file(archive_path).text() catch { _ => return None }
+  if verify.length() != content.length() {
+    return None
+  }
   @fs.remove(self.path) catch {
     _ => ()
   }

@@ -92,54 +92,9 @@ pub fn discover_skills(workspace : String) -> Array[SkillMetadata] {
 }
 
 ///|
-/// Get HOME directory via environment variable pattern.
+/// Get HOME directory via C FFI getenv (cross-platform).
 fn get_home_dir() -> String {
-  // Use the same FFI pattern as config/settings.mbt
-  // We re-use cub_skills_read_file to read /etc/passwd or similar,
-  // but simpler: just check HOME env var via a small file trick
-  // Actually, we need getenv. Let's use a /proc/self approach or
-  // just read from a known path. Simplest: expand ~ via C.
-  // For now, read HOME from /proc/self/environ
-  let home = read_env_home()
-  home
-}
-
-///|
-/// Read HOME from /proc/self/environ (Linux-specific).
-fn read_env_home() -> String {
-  let content = read_file_sync("/proc/self/environ")
-  if content.is_empty() {
-    return ""
-  }
-  // /proc/self/environ has null-separated KEY=VALUE pairs
-  // Since we read as text, nulls become replacement chars or breaks
-  // Search for HOME= prefix
-  let mut i = 0
-  while i < content.length() {
-    // Check if we're at start or after a null byte (char 0)
-    let at_start = i == 0 || content[i - 1].to_int() == 0
-    if at_start {
-      // Check for "HOME=" prefix
-      if i + 5 < content.length() {
-        let matches = content[i].to_int() == 'H'.to_int() &&
-          content[i + 1].to_int() == 'O'.to_int() &&
-          content[i + 2].to_int() == 'M'.to_int() &&
-          content[i + 3].to_int() == 'E'.to_int() &&
-          content[i + 4].to_int() == '='.to_int()
-        if matches {
-          // Extract value until null or end
-          let start = i + 5
-          let mut end = start
-          while end < content.length() && content[end].to_int() != 0 {
-            end += 1
-          }
-          return content[start:end].to_string() catch { _ => "" }
-        }
-      }
-    }
-    i += 1
-  }
-  ""
+  @config.getenv("HOME").unwrap_or("")
 }
 
 ///|
