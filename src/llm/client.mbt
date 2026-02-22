@@ -46,6 +46,34 @@ fn find_substring(haystack : String, needle : String) -> Int {
 }
 
 ///|
+/// Strip image_url parts from a message, converting array content to text-only.
+/// For non-vision providers, this prevents API errors from image_url parts in tape history.
+fn strip_image_parts(msg : Json) -> Json {
+  match msg {
+    { "role": String(role), "content": Array(parts), .. } => {
+      // Extract text parts only
+      let texts : Array[String] = []
+      for part in parts {
+        match part {
+          { "type": String("text"), "text": String(t), .. } => texts.push(t)
+          {
+            "type": String("image_url"),
+            "image_url": { "url": String(u), .. },
+            ..
+          } => texts.push("[image: \{u}]")
+          _ => ()
+        }
+      }
+      let m : Map[String, Json] = {}
+      m["role"] = role.to_json()
+      m["content"] = texts.join("\n").to_json()
+      Json::object(m)
+    }
+    _ => msg
+  }
+}
+
+///|
 /// Check if a provider supports vision (image_url content parts).
 pub fn supports_vision(provider : String) -> Bool {
   match provider {
@@ -147,8 +175,13 @@ fn LLMClient::build_request_body(
       }
     None => ()
   }
+  let vision = supports_vision(self.provider)
   for m in messages {
-    msgs.push(m)
+    if vision {
+      msgs.push(m)
+    } else {
+      msgs.push(strip_image_parts(m))
+    }
   }
   body["messages"] = Json::array(msgs)
   if tools.length() > 0 {

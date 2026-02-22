@@ -67,3 +67,33 @@ test "chunk_message handles text without newlines" {
   // Should split into multiple chunks even without newlines
   inspect(chunks.length() > 1, content="true")
 }
+
+///|
+test "build_prompt_with_quote: no quoted content" {
+  let result = @channels.build_prompt_with_quote("hello", "")
+  inspect(result, content="hello")
+}
+
+///|
+test "build_prompt_with_quote: with quoted content" {
+  let result = @channels.build_prompt_with_quote("my reply", "original message")
+  inspect(result, content="> original message\n\nmy reply")
+}
+
+///|
+test "extract_referenced_content: with referenced message" {
+  let data : Json = {
+    "id": "123",
+    "content": "reply",
+    "referenced_message": { "content": "quoted text" },
+  }
+  let result = @channels.extract_referenced_content(data)
+  inspect(result, content="quoted text")
+}
+
+///|
+test "extract_referenced_content: no referenced message" {
+  let data : Json = { "id": "123", "content": "hello" }
+  let result = @channels.extract_referenced_content(data)
+  inspect(result, content="")
+}

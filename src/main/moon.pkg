@@ -1,5 +1,6 @@
 import {
   "moonbitlang/async" @async,
+  "moonbitlang/async/http" @http,
   "duobei/cub/app" @app,
   "duobei/cub/cli" @cli,
   "duobei/cub/config" @config,
@@ -10,4 +11,5 @@ import {
 
 options(
   "is-main": true,
+  "native-stub": [ "health_ffi.c" ],
 )

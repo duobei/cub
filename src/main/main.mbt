@@ -1,4 +1,12 @@
 ///|
+/// FFI: start health check TCP server on port.
+extern "C" fn cub_health_start(port : Int) -> Int = "cub_health_start"
+
+///|
+/// FFI: poll for and handle one health check request.
+extern "C" fn cub_health_poll(session_count : Int) -> Int = "cub_health_poll"
+
+///|
 /// CLI entry point for cub.
 fn main {
   @async.run_async_main(async fn() {
@@ -82,43 +90,171 @@ fn main {
           )
           return
         }
-        @log.info("cub", "starting message channels...")
-        manager.run(async fn(msg) {
-          let result = runtime.handle_input(
-            msg.session_id,
-            msg.prompt,
-            image_urls=msg.attachments,
-          )
-          let output_parts : Array[String] = []
-          if result.immediate_output.length() > 0 {
-            output_parts.push(result.immediate_output)
-          }
-          if result.assistant_output.length() > 0 {
-            output_parts.push(result.assistant_output)
-          }
-          match result.error {
-            Some(e) => output_parts.push("Error: \{e}")
-            None => ()
-          }
-          if output_parts.length() > 0 {
-            let response = output_parts.join("\n\n")
-            let channel_id = extract_channel_id(msg.session_id)
-            if channel_id.length() > 0 {
-              // Route response to the right channel
-              if msg.session_id.has_prefix("telegram:") {
-                match telegram {
-                  Some(tg) => tg.send_message(channel_id, response)
-                  None => ()
-                }
-              } else {
-                match discord {
-                  Some(dc) => dc.send_message(channel_id, response)
-                  None => ()
-                }
-              }
+        // Rate limiter: sliding window per session
+        let rate_timestamps : Map[String, Array[Int64]] = {}
+        let rate_limit = settings.rate_limit_per_minute
+        // Start health check endpoint if configured
+        match settings.health_port {
+          Some(port) => {
+            let rc = cub_health_start(port)
+            if rc == 0 {
+              @log.info("health", "listening on port \{port}")
+            } else {
+              @log.warn("health", "failed to start on port \{port}")
             }
           }
-        })
+          None => ()
+        }
+        @log.info("cub", "starting message channels...")
+        // Resume active sessions from last run
+        let active_sessions = runtime.load_active_sessions()
+        for entry in active_sessions {
+          let (_, channel, channel_id) = entry
+          @log.info("cub", "resuming session on \{channel}:\{channel_id}")
+          if channel == "telegram" {
+            match telegram {
+              Some(tg) => tg.send_message(channel_id, "Session resumed.")
+              None => ()
+            }
+          } else if channel == "discord" {
+            match discord {
+              Some(dc) => dc.send_message(channel_id, "Session resumed.")
+              None => ()
+            }
+          }
+        }
+        // Run health check polling and channel manager concurrently
+        let health_enabled = settings.health_port is Some(_)
+        @async.with_task_group(async fn(outer_group) {
+          // Background: poll health check endpoint every 1s
+          if health_enabled {
+            outer_group.spawn_bg(
+              async fn() {
+                for {
+                  ignore(cub_health_poll(0))
+                  @async.sleep(1000)
+                }
+              },
+              allow_failure=true,
+            )
+          }
+          manager.run(async fn(msg) {
+            // Check rate limit
+            if rate_limit > 0 {
+              let now = @async.now()
+              let window_ms = 60000L
+              let timestamps = match rate_timestamps.get(msg.session_id) {
+                Some(ts) => ts
+                None => {
+                  let ts : Array[Int64] = []
+                  rate_timestamps[msg.session_id] = ts
+                  ts
+                }
+              }
+              // Remove timestamps outside the window
+              while timestamps.length() > 0 && now - timestamps[0] > window_ms {
+                ignore(timestamps.remove(0))
+              }
+              if timestamps.length() >= rate_limit {
+                @log.warn(
+                  "rate",
+                  "rate limited session \{msg.session_id} (\{timestamps.length()}/\{rate_limit} per minute)",
+                )
+                let channel_id = extract_channel_id(msg.session_id)
+                if channel_id.length() > 0 {
+                  if msg.session_id.has_prefix("telegram:") {
+                    match telegram {
+                      Some(tg) =>
+                        tg.send_message(
+                          channel_id, "Rate limited. Please wait a moment.",
+                        )
+                      None => ()
+                    }
+                  } else {
+                    match discord {
+                      Some(dc) =>
+                        dc.send_message(
+                          channel_id, "Rate limited. Please wait a moment.",
+                        )
+                      None => ()
+                    }
+                  }
+                }
+                return
+              }
+              timestamps.push(now)
+            }
+            let channel_id = extract_channel_id(msg.session_id)
+            // Run typing indicator concurrently with message processing
+            let typing_active : Ref[Bool] = { val: true }
+            @async.with_task_group(async fn(group) {
+              // Background: send typing indicators every 5s
+              if channel_id.length() > 0 {
+                group.spawn_bg(
+                  async fn() {
+                    while typing_active.val {
+                      if msg.session_id.has_prefix("telegram:") {
+                        match telegram {
+                          Some(tg) => tg.send_typing(channel_id)
+                          None => ()
+                        }
+                      } else {
+                        match discord {
+                          Some(dc) => dc.send_typing(channel_id)
+                          None => ()
+                        }
+                      }
+                      @async.sleep(5000)
+                    }
+                  },
+                  allow_failure=true,
+                )
+              }
+              // Foreground: process document attachments then handle input
+              let prompt = process_documents(msg.prompt, msg.documents)
+              let result = runtime.handle_input(
+                msg.session_id,
+                prompt,
+                image_urls=msg.attachments,
+              )
+              typing_active.val = false
+              let output_parts : Array[String] = []
+              if result.immediate_output.length() > 0 {
+                output_parts.push(result.immediate_output)
+              }
+              if result.assistant_output.length() > 0 {
+                output_parts.push(result.assistant_output)
+              }
+              match result.error {
+                Some(e) => output_parts.push("Error: \{e}")
+                None => ()
+              }
+              if output_parts.length() > 0 {
+                let response = output_parts.join("\n\n")
+                if channel_id.length() > 0 {
+                  // Route response to the right channel
+                  if msg.session_id.has_prefix("telegram:") {
+                    match telegram {
+                      Some(tg) => tg.send_message(channel_id, response)
+                      None => ()
+                    }
+                  } else {
+                    match discord {
+                      Some(dc) => dc.send_message(channel_id, response)
+                      None => ()
+                    }
+                  }
+                }
+              }
+              // Save active session state for resume
+              runtime.save_active_session(
+                msg.session_id,
+                msg.channel,
+                channel_id,
+              )
+            })
+          })
+        }) // outer_group for health check
       }
       "run" => {
         // Single message mode
@@ -278,6 +414,90 @@ fn parse_int_or(s : String, default_val : Int) -> Int {
   } else {
     default_val
   }
+}
+
+///|
+/// Process document attachments: fetch text content and append to prompt.
+async fn process_documents(
+  prompt : String,
+  documents : Array[@channels.Attachment],
+) -> String {
+  if documents.is_empty() {
+    return prompt
+  }
+  let parts : Array[String] = [prompt]
+  for doc in documents {
+    let is_text = doc.content_type.has_prefix("text/") ||
+      (
+        doc.filename.length() > 4 &&
+        (
+          has_suffix(doc.filename, ".txt") ||
+          has_suffix(doc.filename, ".md") ||
+          has_suffix(doc.filename, ".csv") ||
+          has_suffix(doc.filename, ".json") ||
+          has_suffix(doc.filename, ".xml") ||
+          has_suffix(doc.filename, ".yaml") ||
+          has_suffix(doc.filename, ".yml") ||
+          has_suffix(doc.filename, ".toml") ||
+          has_suffix(doc.filename, ".ini") ||
+          has_suffix(doc.filename, ".cfg") ||
+          has_suffix(doc.filename, ".log") ||
+          has_suffix(doc.filename, ".py") ||
+          has_suffix(doc.filename, ".js") ||
+          has_suffix(doc.filename, ".ts") ||
+          has_suffix(doc.filename, ".rs") ||
+          has_suffix(doc.filename, ".go") ||
+          has_suffix(doc.filename, ".java") ||
+          has_suffix(doc.filename, ".c") ||
+          has_suffix(doc.filename, ".h") ||
+          has_suffix(doc.filename, ".mbt")
+        )
+      )
+    if is_text {
+      // Fetch text content
+      let headers : Map[String, String] = {}
+      let (resp, data) = @http.get(doc.url, headers~) catch {
+        _ => {
+          parts.push("[Attachment: \{doc.filename} (fetch failed)]")
+          continue
+        }
+      }
+      if resp.code == 200 {
+        let text = data.text() catch { _ => "" }
+        if text.length() > 0 {
+          let truncated = if text.length() > 10000 {
+            let prefix = text[:10000].to_string() catch { _ => text }
+            "\{prefix}\n[...truncated]"
+          } else {
+            text
+          }
+          parts.push(
+            "--- File: \{doc.filename} ---\n\{truncated}\n--- End of \{doc.filename} ---",
+          )
+        }
+      } else {
+        parts.push("[Attachment: \{doc.filename} (HTTP \{resp.code})]")
+      }
+    } else {
+      parts.push("[Attachment: \{doc.filename}]")
+    }
+  }
+  parts.join("\n\n")
+}
+
+///|
+/// Check if string ends with a suffix.
+fn has_suffix(s : String, suffix : String) -> Bool {
+  if suffix.length() > s.length() {
+    return false
+  }
+  let offset = s.length() - suffix.length()
+  for i = 0; i < suffix.length(); i = i + 1 {
+    if s[offset + i] != suffix[i] {
+      return false
+    }
+  }
+  true
 }
 
 ///|

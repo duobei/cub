@@ -20,6 +20,8 @@ pub struct ModelRunner {
   base_system_prompt : String
   get_workspace_system_prompt : () -> String
   llm : @llm.LLMClient
+  llm_vision : @llm.LLMClient?
+  llm_fast : @llm.LLMClient?
   registry : @tools.ToolRegistry
   expanded_skills : Map[String, String]
 }
@@ -41,6 +43,8 @@ pub fn ModelRunner::new(
   get_workspace_system_prompt : () -> String,
   llm : @llm.LLMClient,
   registry : @tools.ToolRegistry,
+  llm_vision? : @llm.LLMClient? = None,
+  llm_fast? : @llm.LLMClient? = None,
 ) -> ModelRunner {
   {
     tape,
@@ -56,6 +60,8 @@ pub fn ModelRunner::new(
     base_system_prompt,
     get_workspace_system_prompt,
     llm,
+    llm_vision,
+    llm_fast,
     registry,
     expanded_skills: {},
   }
@@ -253,6 +259,35 @@ pub async fn ModelRunner::run(
 
 ///|
 /// Make a single chat call with tool execution.
+
+///|
+/// Select the appropriate LLM client based on request context.
+fn ModelRunner::select_llm(
+  self : ModelRunner,
+  prompt : String,
+  image_urls : Array[String],
+) -> @llm.LLMClient {
+  // Route to vision model if images present and default doesn't support vision
+  if image_urls.length() > 0 {
+    match self.llm_vision {
+      Some(vision) =>
+        if not(@llm.supports_vision(self.llm.provider)) {
+          return vision
+        }
+      None => ()
+    }
+  }
+  // Route to fast model for tool continuation prompts
+  if prompt == tool_continue_prompt {
+    match self.llm_fast {
+      Some(fast) => return fast
+      None => ()
+    }
+  }
+  self.llm
+}
+
+///|
 async fn ModelRunner::chat(
   self : ModelRunner,
   prompt : String,
@@ -269,9 +304,10 @@ async fn ModelRunner::chat(
     let tool_name = @tools.from_model_name(name, registry)
     registry.needs_confirmation(tool_name)
   }
+  let llm = self.select_llm(prompt, image_urls)
   let timeout = self.model_timeout_seconds.unwrap_or(120)
   let result = @async.with_timeout(timeout * 1000, async fn() {
-    self.llm.run_tools(
+    llm.run_tools(
       self.tape.tape(),
       prompt,
       system_prompt~,
@@ -289,7 +325,7 @@ async fn ModelRunner::chat(
         "timeout after \{timeout}s, retrying with \{timeout * 2}s",
       )
       let retry_result = @async.with_timeout(timeout * 2 * 1000, async fn() {
-        self.llm.run_tools(
+        llm.run_tools(
           self.tape.tape(),
           prompt,
           system_prompt~,

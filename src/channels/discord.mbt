@@ -345,8 +345,37 @@ async fn DiscordChannel::handle_message_create(
   if is_bot {
     return
   }
-  // Extract image attachment URLs
+  // Extract referenced message (reply context)
+  let quoted_content = match data {
+    { "referenced_message": { "content": String(rc), .. }, .. } => rc
+    _ => ""
+  }
+  // Extract image URLs from referenced message attachments
+  let ref_image_urls : Array[String] = []
+  match data {
+    { "referenced_message": { "attachments": Array(ref_atts), .. }, .. } =>
+      for att in ref_atts {
+        let url = match att {
+          { "url": String(u), .. } => u
+          _ => continue
+        }
+        let ct = match att {
+          { "content_type": String(ct), .. } => ct
+          _ => ""
+        }
+        if ct.has_prefix("image/") {
+          ref_image_urls.push(url)
+        }
+      }
+    _ => ()
+  }
+  // Extract image and document attachment URLs
   let image_urls : Array[String] = []
+  let documents : Array[Attachment] = []
+  // Include referenced message images first
+  for url in ref_image_urls {
+    image_urls.push(url)
+  }
   match data {
     { "attachments": Array(attachments), .. } =>
       for att in attachments {
@@ -358,14 +387,22 @@ async fn DiscordChannel::handle_message_create(
           { "content_type": String(ct), .. } => ct
           _ => ""
         }
+        let filename = match att {
+          { "filename": String(f), .. } => f
+          _ => ""
+        }
         if content_type.has_prefix("image/") {
           image_urls.push(url)
+        } else if url.length() > 0 {
+          documents.push({ url, filename, content_type })
         }
       }
     _ => ()
   }
   // Allow messages with images but no text
-  if content.trim().to_string().is_empty() && image_urls.is_empty() {
+  if content.trim().to_string().is_empty() &&
+    image_urls.is_empty() &&
+    quoted_content.is_empty() {
     return
   }
   // Get channel_id
@@ -397,6 +434,12 @@ async fn DiscordChannel::handle_message_create(
     "discord",
     "message from \{author_name} in \{channel_id}: \{truncate(content, 100)}",
   )
+  // Build prompt with optional quoted context
+  let prompt = if quoted_content.length() > 0 {
+    "> \{quoted_content}\n\n\{content}"
+  } else {
+    content
+  }
   // Build ChannelMessage
   let session_id = "discord:\{channel_id}"
   let metadata : Map[String, Json] = Map::new()
@@ -411,9 +454,10 @@ async fn DiscordChannel::handle_message_create(
   let msg : ChannelMessage = {
     channel: "discord",
     session_id,
-    prompt: content,
+    prompt,
     metadata: Json::object(metadata),
     attachments: image_urls,
+    documents,
   }
   handler(msg)
 }
@@ -485,6 +529,24 @@ pub async fn DiscordChannel::send_message(
 }
 
 ///|
+/// Send typing indicator to a Discord channel.
+pub async fn DiscordChannel::send_typing(
+  self : DiscordChannel,
+  channel_id : String,
+) -> Unit {
+  let url = "\{discord_api_base}/channels/\{channel_id}/typing"
+  let headers : Map[String, String] = Map::new()
+  headers["Content-Type"] = "application/json"
+  headers["Authorization"] = "Bot \{self.token}"
+  headers["User-Agent"] = "DiscordBot (cub, 0.1.0)"
+  try {
+    let _ = @http.post(url, "", headers~)
+  } catch {
+    e => @log.debug("discord", "typing indicator error: \{e}")
+  }
+}
+
+///|
 /// Read a text message from a WebSocket connection.
 async fn read_text_message(conn : @websocket.Conn) -> String {
   let msg = conn.recv()
@@ -537,6 +599,25 @@ pub fn chunk_message(text : String, limit : Int) -> Array[String] {
       }
   }
   chunks
+}
+
+///|
+/// Build prompt with optional quoted context from a referenced message.
+pub fn build_prompt_with_quote(content : String, quoted : String) -> String {
+  if quoted.length() > 0 {
+    "> \{quoted}\n\n\{content}"
+  } else {
+    content
+  }
+}
+
+///|
+/// Extract referenced message content from Discord MESSAGE_CREATE data.
+pub fn extract_referenced_content(data : Json) -> String {
+  match data {
+    { "referenced_message": { "content": String(rc), .. }, .. } => rc
+    _ => ""
+  }
 }
 
 ///|

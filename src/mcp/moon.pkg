@@ -1,0 +1,11 @@
+import {
+  "moonbitlang/async" @async,
+  "duobei/cub/config" @config,
+  "duobei/cub/log" @log,
+  "moonbitlang/core/json",
+  "moonbitlang/core/encoding/utf8",
+}
+
+options(
+  "native-stub": [ "mcp_ffi.c" ],
+)

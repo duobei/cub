@@ -37,13 +37,14 @@ pub fn string_to_cstr(s : String) -> Bytes {
 pub fn collect_env_vars() -> Map[String, String] {
   let env : Map[String, String] = {}
   let keys = [
-    "CUB_MODEL", "CUB_API_KEY", "CUB_API_BASE", "CUB_OLLAMA_API_KEY", "CUB_OLLAMA_API_BASE",
-    "LLM_API_KEY", "OPENROUTER_API_KEY", "CUB_MAX_TOKENS", "CUB_MODEL_TIMEOUT_SECONDS",
-    "CUB_SYSTEM_PROMPT", "CUB_HOME", "CUB_WORKSPACE_PATH", "CUB_TAPE_NAME", "CUB_MAX_STEPS",
-    "CUB_PROACTIVE_RESPONSE", "CUB_TELEGRAM_ENABLED", "CUB_TELEGRAM_TOKEN", "CUB_TELEGRAM_ALLOW_FROM",
+    "CUB_MODEL", "CUB_MODEL_VISION", "CUB_MODEL_FAST", "CUB_API_KEY", "CUB_API_BASE",
+    "CUB_OLLAMA_API_KEY", "CUB_OLLAMA_API_BASE", "LLM_API_KEY", "OPENROUTER_API_KEY",
+    "CUB_MAX_TOKENS", "CUB_MODEL_TIMEOUT_SECONDS", "CUB_SYSTEM_PROMPT", "CUB_HOME",
+    "CUB_WORKSPACE_PATH", "CUB_TAPE_NAME", "CUB_MAX_STEPS", "CUB_PROACTIVE_RESPONSE",
+    "CUB_RATE_LIMIT_PER_MINUTE", "CUB_TELEGRAM_ENABLED", "CUB_TELEGRAM_TOKEN", "CUB_TELEGRAM_ALLOW_FROM",
     "CUB_TELEGRAM_ALLOW_CHATS", "CUB_TELEGRAM_PROXY", "CUB_DISCORD_ENABLED", "CUB_DISCORD_TOKEN",
     "CUB_DISCORD_ALLOW_FROM", "CUB_DISCORD_ALLOW_CHANNELS", "CUB_DISCORD_COMMAND_PREFIX",
-    "CUB_DISCORD_PROXY", "HOME", "PWD",
+    "CUB_DISCORD_PROXY", "CUB_HEALTH_PORT", "HOME", "PWD",
   ]
   for key in keys {
     match getenv(key) {
@@ -58,6 +59,8 @@ pub fn collect_env_vars() -> Map[String, String] {
 /// Runtime settings for cub.
 pub struct Settings {
   model : String
+  model_vision : String?
+  model_fast : String?
   api_key : String?
   api_base : String?
   ollama_api_key : String?
@@ -72,6 +75,7 @@ pub struct Settings {
   tape_name : String
   max_steps : Int
   proactive_response : Bool
+  rate_limit_per_minute : Int
   telegram_enabled : Bool
   telegram_token : String?
   telegram_allow_from : Array[String]
@@ -83,6 +87,7 @@ pub struct Settings {
   discord_allow_channels : Array[String]
   discord_command_prefix : String
   discord_proxy : String?
+  health_port : Int?
   allowed_tools : Array[String]
   allowed_skills : Array[String]
 } derive(Show)
@@ -92,6 +97,8 @@ pub struct Settings {
 pub fn Settings::default() -> Settings {
   {
     model: "openrouter:qwen/qwen3-coder-next",
+    model_vision: None,
+    model_fast: None,
     api_key: None,
     api_base: None,
     ollama_api_key: None,
@@ -106,6 +113,7 @@ pub fn Settings::default() -> Settings {
     tape_name: "cub",
     max_steps: 100,
     proactive_response: false,
+    rate_limit_per_minute: 10,
     telegram_enabled: false,
     telegram_token: None,
     telegram_allow_from: [],
@@ -117,6 +125,7 @@ pub fn Settings::default() -> Settings {
     discord_allow_channels: [],
     discord_command_prefix: "!",
     discord_proxy: None,
+    health_port: None,
     allowed_tools: [],
     allowed_skills: [],
   }
@@ -341,6 +350,8 @@ pub async fn load_settings(workspace_path? : String? = None) -> Settings {
   let defaults = Settings::default()
   {
     model: get_env(combined, "CUB_MODEL").unwrap_or(defaults.model),
+    model_vision: get_env(combined, "CUB_MODEL_VISION"),
+    model_fast: get_env(combined, "CUB_MODEL_FAST"),
     api_key: get_env(combined, "CUB_API_KEY"),
     api_base: get_env(combined, "CUB_API_BASE"),
     ollama_api_key: get_env(combined, "CUB_OLLAMA_API_KEY"),
@@ -369,6 +380,9 @@ pub async fn load_settings(workspace_path? : String? = None) -> Settings {
     ),
     proactive_response: get_env_bool(combined, "CUB_PROACTIVE_RESPONSE").unwrap_or(
       defaults.proactive_response,
+    ),
+    rate_limit_per_minute: get_env_int(combined, "CUB_RATE_LIMIT_PER_MINUTE").unwrap_or(
+      defaults.rate_limit_per_minute,
     ),
     telegram_enabled: get_env_bool(combined, "CUB_TELEGRAM_ENABLED").unwrap_or(
       defaults.telegram_enabled,
@@ -415,6 +429,7 @@ pub async fn load_settings(workspace_path? : String? = None) -> Settings {
       defaults.discord_command_prefix,
     ),
     discord_proxy: get_env(combined, "CUB_DISCORD_PROXY"),
+    health_port: get_env_int(combined, "CUB_HEALTH_PORT"),
     allowed_tools: [],
     allowed_skills: [],
   }

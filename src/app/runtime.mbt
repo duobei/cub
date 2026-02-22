@@ -37,6 +37,7 @@ pub struct AppRuntime {
   store : @tape.FileTapeStore
   confirm_fn : ((String, String) -> Bool)?
   on_chunk : ((String) -> Unit)?
+  mcp_clients : Array[@mcp.McpClient]
 }
 
 ///|
@@ -51,7 +52,17 @@ pub async fn AppRuntime::new(
   let store = @tape.FileTapeStore::new(home, workspace)
   // Decay old learnings on startup
   decay_learnings(home, @async.now())
-  { settings, workspace, sessions: {}, store, confirm_fn, on_chunk }
+  // Load MCP servers
+  let mcp_clients = load_mcp_clients(home)
+  {
+    settings,
+    workspace,
+    sessions: {},
+    store,
+    confirm_fn,
+    on_chunk,
+    mcp_clients,
+  }
 }
 
 ///|
@@ -146,6 +157,8 @@ fn AppRuntime::create_session(
     home,
     allowed_skills=self.settings.allowed_skills,
   )
+  // Register MCP tools
+  register_mcp_tools(registry, self.mcp_clients)
   // Create tool view
   let tool_view = @tools.ProgressiveToolView::new(registry)
   // Create LLM client — auto-detect Ollama if no API key configured
@@ -169,6 +182,33 @@ fn AppRuntime::create_session(
     confirm_fn=self.confirm_fn,
     on_chunk=self.on_chunk,
   )
+  // Create optional vision and fast LLM clients
+  let llm_vision : @llm.LLMClient? = match self.settings.model_vision {
+    Some(m) =>
+      Some(
+        @llm.LLMClient::new(
+          m,
+          api_key,
+          max_tokens=self.settings.max_tokens,
+          confirm_fn=self.confirm_fn,
+          on_chunk=self.on_chunk,
+        ),
+      )
+    None => None
+  }
+  let llm_fast : @llm.LLMClient? = match self.settings.model_fast {
+    Some(m) =>
+      Some(
+        @llm.LLMClient::new(
+          m,
+          api_key,
+          max_tokens=self.settings.max_tokens,
+          confirm_fn=self.confirm_fn,
+          on_chunk=self.on_chunk,
+        ),
+      )
+    None => None
+  }
   // Create router
   let router = @core.InputRouter::new(registry, tool_view, tape, self.workspace)
   // Create model runner
@@ -211,6 +251,8 @@ fn AppRuntime::create_session(
     },
     llm,
     registry,
+    llm_vision~,
+    llm_fast~,
   )
   // Create agent loop with post-task learning extraction
   let learn_home = home
@@ -234,6 +276,72 @@ fn AppRuntime::create_session(
     update_skill_stats(learn_home, expanded_skills, steps, error)
   })
   { session_id, agent_loop, tape, model_runner, tool_view, registry }
+}
+
+///|
+/// Save active session state to disk for resume on restart.
+pub fn AppRuntime::save_active_session(
+  self : AppRuntime,
+  session_id : String,
+  channel : String,
+  channel_id : String,
+) -> Unit {
+  let home = self.settings.resolve_home()
+  let path = "\{home}/active_sessions.json"
+  // Read existing sessions
+  let content = read_file_sync(path)
+  let parsed : Json = @json.parse(content) catch { _ => Json::object({}) }
+  let sessions : Map[String, Json] = match parsed {
+    Object(obj) => obj
+    _ => {}
+  }
+  // Update this session
+  let entry : Map[String, Json] = {}
+  entry["channel"] = channel.to_json()
+  entry["channel_id"] = channel_id.to_json()
+  entry["last_active_ms"] = @async.now().to_double().to_json()
+  sessions[session_id] = Json::object(entry)
+  // Write back
+  ignore(write_file_sync(path, Json::object(sessions).stringify()))
+}
+
+///|
+/// Load active sessions from disk. Returns sessions active within the last 24h.
+pub fn AppRuntime::load_active_sessions(
+  self : AppRuntime,
+) -> Array[(String, String, String)] {
+  let home = self.settings.resolve_home()
+  let path = "\{home}/active_sessions.json"
+  let content = read_file_sync(path)
+  if content.is_empty() {
+    return []
+  }
+  let parsed : Json = @json.parse(content) catch { _ => return [] }
+  let sessions = match parsed {
+    Object(obj) => obj
+    _ => return []
+  }
+  let now = @async.now()
+  let day_ms = 24L * 60L * 60L * 1000L
+  let result : Array[(String, String, String)] = []
+  for session_id, entry in sessions {
+    let last_active = match entry {
+      { "last_active_ms": Number(n, ..), .. } => n.to_int64()
+      _ => 0L
+    }
+    if now - last_active < day_ms {
+      let channel = match entry {
+        { "channel": String(c), .. } => c
+        _ => continue
+      }
+      let channel_id = match entry {
+        { "channel_id": String(cid), .. } => cid
+        _ => continue
+      }
+      result.push((session_id, channel, channel_id))
+    }
+  }
+  result
 }
 
 ///|
@@ -1106,6 +1214,55 @@ pub fn AppRuntime::check_due_schedules(self : AppRuntime) -> Array[String] {
     ignore(write_file_sync(path, json_str))
   }
   due_messages
+}
+
+///|
+/// Load MCP client configurations and start servers.
+async fn load_mcp_clients(home : String) -> Array[@mcp.McpClient] {
+  let clients : Array[@mcp.McpClient] = []
+  // Try loading from ~/.cub/mcp.json
+  let config_path = "\{home}/mcp.json"
+  let config_content = read_file_sync(config_path)
+  let configs = if config_content.length() > 0 {
+    @mcp.load_mcp_configs(config_content)
+  } else {
+    // Try CUB_MCP_SERVERS env var
+    match @config.getenv("CUB_MCP_SERVERS") {
+      Some(s) => @mcp.load_mcp_configs(s)
+      None => []
+    }
+  }
+  for config in configs {
+    let client = @mcp.McpClient::new(config)
+    let started = client.start()
+    if started {
+      ignore(client.discover_tools())
+      clients.push(client)
+    }
+  }
+  clients
+}
+
+///|
+/// Register MCP tools into a tool registry.
+fn register_mcp_tools(
+  registry : @tools.ToolRegistry,
+  mcp_clients : Array[@mcp.McpClient],
+) -> Unit {
+  for client in mcp_clients {
+    let server_name = client.config.name
+    for tool in client.tools {
+      let tool_name = "mcp.\{server_name}.\{tool.name}"
+      let mcp_tool_name = tool.name
+      let mcp_client = client
+      registry.register(
+        tool_name,
+        tool.description,
+        parameters=tool.input_schema,
+        handler=async fn(args) { mcp_client.call_tool(mcp_tool_name, args) },
+      )
+    }
+  }
 }
 
 // ── Learning extraction and persistence ──
