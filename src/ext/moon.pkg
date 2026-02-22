@@ -1,9 +1,8 @@
 import {
-  "duobei/cub/config" @config,
-  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/async/fs" @fs,
   "moonbitlang/core/json",
 }
 
-options(
-  "native-stub": [ "ext_ffi.c" ],
-)
+import {
+  "moonbitlang/async",
+} for "test"

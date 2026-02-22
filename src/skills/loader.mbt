@@ -11,68 +11,27 @@ pub struct SkillMetadata {
 } derive(Show)
 
 ///|
-/// FFI: list directory entries into buffer, returns total size or -1.
-#borrow(path, buf)
-extern "C" fn cub_skills_list_dir(
-  path : Bytes,
-  buf : Bytes,
-  buf_size : Int,
-) -> Int = "cub_skills_list_dir"
-
-///|
-/// FFI: read file into buffer, returns file size or -1.
-#borrow(path, buf)
-extern "C" fn cub_skills_read_file(
-  path : Bytes,
-  buf : Bytes,
-  buf_size : Int,
-) -> Int = "cub_skills_read_file"
-
-///|
-/// Read a file synchronously via C FFI two-pass pattern.
-fn read_file_sync(path : String) -> String {
-  let path_bytes = @config.string_to_cstr(path)
-  let len = cub_skills_read_file(path_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    return ""
+/// Read a file via async fs.
+async fn read_file_async(path : String) -> String {
+  let data = @fs.read_file(path) catch { _ => return "" }
+  data.text() catch {
+    _ => ""
   }
-  let buf = Bytes::new(len)
-  let actual = cub_skills_read_file(path_bytes, buf, len)
-  if actual <= 0 {
-    return ""
-  }
-  @utf8.decode_lossy(buf[:actual])
 }
 
 ///|
-/// List directory entries synchronously via C FFI two-pass pattern.
-fn list_dir_sync(path : String) -> Array[String] {
-  let path_bytes = @config.string_to_cstr(path)
-  let len = cub_skills_list_dir(path_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    return []
+/// List directory entries via async fs.
+async fn list_dir_async(path : String) -> Array[String] {
+  @fs.readdir(path) catch {
+    _ => []
   }
-  let buf = Bytes::new(len)
-  let actual = cub_skills_list_dir(path_bytes, buf, len)
-  if actual <= 0 {
-    return []
-  }
-  let text = @utf8.decode_lossy(buf[:actual])
-  let entries : Array[String] = []
-  for part in text.split("\n") {
-    let s = part.to_string()
-    if s.length() > 0 {
-      entries.push(s)
-    }
-  }
-  entries
 }
 
 ///|
 /// Discover skills from workspace and global paths.
 /// Three-level discovery: workspace/.agent/skills/, ~/.agent/skills/, builtin.
 /// First-match-wins deduplication by name.
-pub fn discover_skills(workspace : String) -> Array[SkillMetadata] {
+pub async fn discover_skills(workspace : String) -> Array[SkillMetadata] {
   let seen : Map[String, Bool] = {}
   let skills : Array[SkillMetadata] = []
   // Level 1: workspace skills
@@ -99,17 +58,17 @@ fn get_home_dir() -> String {
 
 ///|
 /// Scan a skills directory for subdirectories containing SKILL.md.
-fn scan_skills_dir(
+async fn scan_skills_dir(
   dir : String,
   source : String,
   seen : Map[String, Bool],
   skills : Array[SkillMetadata],
 ) -> Unit {
-  let entries = list_dir_sync(dir)
+  let entries = list_dir_async(dir)
   for entry in entries {
     let skill_dir = "\{dir}/\{entry}"
     let skill_md_path = "\{skill_dir}/SKILL.md"
-    let content = read_file_sync(skill_md_path)
+    let content = read_file_async(skill_md_path)
     if content.is_empty() {
       continue
     }
@@ -324,7 +283,7 @@ fn find_char(s : String, ch : Char) -> Int {
 ///|
 /// Load the full SKILL.md body for a skill name.
 /// Searches workspace, global, and builtin skill locations.
-pub fn load_skill_body(name : String, workspace : String) -> String? {
+pub async fn load_skill_body(name : String, workspace : String) -> String? {
   let lower_name = name.to_lower()
   // Search in order: workspace, global, builtin
   let dirs : Array[(String, String)] = []
@@ -338,7 +297,7 @@ pub fn load_skill_body(name : String, workspace : String) -> String? {
     let (dir, _source) = pair
     // Try original name first
     let skill_md_path = "\{dir}/\{name}/SKILL.md"
-    let content = read_file_sync(skill_md_path)
+    let content = read_file_async(skill_md_path)
     if content.length() > 0 {
       let (_meta, body) = parse_frontmatter(content)
       return Some(body)
@@ -346,7 +305,7 @@ pub fn load_skill_body(name : String, workspace : String) -> String? {
     // Try lowercase name
     if lower_name != name {
       let lower_path = "\{dir}/\{lower_name}/SKILL.md"
-      let lower_content = read_file_sync(lower_path)
+      let lower_content = read_file_async(lower_path)
       if lower_content.length() > 0 {
         let (_meta, body) = parse_frontmatter(lower_content)
         return Some(body)

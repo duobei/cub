@@ -4,7 +4,7 @@
 /// Discover extensions from all search paths.
 /// Priority: workspace tools/plugins > global tools/plugins.
 /// Deduplicates by name (first wins = workspace overrides global).
-pub fn discover_extensions(
+pub async fn discover_extensions(
   home : String,
   workspace : String,
 ) -> Array[ExtManifest] {
@@ -37,7 +37,7 @@ pub fn discover_extensions(
 
 ///|
 /// Load a single directory entry as an extension manifest.
-fn load_entry(
+async fn load_entry(
   dir : String,
   entry : String,
   ext_type : ExtType,
@@ -52,7 +52,7 @@ fn load_entry(
 ///|
 /// Load a script tool entry. Expects an executable file (e.g. check-pr.sh).
 /// Optionally reads a .json manifest with the same base name.
-fn load_script_entry(
+async fn load_script_entry(
   dir : String,
   entry : String,
   scope : String,
@@ -73,7 +73,7 @@ fn load_script_entry(
 
 ///|
 /// Load a WASM plugin entry. Expects a directory with plugin.json manifest.
-fn load_wasm_entry(
+async fn load_wasm_entry(
   dir : String,
   entry : String,
   scope : String,
@@ -107,14 +107,14 @@ fn load_wasm_entry(
 
 ///|
 /// Find the .wasm file in a plugin directory (public API).
-pub fn find_wasm_in_plugin(plugin_dir : String) -> String {
+pub async fn find_wasm_in_plugin(plugin_dir : String) -> String {
   find_wasm_file(plugin_dir)
 }
 
 ///|
 /// Find the .wasm file in a plugin directory.
 /// Looks in _build subdirectories for main.wasm.
-fn find_wasm_file(plugin_dir : String) -> String {
+async fn find_wasm_file(plugin_dir : String) -> String {
   // Common path: _build/target/wasm/release/build/main/main.wasm
   let candidates = [
     "\{plugin_dir}/_build/wasm/release/build/cmd/main/main.wasm",
@@ -140,7 +140,7 @@ fn find_wasm_file(plugin_dir : String) -> String {
 ///|
 /// Read companion .json manifest for a script tool.
 /// Returns (description, parameters).
-fn read_script_manifest(dir : String, entry : String) -> (String, Json) {
+async fn read_script_manifest(dir : String, entry : String) -> (String, Json) {
   let base = strip_extension(entry)
   let manifest_path = "\{dir}/\{base}.json"
   let content = read_ext_file(manifest_path)
@@ -187,59 +187,18 @@ fn strip_extension(filename : String) -> String {
 }
 
 ///|
-/// List directory entries via C FFI.
-fn list_ext_dir(path : String) -> Array[String] {
-  let path_bytes = @config.string_to_cstr(path)
-  let len = cub_ext_list_dir(path_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    return []
+/// List directory entries via async fs.
+async fn list_ext_dir(path : String) -> Array[String] {
+  @fs.readdir(path) catch {
+    _ => []
   }
-  let buf = Bytes::new(len)
-  let actual = cub_ext_list_dir(path_bytes, buf, len)
-  if actual <= 0 {
-    return []
-  }
-  let text = @utf8.decode_lossy(buf[:actual])
-  let entries : Array[String] = []
-  for part in text.split("\n") {
-    let s = part.to_string()
-    if not(s.is_empty()) {
-      entries.push(s)
-    }
-  }
-  entries
 }
 
 ///|
-/// Read file content via C FFI.
-fn read_ext_file(path : String) -> String {
-  let path_bytes = @config.string_to_cstr(path)
-  let len = cub_ext_read_file(path_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    return ""
+/// Read file content via async fs.
+async fn read_ext_file(path : String) -> String {
+  let data = @fs.read_file(path) catch { _ => return "" }
+  data.text() catch {
+    _ => ""
   }
-  let buf = Bytes::new(len)
-  let actual = cub_ext_read_file(path_bytes, buf, len)
-  if actual <= 0 {
-    return ""
-  }
-  @utf8.decode_lossy(buf[:actual])
 }
-
-///|
-/// FFI: list directory entries.
-#borrow(path, buf)
-extern "C" fn cub_ext_list_dir(
-  path : Bytes,
-  buf : Bytes,
-  buf_size : Int,
-) -> Int = "cub_ext_list_dir"
-
-///|
-/// FFI: read file content.
-#borrow(path, buf)
-extern "C" fn cub_ext_read_file(
-  path : Bytes,
-  buf : Bytes,
-  buf_size : Int,
-) -> Int = "cub_ext_read_file"

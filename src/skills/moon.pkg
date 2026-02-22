@@ -1,8 +1,4 @@
 import {
+  "moonbitlang/async/fs" @fs,
   "duobei/cub/config" @config,
-  "moonbitlang/core/encoding/utf8",
 }
-
-options(
-  "native-stub": [ "skills_ffi.c" ],
-)

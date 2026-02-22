@@ -1,69 +1,64 @@
 /// MCP client — JSON-RPC 2.0 over stdio transport.
 
 ///|
-/// FFI: spawn a child process with bidirectional pipes.
-#borrow(command, args, env_keys, env_vals)
-extern "C" fn cub_mcp_spawn(
-  command : Bytes,
-  args : Bytes,
-  env_keys : Bytes,
-  env_vals : Bytes,
-) -> Int = "cub_mcp_spawn"
-
-///|
-/// FFI: write data to child stdin.
-#borrow(data)
-extern "C" fn cub_mcp_write(slot : Int, data : Bytes, len : Int) -> Int = "cub_mcp_write"
-
-///|
-/// FFI: read data from child stdout.
-#borrow(buf)
-extern "C" fn cub_mcp_read(slot : Int, buf : Bytes, buf_size : Int) -> Int = "cub_mcp_read"
-
-///|
-/// FFI: kill child process.
-extern "C" fn cub_mcp_kill(slot : Int) -> Int = "cub_mcp_kill"
-
-///|
-/// FFI: check if process is alive.
-extern "C" fn cub_mcp_alive(slot : Int) -> Int = "cub_mcp_alive"
-
-///|
 /// Create a new MCP client for a server configuration.
 pub fn McpClient::new(config : McpServerConfig) -> McpClient {
-  { config, slot: -1, request_id: 0, initialized: false, tools: [] }
+  {
+    config,
+    pid: -1,
+    writer: None,
+    reader: None,
+    request_id: 0,
+    initialized: false,
+    tools: [],
+  }
 }
 
 ///|
 /// Check if the MCP server process is still alive.
-pub fn McpClient::is_alive(self : McpClient) -> Bool {
-  if self.slot < 0 {
+pub async fn McpClient::is_alive(self : McpClient) -> Bool {
+  if self.pid <= 0 {
     return false
   }
-  cub_mcp_alive(self.slot) == 1
+  let pid_str = self.pid.to_string()
+  let kill_args : Array[String] = ["-0", pid_str]
+  let rc = @process.run("kill", kill_args[:])
+  rc == 0
 }
 
 ///|
 /// Start the MCP server process and perform initialization handshake.
 pub async fn McpClient::start(self : McpClient) -> Bool {
-  let cmd = @config.string_to_cstr(self.config.command)
-  let args_str = self.config.args.join("\n")
-  let args = @config.string_to_cstr(args_str)
-  let env_keys_arr : Array[String] = []
-  let env_vals_arr : Array[String] = []
-  for k, v in self.config.env {
-    env_keys_arr.push(k)
-    env_vals_arr.push(v)
+  let (stdin_input, writer) = @process.write_to_process() catch {
+    _ => {
+      @log.error("mcp", "failed to create stdin pipe")
+      return false
+    }
   }
-  let env_keys = @config.string_to_cstr(env_keys_arr.join("\n"))
-  let env_vals = @config.string_to_cstr(env_vals_arr.join("\n"))
-  let slot = cub_mcp_spawn(cmd, args, env_keys, env_vals)
-  if slot < 0 {
+  let (reader, stdout_output) = @process.read_from_process() catch {
+    _ => {
+      writer.close()
+      @log.error("mcp", "failed to create stdout pipe")
+      return false
+    }
+  }
+  let pid = @process.spawn_orphan(
+    self.config.command,
+    self.config.args[:],
+    extra_env=self.config.env,
+    stdin=stdin_input,
+    stdout=stdout_output,
+  )
+  if pid <= 0 {
+    writer.close()
+    reader.close()
     @log.error("mcp", "failed to spawn process: \{self.config.command}")
     return false
   }
-  self.slot = slot
-  @log.info("mcp", "spawned \{self.config.name} (slot \{slot})")
+  self.pid = pid
+  self.writer = Some(writer)
+  self.reader = Some(reader)
+  @log.info("mcp", "spawned \{self.config.name} (pid \{pid})")
   // Wait briefly for process to start
   @async.sleep(500)
   // Send initialize request
@@ -204,13 +199,36 @@ pub async fn McpClient::call_tool(
 
 ///|
 /// Stop the MCP server process.
-pub fn McpClient::stop(self : McpClient) -> Unit {
-  if self.slot >= 0 {
-    ignore(cub_mcp_kill(self.slot))
-    @log.info("mcp", "stopped \{self.config.name}")
-    self.slot = -1
-    self.initialized = false
+pub async fn McpClient::stop(self : McpClient) -> Unit {
+  if self.pid <= 0 {
+    return
   }
+  // Close pipes
+  match self.writer {
+    Some(w) => w.close()
+    None => ()
+  }
+  match self.reader {
+    Some(r) => r.close()
+    None => ()
+  }
+  self.writer = None
+  self.reader = None
+  // Send SIGTERM
+  let pid_str = self.pid.to_string()
+  let term_args : Array[String] = ["-TERM", pid_str]
+  ignore(@process.run("kill", term_args[:]))
+  @async.sleep(200)
+  // Check if still alive, force kill if needed
+  let check_args : Array[String] = ["-0", pid_str]
+  let rc = @process.run("kill", check_args[:])
+  if rc == 0 {
+    let kill_args : Array[String] = ["-9", pid_str]
+    ignore(@process.run("kill", kill_args[:]))
+  }
+  @log.info("mcp", "stopped \{self.config.name}")
+  self.pid = -1
+  self.initialized = false
 }
 
 ///|
@@ -229,40 +247,68 @@ async fn McpClient::send_request(
   req["params"] = params
   let msg = Json::object(req).stringify()
   let line = "\{msg}\n"
-  let line_bytes = @utf8.encode(line)
-  let written = cub_mcp_write(self.slot, line_bytes, line_bytes.length())
-  if written < 0 {
-    @log.error("mcp", "write failed for \{rpc_method}")
-    return None
-  }
-  // Read response with timeout (up to 30s)
-  let buf = Bytes::new(65536)
-  let response_buf = StringBuilder::new()
-  let mut attempts = 0
-  while attempts < 300 {
-    attempts += 1
-    let n = cub_mcp_read(self.slot, buf, 65536)
-    if n > 0 {
-      response_buf.write_string(@utf8.decode_lossy(buf[:n]))
-      let text = response_buf.to_string()
-      // Look for complete JSON-RPC response (newline-delimited)
-      match find_jsonrpc_response(text, id) {
-        Some(result) => return Some(result)
-        None => ()
-      }
-    } else if n < 0 {
-      @log.error("mcp", "read error for \{rpc_method}")
+  let writer = match self.writer {
+    Some(w) => w
+    None => {
+      @log.error("mcp", "no writer for \{rpc_method}")
       return None
     }
-    @async.sleep(100)
   }
-  @log.warn("mcp", "timeout waiting for response to \{rpc_method}")
-  None
+  writer.write(line) catch {
+    _ => {
+      @log.error("mcp", "write failed for \{rpc_method}")
+      return None
+    }
+  }
+  let reader = match self.reader {
+    Some(r) => r
+    None => {
+      @log.error("mcp", "no reader for \{rpc_method}")
+      return None
+    }
+  }
+  // Read response with 30s timeout
+  let result = @async.with_timeout_opt(30000, async fn() {
+    while true {
+      let text = reader.read_until("\n") catch { _ => return None }
+      match text {
+        None => return None
+        Some(line_text) => {
+          let trimmed = line_text.trim().to_string()
+          if trimmed.is_empty() {
+            continue
+          }
+          let json = @json.parse(trimmed) catch { _ => continue }
+          match json {
+            { "id": Number(n, ..), "result": result, .. } =>
+              if n.to_int() == id {
+                return Some(result)
+              }
+            { "id": Number(n, ..), "error": error, .. } =>
+              if n.to_int() == id {
+                let err_map : Map[String, Json] = {}
+                err_map["error"] = error
+                return Some(Json::object(err_map))
+              }
+            _ => () // notification or unrelated message
+          }
+        }
+      }
+    }
+    None
+  })
+  match result {
+    Some(inner) => inner
+    None => {
+      @log.warn("mcp", "timeout waiting for response to \{rpc_method}")
+      None
+    }
+  }
 }
 
 ///|
 /// Send a JSON-RPC notification (no response expected).
-fn McpClient::send_notification(
+async fn McpClient::send_notification(
   self : McpClient,
   rpc_method : String,
   params : Json,
@@ -273,34 +319,13 @@ fn McpClient::send_notification(
   req["params"] = params
   let msg = Json::object(req).stringify()
   let line = "\{msg}\n"
-  let line_bytes = @utf8.encode(line)
-  ignore(cub_mcp_write(self.slot, line_bytes, line_bytes.length()))
-}
-
-///|
-/// Find a JSON-RPC response with matching ID in newline-delimited text.
-fn find_jsonrpc_response(text : String, id : Int) -> Json? {
-  for line in text.split("\n") {
-    let line_str = line.to_string().trim().to_string()
-    if line_str.is_empty() {
-      continue
-    }
-    let json = @json.parse(line_str) catch { _ => continue }
-    match json {
-      { "id": Number(n, ..), "result": result, .. } =>
-        if n.to_int() == id {
-          return Some(result)
-        }
-      { "id": Number(n, ..), "error": error, .. } =>
-        if n.to_int() == id {
-          let err_map : Map[String, Json] = {}
-          err_map["error"] = error
-          return Some(Json::object(err_map))
-        }
-      _ => ()
-    }
+  let writer = match self.writer {
+    Some(w) => w
+    None => return
   }
-  None
+  writer.write(line) catch {
+    _ => ()
+  }
 }
 
 ///|

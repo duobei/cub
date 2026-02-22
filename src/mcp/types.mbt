@@ -21,8 +21,10 @@ pub struct McpTool {
 /// MCP client state for a single server.
 pub struct McpClient {
   config : McpServerConfig
-  mut slot : Int
+  mut pid : Int
+  mut writer : @process.WriteToProcess?
+  mut reader : @process.ReadFromProcess?
   mut request_id : Int
   mut initialized : Bool
   tools : Array[McpTool]
-} derive(Show)
+}

@@ -1,9 +1,13 @@
-/// Interactive REPL with readline history and shell mode toggle.
+/// Interactive REPL with history and shell mode toggle.
 
 ///|
-/// CLI-based tool confirmation using readline.
+/// In-memory command history (max 500 entries).
+let cli_history : Array[String] = []
+
+///|
+/// CLI-based tool confirmation using async stdin.
 /// Returns true if user approves, false otherwise.
-pub fn confirm_tool(tool_name : String, args : String) -> Bool {
+pub async fn confirm_tool(tool_name : String, args : String) -> Bool {
   // Truncate long args for display
   let display_args = if args.length() > 200 {
     (args[:200].to_string() catch { _ => args }) + "..."
@@ -40,62 +44,48 @@ pub fn InteractiveCli::new(
 }
 
 ///|
-/// Read a line using GNU readline (with editing and history).
-fn readline_read(prompt : String) -> String? {
-  let prompt_bytes = @config.string_to_cstr(prompt)
-  // Two-pass: get length first
-  let len = cub_readline(prompt_bytes, Bytes::new(0), 0)
-  if len < 0 {
-    return None // EOF
+/// Read a line from stdin with a prompt.
+async fn readline_read(prompt : String) -> String? {
+  @stdio.stdout.write(prompt) catch {
+    _ => ()
   }
-  if len == 0 {
-    return Some("")
-  }
-  let buf = Bytes::new(len)
-  let actual = cub_readline(prompt_bytes, buf, len)
-  if actual < 0 {
-    return None
-  }
-  Some(@utf8.decode_lossy(buf[:actual]))
+  let line = @stdio.stdin.read_until("\n") catch { _ => return None }
+  line
 }
 
 ///|
-/// Add a line to readline history.
+/// Add a line to in-memory history.
 fn add_history(line : String) -> Unit {
-  let bytes = @config.string_to_cstr(line)
-  cub_add_history(bytes)
+  if line.is_empty() {
+    return
+  }
+  if cli_history.length() >= 500 {
+    ignore(cli_history.remove(0))
+  }
+  cli_history.push(line)
 }
 
 ///|
-/// Load history from file.
-fn load_history(path : String) -> Unit {
-  let bytes = @config.string_to_cstr(path)
-  ignore(cub_read_history(bytes))
+/// Load history from file into memory.
+async fn load_history(path : String) -> Unit {
+  let data = @fs.read_file(path) catch { _ => return }
+  let text = data.text() catch { _ => return }
+  for line in text.split("\n") {
+    let s = line.to_string()
+    if s.length() > 0 {
+      cli_history.push(s)
+    }
+  }
 }
 
 ///|
-/// Save history to file.
-fn save_history(path : String) -> Unit {
-  let bytes = @config.string_to_cstr(path)
-  ignore(cub_write_history(bytes))
+/// Save in-memory history to file.
+async fn save_history(path : String) -> Unit {
+  let content = cli_history.join("\n")
+  @fs.write_file(path, content, create=0o644) catch {
+    _ => ()
+  }
 }
-
-///|
-/// FFI bindings.
-#borrow(prompt, buf)
-extern "C" fn cub_readline(prompt : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_readline"
-
-///|
-#borrow(line)
-extern "C" fn cub_add_history(line : Bytes) -> Unit = "cub_add_history"
-
-///|
-#borrow(path)
-extern "C" fn cub_read_history(path : Bytes) -> Int = "cub_read_history"
-
-///|
-#borrow(path)
-extern "C" fn cub_write_history(path : Bytes) -> Int = "cub_write_history"
 
 ///|
 /// Run the interactive REPL.

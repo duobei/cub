@@ -88,12 +88,7 @@ pub fn error(source : String, msg : String) -> Unit {
 }
 
 ///|
-/// FFI: write a line to stderr.
+/// Write a log line to stdout (previously stderr via C FFI).
 fn cub_log_stderr(line : String) -> Unit {
-  let bytes = @config.string_to_cstr(line)
-  ignore(cub_write_stderr(bytes, bytes.length() - 1))
+  println(line)
 }
-
-///|
-#borrow(buf)
-extern "C" fn cub_write_stderr(buf : Bytes, len : Int) -> Int = "cub_write_stderr"

@@ -4,7 +4,3 @@ import {
   "moonbitlang/core/json",
   "moonbitlang/core/strconv",
 }
-
-options(
-  "native-stub": [ "env_ffi.c" ],
-)

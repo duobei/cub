@@ -1,7 +1,3 @@
 import {
   "duobei/cub/config" @config,
 }
-
-options(
-  "native-stub": [ "log_ffi.c" ],
-)

@@ -13,7 +13,7 @@ test "derive_tool_name handles edge cases" {
 }
 
 ///|
-test "discover_extensions returns empty for nonexistent dirs" {
+async test "discover_extensions returns empty for nonexistent dirs" {
   let results = @ext.discover_extensions("/nonexistent/home", "/nonexistent/ws")
   inspect(results.length(), content="0")
 }

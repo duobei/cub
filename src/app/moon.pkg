@@ -1,5 +1,7 @@
 import {
   "moonbitlang/async" @async,
+  "moonbitlang/async/fs" @fs,
+  "moonbitlang/async/http" @http,
   "duobei/cub/config" @config,
   "duobei/cub/tape" @tape,
   "duobei/cub/llm" @llm,
@@ -13,7 +15,3 @@ import {
   "moonbitlang/core/json",
   "moonbitlang/core/encoding/utf8",
 }
-
-options(
-  "native-stub": [ "file_ffi.c" ],
-)

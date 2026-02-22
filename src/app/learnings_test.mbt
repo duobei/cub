@@ -23,7 +23,7 @@ test "learnings_similar rejects unrelated" {
 }
 
 ///|
-test "add_learning creates new entry" {
+async test "add_learning creates new entry" {
   let home = "/tmp/cub_test_learnings_new"
   @app.write_learnings(home, []) |> ignore
   let result = @app.add_learning(home, "heuristic", "test content", 1000L)
@@ -41,7 +41,7 @@ test "add_learning creates new entry" {
 }
 
 ///|
-test "add_learning dedup reinforces existing" {
+async test "add_learning dedup reinforces existing" {
   let home = "/tmp/cub_test_learnings_dedup"
   // Create initial learning
   @app.write_learnings(home, []) |> ignore
@@ -60,7 +60,7 @@ test "add_learning dedup reinforces existing" {
 }
 
 ///|
-test "add_learning returns content on crystallization threshold" {
+async test "add_learning returns content on crystallization threshold" {
   let home = "/tmp/cub_test_learnings_crystal"
   @app.write_learnings(home, []) |> ignore
   // Build up reinforcement
@@ -75,7 +75,7 @@ test "add_learning returns content on crystallization threshold" {
 }
 
 ///|
-test "decay_learnings reduces confidence" {
+async test "decay_learnings reduces confidence" {
   let home = "/tmp/cub_test_learnings_decay"
   // Create a learning with last_used 10 weeks ago
   let ms_per_week : Int64 = 7L * 24L * 60L * 60L * 1000L
@@ -102,7 +102,7 @@ test "decay_learnings reduces confidence" {
 }
 
 ///|
-test "decay_learnings prunes low confidence" {
+async test "decay_learnings prunes low confidence" {
   let home = "/tmp/cub_test_learnings_prune"
   let ms_per_week : Int64 = 7L * 24L * 60L * 60L * 1000L
   let now : Int64 = 100L * ms_per_week
@@ -122,14 +122,14 @@ test "decay_learnings prunes low confidence" {
 }
 
 ///|
-test "render_learnings returns empty for no learnings" {
+async test "render_learnings returns empty for no learnings" {
   let home = "/tmp/cub_test_render_empty"
   @app.write_learnings(home, []) |> ignore
   inspect(@app.render_learnings(home), content="")
 }
 
 ///|
-test "render_learnings formats learnings with tags" {
+async test "render_learnings formats learnings with tags" {
   let home = "/tmp/cub_test_render_tags"
   let e1 : Map[String, Json] = {}
   e1["type"] = "anti_pattern".to_json()
@@ -154,7 +154,7 @@ test "render_learnings formats learnings with tags" {
 }
 
 ///|
-test "render_learnings filters low confidence" {
+async test "render_learnings filters low confidence" {
   let home = "/tmp/cub_test_render_filter"
   let e1 : Map[String, Json] = {}
   e1["type"] = "heuristic".to_json()
@@ -170,7 +170,7 @@ test "render_learnings filters low confidence" {
 }
 
 ///|
-test "update_skill_stats tracks usage" {
+async test "update_skill_stats tracks usage" {
   let home = "/tmp/cub_test_skill_stats"
   @app.write_skill_stats(home, {}) |> ignore
   let skills : Map[String, String] = {}
@@ -187,7 +187,7 @@ test "update_skill_stats tracks usage" {
 }
 
 ///|
-test "update_skill_stats tracks failures" {
+async test "update_skill_stats tracks failures" {
   let home = "/tmp/cub_test_skill_stats_fail"
   @app.write_skill_stats(home, {}) |> ignore
   let skills : Map[String, String] = {}
@@ -201,7 +201,7 @@ test "update_skill_stats tracks failures" {
 }
 
 ///|
-test "update_skill_stats accumulates across calls" {
+async test "update_skill_stats accumulates across calls" {
   let home = "/tmp/cub_test_skill_stats_accum"
   @app.write_skill_stats(home, {}) |> ignore
   let skills : Map[String, String] = {}
@@ -219,7 +219,7 @@ test "update_skill_stats accumulates across calls" {
 }
 
 ///|
-test "update_skill_stats skips empty skills" {
+async test "update_skill_stats skips empty skills" {
   let home = "/tmp/cub_test_skill_stats_empty"
   @app.write_skill_stats(home, {}) |> ignore
   let skills : Map[String, String] = {}
@@ -229,7 +229,7 @@ test "update_skill_stats skips empty skills" {
 }
 
 ///|
-test "extract_learnings detects failure pattern" {
+async test "extract_learnings detects failure pattern" {
   let home = "/tmp/cub_test_learnings_extract"
   @app.write_learnings(home, []) |> ignore
   // Create mock tape entries with tool calls
@@ -257,7 +257,7 @@ test "extract_learnings detects failure pattern" {
 }
 
 ///|
-test "extract_learnings detects efficient completion" {
+async test "extract_learnings detects efficient completion" {
   let home = "/tmp/cub_test_learnings_efficient"
   @app.write_learnings(home, []) |> ignore
   let call_fn : Map[String, Json] = {}
@@ -291,7 +291,7 @@ test "skill_name_from_content generates name" {
 }
 
 ///|
-test "crystallize_skill creates skill file" {
+async test "crystallize_skill creates skill file" {
   // crystallize_skill writes to .agent/skills/ dir — test that it returns a name
   // The write may fail in test env without the dir, but the function should not crash
   let ws = "/tmp/cub_test_crystallize"

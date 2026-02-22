@@ -1,15 +1,9 @@
 ///|
-/// FFI: start health check TCP server on port.
-extern "C" fn cub_health_start(port : Int) -> Int = "cub_health_start"
-
-///|
-/// FFI: poll for and handle one health check request.
-extern "C" fn cub_health_poll(session_count : Int) -> Int = "cub_health_poll"
-
-///|
 /// CLI entry point for cub.
 fn main {
   @async.run_async_main(async fn() {
+    // Initialize environment snapshot before anything else
+    @config.init_env()
     let args = @env.args()
     // Parse CLI flags and positional args
     let parsed = parse_cli_args(args)
@@ -28,7 +22,7 @@ fn main {
     // Parse command
     let command = parsed.command
     // Create runtime — CLI modes get tool confirmation, channels auto-approve
-    let confirm_fn : ((String, String) -> Bool)? = if command == "chat" {
+    let confirm_fn : (async (String, String) -> Bool)? = if command == "chat" {
       Some(@cli.confirm_tool)
     } else {
       None
@@ -93,18 +87,6 @@ fn main {
         // Rate limiter: sliding window per session
         let rate_timestamps : Map[String, Array[Int64]] = {}
         let rate_limit = settings.rate_limit_per_minute
-        // Start health check endpoint if configured
-        match settings.health_port {
-          Some(port) => {
-            let rc = cub_health_start(port)
-            if rc == 0 {
-              @log.info("health", "listening on port \{port}")
-            } else {
-              @log.warn("health", "failed to start on port \{port}")
-            }
-          }
-          None => ()
-        }
         @log.info("cub", "starting message channels...")
         // Resume active sessions from last run
         let active_sessions = runtime.load_active_sessions()
@@ -123,20 +105,18 @@ fn main {
             }
           }
         }
-        // Run health check polling and channel manager concurrently
-        let health_enabled = settings.health_port is Some(_)
+        // Run health server and channel manager concurrently
+        let health_port = settings.health_port
+        let start_time = @async.now()
         @async.with_task_group(async fn(outer_group) {
-          // Background: poll health check endpoint every 1s
-          if health_enabled {
-            outer_group.spawn_bg(
-              async fn() {
-                for {
-                  ignore(cub_health_poll(0))
-                  @async.sleep(1000)
-                }
-              },
-              allow_failure=true,
-            )
+          // Background: run health check HTTP server
+          match health_port {
+            Some(port) =>
+              outer_group.spawn_bg(
+                async fn() { run_health_server(port, start_time) },
+                allow_failure=true,
+              )
+            None => ()
           }
           manager.run(async fn(msg) {
             // Check rate limit
@@ -516,4 +496,43 @@ fn extract_channel_id(session_id : String) -> String {
   session_id[colon_pos + 1:].to_string() catch {
     _ => session_id
   }
+}
+
+///|
+/// Run an async HTTP health check server on the given port.
+async fn run_health_server(port : Int, start_time : Int64) -> Unit {
+  let addr_str = "0.0.0.0:\{port}"
+  let addr = @socket.Addr::parse(addr_str) catch {
+    _ => {
+      @log.warn("health", "failed to parse address \{addr_str}")
+      return
+    }
+  }
+  let server = @http.Server::new(addr, reuse_addr=true) catch {
+    _ => {
+      @log.warn("health", "failed to start on port \{port}")
+      return
+    }
+  }
+  @log.info("health", "listening on port \{port}")
+  server.run_forever(
+    async fn(_req, _reader, conn) {
+      let now = @async.now()
+      let uptime = (now - start_time) / 1000L
+      let body = "{\"status\":\"ok\",\"uptime\":\{uptime},\"sessions\":0}"
+      let headers : Map[String, String] = {}
+      headers["Content-Type"] = "application/json"
+      headers["Content-Length"] = body.length().to_string()
+      headers["Connection"] = "close"
+      conn.send_response(200, "OK", extra_headers=headers)
+      conn.write(body) catch {
+        _ => ()
+      }
+      conn.flush() catch {
+        _ => ()
+      }
+      conn.close()
+    },
+    allow_failure=true,
+  )
 }

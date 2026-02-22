@@ -125,7 +125,7 @@ pub struct LLMClient {
   max_tokens : Int
   context_budget : Int
   handoff_threshold : Int
-  confirm_fn : ((String, String) -> Bool)?
+  confirm_fn : (async (String, String) -> Bool)?
   on_chunk : ((String) -> Unit)?
 }
 
@@ -139,7 +139,7 @@ pub fn LLMClient::new(
   max_tokens? : Int = 1024,
   context_budget? : Int = 128000,
   handoff_threshold? : Int = 90,
-  confirm_fn? : ((String, String) -> Bool)? = None,
+  confirm_fn? : (async (String, String) -> Bool)? = None,
   on_chunk? : ((String) -> Unit)? = None,
 ) -> LLMClient {
   let (provider, model_id) = parse_model_spec(model)

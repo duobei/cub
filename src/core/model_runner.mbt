@@ -10,14 +10,14 @@ pub struct ModelRunner {
   tape : @tape.TapeService
   router : InputRouter
   tool_view : @tools.ProgressiveToolView
-  list_skills : () -> Array[@skills.SkillMetadata]
-  load_skill_body : (String) -> String?
+  list_skills : async () -> Array[@skills.SkillMetadata]
+  load_skill_body : async (String) -> String?
   model : String
   max_steps : Int
   max_tokens : Int
   model_timeout_seconds : Int?
   base_system_prompt : String
-  get_workspace_system_prompt : () -> String
+  get_workspace_system_prompt : async () -> String
   llm : @llm.LLMClient
   llm_vision : @llm.LLMClient?
   llm_fast : @llm.LLMClient?
@@ -31,14 +31,14 @@ pub fn ModelRunner::new(
   tape : @tape.TapeService,
   router : InputRouter,
   tool_view : @tools.ProgressiveToolView,
-  list_skills : () -> Array[@skills.SkillMetadata],
-  load_skill_body : (String) -> String?,
+  list_skills : async () -> Array[@skills.SkillMetadata],
+  load_skill_body : async (String) -> String?,
   model : String,
   max_steps : Int,
   max_tokens : Int,
   model_timeout_seconds : Int?,
   base_system_prompt : String,
-  get_workspace_system_prompt : () -> String,
+  get_workspace_system_prompt : async () -> String,
   llm : @llm.LLMClient,
   registry : @tools.ToolRegistry,
   llm_vision? : @llm.LLMClient? = None,
@@ -356,7 +356,7 @@ async fn ModelRunner::chat(
 
 ///|
 /// Render the full system prompt.
-fn ModelRunner::render_system_prompt(self : ModelRunner) -> String {
+async fn ModelRunner::render_system_prompt(self : ModelRunner) -> String {
   let blocks : Array[String] = [
     self.base_system_prompt,
     (self.get_workspace_system_prompt)(),
@@ -421,7 +421,10 @@ fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
 
 ///|
 /// Scan text for $name hints and expand matching skills into expanded_skills.
-fn ModelRunner::expand_skill_hints(self : ModelRunner, text : String) -> Unit {
+async fn ModelRunner::expand_skill_hints(
+  self : ModelRunner,
+  text : String,
+) -> Unit {
   let mut i = 0
   while i < text.length() {
     if text[i] == '$'.to_int().to_uint16() {

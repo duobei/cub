@@ -791,7 +791,7 @@ fn register_web_fetch(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
     "Fetch URL content",
     detail="Fetch a URL and return its content as plain text. HTML tags are stripped.",
     parameters=params,
-    handler=fn(args) raise {
+    handler=async fn(args) {
       let url = match args {
         { "url": String(u), .. } => u
         _ => fail("web.fetch: missing 'url' argument")
@@ -823,22 +823,20 @@ fn normalize_url(raw : String) -> String raise {
 }
 
 ///|
-/// Fetch URL content via C FFI, strip HTML tags.
-fn fetch_url(raw_url : String) -> String raise {
+/// Fetch URL content via async HTTP, strip HTML tags.
+async fn fetch_url(raw_url : String) -> String {
   let url = normalize_url(raw_url)
-  let url_bytes = @config.string_to_cstr(url)
-  // First pass: get content size
-  let len = cub_web_fetch(url_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    fail("web.fetch: failed to fetch URL")
+  let headers : Map[String, String] = {}
+  let (resp, data) = @http.get(url, headers~) catch {
+    e => fail("web.fetch: failed to fetch URL: \{e}")
   }
-  // Second pass: read content
-  let buf = Bytes::new(len)
-  let actual = cub_web_fetch(url_bytes, buf, len)
-  if actual <= 0 {
-    fail("web.fetch: failed to read response")
+  if resp.code != 200 {
+    fail("web.fetch: HTTP \{resp.code}")
   }
-  let raw = @utf8.decode_lossy(buf[:actual])
+  let raw = data.text() catch { _ => "" }
+  if raw.is_empty() {
+    fail("web.fetch: empty response")
+  }
   // Strip HTML tags and decode basic entities
   let stripped = strip_html_tags(raw)
   // Truncate if very large (keep first 50K chars)
@@ -946,11 +944,6 @@ fn peek_tag_name(s : String, start : Int) -> String {
 }
 
 ///|
-/// FFI: fetch URL content into buffer, returns size or -1 on error.
-#borrow(url, buf)
-extern "C" fn cub_web_fetch(url : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_web_fetch"
-
-///|
 /// Register web.search tool.
 fn register_web_search(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
   let props : Map[String, Json] = Map::new()
@@ -962,7 +955,7 @@ fn register_web_search(registry : ToolRegistry, _ctx : ToolContext) -> Unit {
     "Search the web and return results",
     detail="Search using DuckDuckGo and return top results with titles, URLs, and snippets.",
     parameters=params,
-    handler=fn(args) raise {
+    handler=async fn(args) {
       let query = match args {
         { "query": String(q), .. } => q
         _ => fail("web.search: missing 'query' argument")
@@ -1282,19 +1275,9 @@ fn resolve_schedules_path(_workspace : String) -> String {
 }
 
 ///|
-/// Read schedules from JSON file as sync via C FFI.
-fn read_schedules_file(path : String) -> Array[Json] {
-  let path_bytes = @config.string_to_cstr(path)
-  let len = cub_read_file_ffi(path_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    return []
-  }
-  let buf = Bytes::new(len)
-  let actual = cub_read_file_ffi(path_bytes, buf, len)
-  if actual <= 0 {
-    return []
-  }
-  let content = @utf8.decode_lossy(buf[:actual])
+/// Read schedules from JSON file via async fs.
+async fn read_schedules_file(path : String) -> Array[Json] {
+  let content = @fs.read_file(path).text() catch { _ => return [] }
   if content.trim().to_string().is_empty() {
     return []
   }
@@ -1304,15 +1287,6 @@ fn read_schedules_file(path : String) -> Array[Json] {
     _ => []
   }
 }
-
-///|
-/// FFI: read file for tools package.
-#borrow(path, buf)
-extern "C" fn cub_read_file_ffi(
-  path : Bytes,
-  buf : Bytes,
-  buf_size : Int,
-) -> Int = "cub_tools_read_file"
 
 ///|
 /// Write schedules to JSON file. Raises on failure.
@@ -1404,7 +1378,7 @@ fn register_schedule_list(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     "List all scheduled tasks",
     detail="Show all pending scheduled tasks with their triggers and messages.",
     parameters=params,
-    handler=fn(_args) {
+    handler=async fn(_args) {
       let path = resolve_schedules_path(workspace)
       let schedules = read_schedules_file(path)
       if schedules.is_empty() {
@@ -1493,16 +1467,15 @@ async fn spawn_sub_agent(
   let cub_bin = match @config.getenv("CUB_BIN") {
     Some(b) => b
     None => {
-      // Try common locations via C FFI (lightweight: only check file size)
+      // Try common locations
       let candidates = [
         "\{workspace}/_build/native/debug/build/main/main.exe",
         "/usr/local/bin/cub",
       ]
       let mut found = ""
       for c in candidates {
-        let path_bytes = @config.string_to_cstr(c)
-        let size = cub_read_file_ffi(path_bytes, Bytes::new(0), 0)
-        if size > 0 {
+        let data = @fs.read_file(c) catch { _ => continue }
+        if data.binary().length() > 0 {
           found = c
           break
         }

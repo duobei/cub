@@ -1,35 +1,49 @@
 /// Application settings loaded from environment variables and .env files.
 
 ///|
-/// FFI: copy env var into buffer, returns length or -1 if not set.
-#borrow(name, buf)
-extern "C" fn cub_getenv(name : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_getenv"
+/// Environment variable snapshot, populated at startup via init_env().
+let env_snapshot : Ref[Map[String, String]] = { val: {} }
 
 ///|
-/// Get an environment variable by name. Returns None if not set.
-pub fn getenv(name : String) -> String? {
-  let name_bytes = string_to_cstr(name)
-  // First call to get length
-  let len = cub_getenv(name_bytes, Bytes::new(0), 0)
-  if len < 0 {
-    return None
+/// Initialize environment snapshot by reading /proc/self/environ.
+/// Must be called once at startup before any getenv() calls.
+pub async fn init_env() -> Unit {
+  let data = @fs.read_file("/proc/self/environ") catch { _ => return }
+  let bytes = data.binary()
+  let env : Map[String, String] = {}
+  // /proc/self/environ is null-separated KEY=VALUE pairs
+  let mut start = 0
+  for i = 0; i < bytes.length(); i = i + 1 {
+    if bytes[i] == b'\x00' {
+      if i > start {
+        let entry = @utf8.decode_lossy(bytes[start:i])
+        // Find first '=' to split key=value
+        let mut eq_pos = -1
+        for j = 0; j < entry.length(); j = j + 1 {
+          if entry[j] == '='.to_int().to_uint16() {
+            eq_pos = j
+            break
+          }
+        }
+        if eq_pos > 0 {
+          let key = entry[:eq_pos].to_string() catch { _ => "" }
+          let value = entry[eq_pos + 1:].to_string() catch { _ => "" }
+          if key.length() > 0 {
+            env[key] = value
+          }
+        }
+      }
+      start = i + 1
+    }
   }
-  if len == 0 {
-    return Some("")
-  }
-  // Second call to get value
-  let buf = Bytes::new(len)
-  let _ = cub_getenv(name_bytes, buf, len)
-  Some(@utf8.decode_lossy(buf[:len]))
+  env_snapshot.val = env
 }
 
 ///|
-/// Convert a MoonBit String to a null-terminated UTF-8 byte array for C.
-pub fn string_to_cstr(s : String) -> Bytes {
-  let utf8 = @utf8.encode(s)
-  let len = utf8.length()
-  // Build with extra byte for null terminator
-  Bytes::makei(len + 1, fn(i) { if i < len { utf8[i] } else { b'\x00' } })
+/// Get an environment variable by name. Returns None if not set.
+/// Reads from the in-memory snapshot (no C FFI).
+pub fn getenv(name : String) -> String? {
+  env_snapshot.val.get(name)
 }
 
 ///|

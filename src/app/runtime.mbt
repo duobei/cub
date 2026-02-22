@@ -35,7 +35,7 @@ pub struct AppRuntime {
   workspace : String
   sessions : Map[String, SessionRuntime]
   store : @tape.FileTapeStore
-  confirm_fn : ((String, String) -> Bool)?
+  confirm_fn : (async (String, String) -> Bool)?
   on_chunk : ((String) -> Unit)?
   mcp_clients : Array[@mcp.McpClient]
 }
@@ -45,7 +45,7 @@ pub struct AppRuntime {
 pub async fn AppRuntime::new(
   settings : @config.Settings,
   workspace : String,
-  confirm_fn? : ((String, String) -> Bool)? = None,
+  confirm_fn? : (async (String, String) -> Bool)? = None,
   on_chunk? : ((String) -> Unit)? = None,
 ) -> AppRuntime {
   let home = settings.home.unwrap_or("\{workspace}/.cub")
@@ -67,7 +67,7 @@ pub async fn AppRuntime::new(
 
 ///|
 /// Get or create a session.
-pub fn AppRuntime::get_session(
+pub async fn AppRuntime::get_session(
   self : AppRuntime,
   session_id : String,
 ) -> SessionRuntime {
@@ -96,20 +96,15 @@ fn resolve_api_key(settings : @config.Settings) -> String {
 
 ///|
 /// Detect if Ollama is running locally and return the first available model.
-fn detect_ollama() -> String? {
-  // Fetch http://localhost:11434/api/tags via C FFI
-  let url_bytes = @config.string_to_cstr("http://localhost:11434/api/tags")
-  let len = cub_http_get(url_bytes, Bytes::new(0), 0)
-  if len <= 0 {
+async fn detect_ollama() -> String? {
+  let headers : Map[String, String] = {}
+  let (resp, data) = @http.get("http://localhost:11434/api/tags", headers~) catch {
+    _ => return None
+  }
+  if resp.code != 200 {
     return None
   }
-  let buf = Bytes::new(len)
-  let actual = cub_http_get(url_bytes, buf, len)
-  if actual <= 0 {
-    return None
-  }
-  let text = @utf8.decode_lossy(buf[:actual])
-  // Parse JSON to extract first model name
+  let text = data.text() catch { _ => return None }
   let json = @json.parse(text) catch { _ => return None }
   match json {
     { "models": Array(models), .. } =>
@@ -126,13 +121,8 @@ fn detect_ollama() -> String? {
 }
 
 ///|
-/// FFI: simple HTTP GET (for Ollama detection).
-#borrow(url, buf)
-extern "C" fn cub_http_get(url : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_http_get"
-
-///|
 /// Create a new session with all components wired up.
-fn AppRuntime::create_session(
+async fn AppRuntime::create_session(
   self : AppRuntime,
   session_id : String,
 ) -> SessionRuntime {
@@ -226,17 +216,17 @@ fn AppRuntime::create_session(
     tape,
     router,
     tool_view,
-    fn() {
+    async fn() {
       let skills = @skills.discover_skills(ws)
       filter_skills(skills, self.settings.allowed_skills)
     },
-    fn(name) { @skills.load_skill_body(name, ws) },
+    async fn(name) { @skills.load_skill_body(name, ws) },
     model,
     self.settings.max_steps,
     self.settings.max_tokens,
     timeout,
     self.settings.system_prompt,
-    fn() {
+    async fn() {
       let agents = read_agents_md(ws)
       let memory = read_memory_md(home)
       let startup = read_startup_md(ws)
@@ -287,7 +277,7 @@ fn AppRuntime::create_session(
 
 ///|
 /// Save active session state to disk for resume on restart.
-pub fn AppRuntime::save_active_session(
+pub async fn AppRuntime::save_active_session(
   self : AppRuntime,
   session_id : String,
   channel : String,
@@ -314,7 +304,7 @@ pub fn AppRuntime::save_active_session(
 
 ///|
 /// Load active sessions from disk. Returns sessions active within the last 24h.
-pub fn AppRuntime::load_active_sessions(
+pub async fn AppRuntime::load_active_sessions(
   self : AppRuntime,
 ) -> Array[(String, String, String)] {
   let home = self.settings.resolve_home()
@@ -387,7 +377,7 @@ pub fn AppRuntime::reset_session_context(
 
 ///|
 /// Discover skills for this workspace.
-pub fn AppRuntime::discover_skills(
+pub async fn AppRuntime::discover_skills(
   self : AppRuntime,
 ) -> Array[@skills.SkillMetadata] {
   @skills.discover_skills(self.workspace)
@@ -395,7 +385,10 @@ pub fn AppRuntime::discover_skills(
 
 ///|
 /// Load a skill body.
-pub fn AppRuntime::load_skill_body(self : AppRuntime, name : String) -> String? {
+pub async fn AppRuntime::load_skill_body(
+  self : AppRuntime,
+  name : String,
+) -> String? {
   @skills.load_skill_body(name, self.workspace)
 }
 
@@ -504,7 +497,7 @@ fn export_tape_to_markdown(entries : Array[@tape.TapeEntry]) -> String {
 
 ///|
 /// Read AGENTS.md from workspace root, returns empty string if not found.
-fn read_agents_md(workspace : String) -> String {
+async fn read_agents_md(workspace : String) -> String {
   let path = "\{workspace}/AGENTS.md"
   let text = read_file_sync(path)
   if text.is_empty() {
@@ -514,46 +507,26 @@ fn read_agents_md(workspace : String) -> String {
 }
 
 ///|
-/// Synchronous file read via C FFI two-pass pattern.
-fn read_file_sync(path : String) -> String {
-  let path_bytes = @config.string_to_cstr(path)
-  let len = cub_read_file(path_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    return ""
+/// Read file content via async fs.
+async fn read_file_sync(path : String) -> String {
+  let data = @fs.read_file(path) catch { _ => return "" }
+  data.text() catch {
+    _ => ""
   }
-  let buf = Bytes::new(len)
-  let actual = cub_read_file(path_bytes, buf, len)
-  if actual <= 0 {
-    return ""
-  }
-  @utf8.decode_lossy(buf[:actual])
 }
 
 ///|
-/// FFI: read file into buffer, returns size or -1 on error.
-#borrow(path, buf)
-extern "C" fn cub_read_file(path : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_read_file"
-
-///|
-/// FFI: write data to file, returns bytes written or -1 on error.
-#borrow(path, data)
-extern "C" fn cub_write_file(path : Bytes, data : Bytes, data_len : Int) -> Int = "cub_write_file"
-
-///|
-/// FFI: recursively create directories.
-#borrow(path)
-extern "C" fn cub_mkdir_p(path : Bytes) -> Int = "cub_mkdir_p"
-
-///|
-/// Create directory recursively (sync).
-fn mkdir_p_sync(path : String) -> Bool {
-  let path_bytes = @config.string_to_cstr(path)
-  cub_mkdir_p(path_bytes) == 0
+/// Create directory recursively via async fs.
+async fn mkdir_p_sync(path : String) -> Bool {
+  @fs.mkdir(path, permission=0o755, recursive=true) catch {
+    _ => return false
+  }
+  true
 }
 
 ///|
-/// Write file content synchronously. Creates parent directories.
-fn write_file_sync(path : String, content : String) -> Bool {
+/// Write file content via async fs. Creates parent directories.
+async fn write_file_sync(path : String, content : String) -> Bool {
   // Create parent directory
   let mut last_slash = -1
   for i, ch in path {
@@ -567,55 +540,38 @@ fn write_file_sync(path : String, content : String) -> Bool {
       ignore(mkdir_p_sync(parent))
     }
   }
-  let path_bytes = @config.string_to_cstr(path)
-  let content_utf8 = @utf8.encode(content)
-  cub_write_file(path_bytes, content_utf8, content_utf8.length()) >= 0
+  @fs.write_file(path, content, create=0o644) catch {
+    _ => return false
+  }
+  true
 }
 
 ///|
-/// FFI: make file executable (chmod +x).
-#borrow(path)
-extern "C" fn cub_chmod_x(path : Bytes) -> Int = "cub_chmod_x"
-
-///|
-/// FFI: remove a file or directory recursively.
-#borrow(path)
-extern "C" fn cub_remove_path(path : Bytes) -> Int = "cub_remove_path"
-
-///|
-/// Remove a file or directory recursively.
-fn remove_path_sync(path : String) -> Bool {
-  let path_bytes = @config.string_to_cstr(path)
-  cub_remove_path(path_bytes) == 0
+/// Make file executable via async fs.
+async fn chmod_x(path : String) -> Bool {
+  @fs.chmod(path, 0o755) catch {
+    _ => return false
+  }
+  true
 }
 
 ///|
-/// FFI: list directory entries as newline-separated string.
-#borrow(path, buf)
-extern "C" fn cub_list_dir(path : Bytes, buf : Bytes, buf_size : Int) -> Int = "cub_list_dir"
+/// Remove a file or directory recursively via async fs.
+async fn remove_path_sync(path : String) -> Bool {
+  let file_kind = @fs.kind(path) catch { _ => return false }
+  match file_kind {
+    Directory => @fs.rmdir(path, recursive=true) catch { _ => return false }
+    _ => @fs.remove(path) catch { _ => return false }
+  }
+  true
+}
 
 ///|
-/// List files in a directory synchronously.
-fn list_dir_sync(path : String) -> Array[String] {
-  let path_bytes = @config.string_to_cstr(path)
-  let len = cub_list_dir(path_bytes, Bytes::new(0), 0)
-  if len <= 0 {
-    return []
+/// List files in a directory via async fs.
+async fn list_dir_sync(path : String) -> Array[String] {
+  @fs.readdir(path) catch {
+    _ => []
   }
-  let buf = Bytes::new(len)
-  let actual = cub_list_dir(path_bytes, buf, len)
-  if actual <= 0 {
-    return []
-  }
-  let text = @utf8.decode_lossy(buf[:actual])
-  let entries : Array[String] = []
-  for part in text.split("\n") {
-    let s = part.to_string()
-    if not(s.is_empty()) {
-      entries.push(s)
-    }
-  }
-  entries
 }
 
 ///|
@@ -687,7 +643,7 @@ fn hex_digit(ch : UInt16) -> Int {
 
 ///|
 /// Read MEMORY.md from home directory, returns empty string if not found.
-fn read_memory_md(home : String) -> String {
+async fn read_memory_md(home : String) -> String {
   let path = "\{home}/MEMORY.md"
   let text = read_file_sync(path)
   if text.is_empty() {
@@ -864,7 +820,9 @@ fn register_tape_tools(
   // ,skills.list
   let ws_for_skills = workspace
   let skill_filter = allowed_skills
-  registry.register("skills.list", "List available skills", handler=fn(_args) {
+  registry.register("skills.list", "List available skills", handler=async fn(
+    _args,
+  ) {
     let all_skills = @skills.discover_skills(ws_for_skills)
     let skills = filter_skills(all_skills, skill_filter)
     if skills.is_empty() {
@@ -889,7 +847,7 @@ fn register_tape_tools(
     "skills.describe",
     "Show skill details",
     parameters=describe_params,
-    handler=fn(args) {
+    handler=async fn(args) {
       let name = match args {
         { "name": String(n), .. } => n
         _ => return "skills.describe: missing name"
@@ -902,7 +860,7 @@ fn register_tape_tools(
   )
   // ,sessions
   let sessions_home = home
-  registry.register("sessions", "List tape sessions in this workspace", handler=fn(
+  registry.register("sessions", "List tape sessions in this workspace", handler=async fn(
     _args,
   ) {
     let tape_dir = "\{sessions_home}/tapes"
@@ -935,7 +893,7 @@ fn register_tape_tools(
   registry.register(
     "memory.read",
     "Read persistent workspace memory (MEMORY.md)",
-    handler=fn(_args) {
+    handler=async fn(_args) {
       let text = read_file_sync("\{mem_home_read}/MEMORY.md")
       if text.is_empty() {
         "no memory saved yet"
@@ -955,7 +913,7 @@ fn register_tape_tools(
     "memory.save",
     "Save persistent facts to workspace memory (MEMORY.md) — survives across sessions",
     parameters=mem_params,
-    handler=fn(args) {
+    handler=async fn(args) {
       let content = match args {
         { "content": String(c), .. } => c
         _ => return "memory.save: missing content"
@@ -968,13 +926,10 @@ fn register_tape_tools(
       } else {
         "\{existing}\n\{content}\n"
       }
-      let bytes = @config.string_to_cstr(path)
-      let content_bytes = @utf8.encode(new_content)
-      let result = cub_write_file(bytes, content_bytes, content_bytes.length())
-      if result < 0 {
-        "memory.save: write failed"
-      } else {
+      if write_file_sync(path, new_content) {
         "saved to MEMORY.md"
+      } else {
+        "memory.save: write failed"
       }
     },
   )
@@ -999,7 +954,7 @@ fn register_tape_tools(
     "skill.create",
     "Create a new reusable skill (writes SKILL.md)",
     parameters=sc_params,
-    handler=fn(args) {
+    handler=async fn(args) {
       let name = match args {
         { "name": String(n), .. } => n
         _ => return "skill.create: missing 'name'"
@@ -1108,8 +1063,7 @@ fn register_tape_tools(
             return "tool.create: failed to write script"
           }
           // Make executable
-          let path_bytes = @config.string_to_cstr(script_path)
-          if cub_chmod_x(path_bytes) != 0 {
+          if not(chmod_x(script_path)) {
             return "tool.create: failed to chmod +x"
           }
           // Write manifest
@@ -1225,7 +1179,7 @@ fn register_tape_tools(
   registry.register(
     "ext.list",
     "List installed extension tools (scripts and WASM plugins)",
-    handler=fn(_args) {
+    handler=async fn(_args) {
       let extensions = @ext.discover_extensions(el_home, el_ws)
       if extensions.is_empty() {
         return "no extensions installed"
@@ -1255,7 +1209,7 @@ fn register_tape_tools(
     "Remove an installed extension tool",
     parameters=er_params,
     requires_confirmation=true,
-    handler=fn(args) {
+    handler=async fn(args) {
       let name = match args {
         { "name": String(n), .. } => n
         _ => return "ext.remove: missing 'name'"
@@ -1311,7 +1265,7 @@ fn register_tape_tools(
     "agents.update",
     "Update workspace AGENTS.md to evolve agent behavior",
     parameters=au_params,
-    handler=fn(args) {
+    handler=async fn(args) {
       let path = "\{agents_ws}/AGENTS.md"
       match args {
         { "content": String(c), .. } => {
@@ -1353,7 +1307,7 @@ fn register_tape_tools(
   registry.register(
     "schedules",
     "List scheduled tasks (alias for schedule.list)",
-    handler=fn(_args) {
+    handler=async fn(_args) {
       let sched_home = @config.getenv("HOME").unwrap_or("/tmp")
       let path = "\{sched_home}/.cub/schedules.json"
       let content = read_file_sync(path)
@@ -1396,7 +1350,7 @@ fn register_tape_tools(
   registry.register(
     "evolution.stats",
     "Show self-evolution metrics: learnings, skill stats, crystallized skills",
-    handler=fn(_args) {
+    handler=async fn(_args) {
       let learnings = read_learnings(evo_home)
       let skill_stats = read_skill_stats(evo_home)
       let lines : Array[String] = ["# Evolution Stats", ""]
@@ -1516,7 +1470,7 @@ fn register_tape_tools(
   registry.register(
     "ext.list",
     "List installed extension tools (script + WASM)",
-    handler=fn(_args) {
+    handler=async fn(_args) {
       let extensions = @ext.discover_extensions(el_home, el_ws)
       if extensions.is_empty() {
         return "no extensions installed"
@@ -1548,7 +1502,7 @@ fn register_tape_tools(
     "Remove an installed extension tool",
     parameters=er_params,
     requires_confirmation=true,
-    handler=fn(args) {
+    handler=async fn(args) {
       let name = match args {
         { "name": String(n), .. } => n
         _ => return "ext.remove: missing 'name'"
@@ -1590,7 +1544,7 @@ fn register_tape_tools(
 
 ///|
 /// Read .agent/startup.md from workspace, returns empty string if not found.
-fn read_startup_md(workspace : String) -> String {
+async fn read_startup_md(workspace : String) -> String {
   let path = "\{workspace}/.agent/startup.md"
   let text = read_file_sync(path)
   if text.is_empty() {
@@ -1603,7 +1557,9 @@ fn read_startup_md(workspace : String) -> String {
 /// Check and execute due scheduled tasks. Returns messages for due tasks.
 /// For interval triggers, checks if enough time has elapsed since created_at_ms.
 /// For date triggers, checks if the date has passed.
-pub fn AppRuntime::check_due_schedules(self : AppRuntime) -> Array[String] {
+pub async fn AppRuntime::check_due_schedules(
+  self : AppRuntime,
+) -> Array[String] {
   let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
   let path = "\{home}/schedules.json"
   let content = read_file_sync(path)
@@ -1748,7 +1704,7 @@ fn register_mcp_tools(
 
 ///|
 /// Register discovered extension tools into the registry.
-fn register_ext_tools(
+async fn register_ext_tools(
   registry : @tools.ToolRegistry,
   home : String,
   workspace : String,
@@ -1801,7 +1757,7 @@ async fn run_extension(
 
 ///|
 /// Read learnings from ~/.cub/learnings.json.
-pub fn read_learnings(home : String) -> Array[Json] {
+pub async fn read_learnings(home : String) -> Array[Json] {
   let path = "\{home}/learnings.json"
   let content = read_file_sync(path)
   if content.is_empty() {
@@ -1817,7 +1773,7 @@ pub fn read_learnings(home : String) -> Array[Json] {
 ///|
 /// Render learnings as a prompt section for system prompt injection.
 /// Only includes learnings with confidence >= 0.3, sorted by confidence desc.
-pub fn render_learnings(home : String) -> String {
+pub async fn render_learnings(home : String) -> String {
   let learnings = read_learnings(home)
   if learnings.is_empty() {
     return ""
@@ -1863,7 +1819,7 @@ pub fn render_learnings(home : String) -> String {
 
 ///|
 /// Write learnings to ~/.cub/learnings.json.
-pub fn write_learnings(home : String, learnings : Array[Json]) -> Bool {
+pub async fn write_learnings(home : String, learnings : Array[Json]) -> Bool {
   let path = "\{home}/learnings.json"
   let json_str = Json::array(learnings).stringify()
   write_file_sync(path, json_str)
@@ -1940,7 +1896,7 @@ fn split_words(s : String) -> Array[String] {
 ///|
 /// Add a learning with dedup-as-reinforcement.
 /// Returns the proposed skill name if a learning was reinforced enough for crystallization.
-pub fn add_learning(
+pub async fn add_learning(
   home : String,
   type_ : String,
   content : String,
@@ -2001,7 +1957,7 @@ pub fn add_learning(
 ///|
 /// Decay learnings confidence based on time since last use.
 /// Prunes entries with confidence < 0.1.
-pub fn decay_learnings(home : String, now_ms : Int64) -> Unit {
+pub async fn decay_learnings(home : String, now_ms : Int64) -> Unit {
   let learnings = read_learnings(home)
   if learnings.is_empty() {
     return
@@ -2063,7 +2019,7 @@ pub fn decay_learnings(home : String, now_ms : Int64) -> Unit {
 
 ///|
 /// Extract learnings from tape after task completion (zero-token, no LLM).
-pub fn extract_learnings_from_tape(
+pub async fn extract_learnings_from_tape(
   entries : Array[@tape.TapeEntry],
   steps : Int,
   error : String?,
@@ -2183,7 +2139,7 @@ pub fn extract_learnings_from_tape(
 
 ///|
 /// Read skill stats from ~/.cub/skill_stats.json.
-pub fn read_skill_stats(home : String) -> Map[String, Json] {
+pub async fn read_skill_stats(home : String) -> Map[String, Json] {
   let path = "\{home}/skill_stats.json"
   let content = read_file_sync(path)
   if content.is_empty() {
@@ -2198,7 +2154,10 @@ pub fn read_skill_stats(home : String) -> Map[String, Json] {
 
 ///|
 /// Write skill stats to ~/.cub/skill_stats.json.
-pub fn write_skill_stats(home : String, stats : Map[String, Json]) -> Bool {
+pub async fn write_skill_stats(
+  home : String,
+  stats : Map[String, Json],
+) -> Bool {
   let path = "\{home}/skill_stats.json"
   let json_str = Json::object(stats).stringify()
   write_file_sync(path, json_str)
@@ -2207,7 +2166,7 @@ pub fn write_skill_stats(home : String, stats : Map[String, Json]) -> Bool {
 ///|
 /// Update skill stats after a task completes.
 /// Records usage count, success/failure, and average steps.
-pub fn update_skill_stats(
+pub async fn update_skill_stats(
   home : String,
   expanded_skills : Map[String, String],
   steps : Int,
@@ -2288,7 +2247,7 @@ pub fn skill_name_from_content(content : String) -> String {
 ///|
 /// Crystallize a learning into a skill file.
 /// Creates .agent/skills/auto-{name}/SKILL.md from a reinforced learning.
-pub fn crystallize_skill(
+pub async fn crystallize_skill(
   workspace : String,
   type_ : String,
   content : String,

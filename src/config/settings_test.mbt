@@ -169,11 +169,3 @@ test "Settings with_overrides None leaves original" {
   let s = Settings::default().with_overrides()
   inspect(s.model, content="openrouter:qwen/qwen3-coder-next")
 }
-
-///|
-test "string_to_cstr null terminated" {
-  let bytes = string_to_cstr("hi")
-  // "hi" = 2 UTF-8 bytes + 1 null terminator = 3
-  inspect(bytes.length(), content="3")
-  inspect(bytes[2], content="b'\\x00'")
-}
