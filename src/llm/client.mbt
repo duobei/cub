@@ -46,6 +46,15 @@ fn find_substring(haystack : String, needle : String) -> Int {
 }
 
 ///|
+/// Check if a provider supports vision (image_url content parts).
+pub fn supports_vision(provider : String) -> Bool {
+  match provider {
+    "openai" | "openrouter" | "ollama" => true
+    _ => false
+  }
+}
+
+///|
 /// Known provider base URLs.
 fn provider_base_url(provider : String) -> String {
   match provider {
@@ -660,9 +669,16 @@ pub async fn LLMClient::run_tools(
 ) -> ToolAutoResult {
   // Record user message to tape (with images if present)
   if image_urls.length() > 0 {
-    tape.append(
-      @tape.TapeEntry::message_with_images("user", prompt, image_urls),
-    )
+    if supports_vision(self.provider) {
+      tape.append(
+        @tape.TapeEntry::message_with_images("user", prompt, image_urls),
+      )
+    } else {
+      // Fallback: include image URLs as text for non-vision models
+      let urls_text = image_urls.join("\n")
+      let fallback = "\{prompt}\n\n[Attached images:\n\{urls_text}\n]"
+      tape.append(@tape.TapeEntry::message("user", fallback))
+    }
   } else {
     tape.append(@tape.TapeEntry::message("user", prompt))
   }
