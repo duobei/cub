@@ -1111,6 +1111,127 @@ fn register_tape_tools(
     },
   )
   ignore(sched_ws)
+  // ,evolution.stats
+  let evo_home = home
+  registry.register(
+    "evolution.stats",
+    "Show self-evolution metrics: learnings, skill stats, crystallized skills",
+    handler=fn(_args) {
+      let learnings = read_learnings(evo_home)
+      let skill_stats = read_skill_stats(evo_home)
+      let lines : Array[String] = ["# Evolution Stats", ""]
+      // --- Learnings summary ---
+      let total = learnings.length()
+      let mut anti_patterns = 0
+      let mut heuristics = 0
+      let mut preferences = 0
+      let mut active = 0 // confidence >= 0.3
+      let mut max_reinforced = 0
+      for entry in learnings {
+        let type_ = match entry {
+          { "type": String(t), .. } => t
+          _ => ""
+        }
+        match type_ {
+          "anti_pattern" => anti_patterns += 1
+          "heuristic" => heuristics += 1
+          "preference" => preferences += 1
+          _ => ()
+        }
+        let confidence = match entry {
+          { "confidence": Number(c, ..), .. } => c
+          _ => 0.0
+        }
+        if confidence >= 0.3 {
+          active += 1
+        }
+        let reinforced = match entry {
+          { "reinforced": Number(r, ..), .. } => r.to_int()
+          _ => 0
+        }
+        if reinforced > max_reinforced {
+          max_reinforced = reinforced
+        }
+      }
+      lines.push("## Learnings")
+      lines.push("  total: \{total}")
+      lines.push("  active (confidence >= 0.3): \{active}")
+      lines.push("  anti_patterns: \{anti_patterns}")
+      lines.push("  heuristics: \{heuristics}")
+      lines.push("  preferences: \{preferences}")
+      lines.push("  max reinforced: \{max_reinforced}")
+      lines.push("")
+      // --- Skill stats ---
+      if not(skill_stats.is_empty()) {
+        lines.push("## Skill Stats")
+        for name, value in skill_stats {
+          let uses = match value {
+            { "uses": Number(n, ..), .. } => n.to_int()
+            _ => 0
+          }
+          let successes = match value {
+            { "successes": Number(n, ..), .. } => n.to_int()
+            _ => 0
+          }
+          let failures = match value {
+            { "failures": Number(n, ..), .. } => n.to_int()
+            _ => 0
+          }
+          let total_steps = match value {
+            { "total_steps": Number(n, ..), .. } => n.to_int()
+            _ => 0
+          }
+          let avg_steps = if uses > 0 { total_steps / uses } else { 0 }
+          lines.push(
+            "  \{name}: \{uses} uses, \{successes} ok, \{failures} fail, avg \{avg_steps} steps",
+          )
+        }
+        lines.push("")
+      }
+      // --- Active learnings detail ---
+      if active > 0 {
+        lines.push("## Active Learnings")
+        let items : Array[(Double, String, String, Int)] = []
+        for entry in learnings {
+          let confidence = match entry {
+            { "confidence": Number(c, ..), .. } => c
+            _ => 0.0
+          }
+          if confidence < 0.3 {
+            continue
+          }
+          let type_ = match entry {
+            { "type": String(t), .. } => t
+            _ => "unknown"
+          }
+          let content = match entry {
+            { "content": String(c), .. } => c
+            _ => continue
+          }
+          let reinforced = match entry {
+            { "reinforced": Number(r, ..), .. } => r.to_int()
+            _ => 0
+          }
+          items.push((confidence, type_, content, reinforced))
+        }
+        items.sort_by(fn(a, b) { b.0.compare(a.0) })
+        for item in items {
+          let tag = match item.1 {
+            "anti_pattern" => "[avoid]"
+            "heuristic" => "[effective]"
+            "preference" => "[pattern]"
+            _ => "[note]"
+          }
+          let conf_pct = (item.0 * 100.0).to_int()
+          lines.push(
+            "  \{tag} \{item.2} (conf:\{conf_pct}% x\{item.3})",
+          )
+        }
+      }
+      ignore(total)
+      lines.join("\n")
+    },
+  )
   // ,quit
   registry.register("quit", "Exit the session", handler=fn(_args) { "exit" })
 }
