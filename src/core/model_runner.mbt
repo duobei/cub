@@ -304,6 +304,10 @@ async fn ModelRunner::chat(
     let tool_name = @tools.from_model_name(name, registry)
     registry.needs_confirmation(tool_name)
   }
+  let is_serial : (String) -> Bool = fn(name) {
+    let tool_name = @tools.from_model_name(name, registry)
+    registry.is_serial(tool_name)
+  }
   let llm = self.select_llm(prompt, image_urls)
   let timeout = self.model_timeout_seconds.unwrap_or(120)
   let result = @async.with_timeout(timeout * 1000, async fn() {
@@ -315,6 +319,7 @@ async fn ModelRunner::chat(
       tools_json=self.tools,
       image_urls~,
       needs_confirmation~,
+      is_serial~,
       execute_tool~,
     )
   }) catch {

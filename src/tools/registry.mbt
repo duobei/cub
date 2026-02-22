@@ -74,6 +74,20 @@ pub fn ToolRegistry::needs_confirmation(
 }
 
 ///|
+/// Check if a tool must run serially (not in parallel with other tools).
+/// This includes tools that need confirmation AND write-mutating tools.
+pub fn ToolRegistry::is_serial(
+  self : ToolRegistry,
+  name : String,
+) -> Bool {
+  if self.needs_confirmation(name) {
+    return true
+  }
+  // File-mutating tools must not run in parallel to avoid race conditions
+  name == "fs.write" || name == "fs.edit"
+}
+
+///|
 /// Execute a tool by name.
 pub async fn ToolRegistry::execute(
   self : ToolRegistry,

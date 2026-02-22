@@ -698,6 +698,7 @@ pub async fn LLMClient::run_tools(
   tools_json? : Array[Json] = [],
   image_urls? : Array[String] = [],
   needs_confirmation? : (String) -> Bool = fn(_name) { false },
+  is_serial? : (String) -> Bool = fn(_name) { false },
   execute_tool~ : async (String, Json) -> String,
 ) -> ToolAutoResult {
   // Record user message to tape (with images if present)
@@ -781,11 +782,11 @@ pub async fn LLMClient::run_tools(
   // Record assistant tool calls
   let call_jsons = response.tool_calls.map(fn(tc) { tc.to_json() })
   tape.append(@tape.TapeEntry::tool_call(call_jsons))
-  // Separate tool calls into confirmation-required (serial) and parallel-safe
+  // Separate tool calls into serial (confirmation + write-mutating) and parallel-safe
   let serial_calls : Array[ToolCallInfo] = []
   let parallel_calls : Array[ToolCallInfo] = []
   for tc in response.tool_calls {
-    if needs_confirmation(tc.function_.name) {
+    if is_serial(tc.function_.name) {
       serial_calls.push(tc)
     } else {
       parallel_calls.push(tc)
@@ -860,18 +861,20 @@ pub async fn LLMClient::run_tools(
     let args : Json = @json.parse(tc.function_.arguments) catch {
       _ => Json::object(Map::new())
     }
-    // Check if tool requires confirmation
-    match self.confirm_fn {
-      Some(cfn) =>
-        if not(cfn(tc.function_.name, tc.function_.arguments)) {
-          let result_obj : Map[String, Json] = Map::new()
-          result_obj["tool_call_id"] = tc.id.to_json()
-          result_obj["name"] = tc.function_.name.to_json()
-          result_obj["content"] = "[denied by user]".to_json()
-          result_jsons.push(Json::object(result_obj))
-          continue
-        }
-      None => () // No confirm_fn means auto-approve
+    // Check if tool requires user confirmation (not just serial execution)
+    if needs_confirmation(tc.function_.name) {
+      match self.confirm_fn {
+        Some(cfn) =>
+          if not(cfn(tc.function_.name, tc.function_.arguments)) {
+            let result_obj : Map[String, Json] = Map::new()
+            result_obj["tool_call_id"] = tc.id.to_json()
+            result_obj["name"] = tc.function_.name.to_json()
+            result_obj["content"] = "[denied by user]".to_json()
+            result_jsons.push(Json::object(result_obj))
+            continue
+          }
+        None => () // No confirm_fn means auto-approve
+      }
     }
     let result_text = execute_tool(tc.function_.name, args) catch {
       e => {
