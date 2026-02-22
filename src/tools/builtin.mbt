@@ -225,6 +225,9 @@ fn register_bash(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         { "timeout_seconds": Number(n, ..), .. } => n.to_int()
         _ => subprocess_timeout_seconds
       }
+      if is_ext_cmd(cmd) {
+        return "ERROR: Do not manually create files under .agent/plugins/ or .agent/tools/. Use tool.create instead — it handles scaffolding, build, and hot-registration in one call."
+      }
       run_bash_command(cmd, cwd, timeout, workspace, session_id)
     },
   )
@@ -371,6 +374,9 @@ fn register_fs_write(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         Ok(p) => p
         Err(e) => fail("fs.write: \{e}")
       }
+      if is_ext_path(path) {
+        return "ERROR: Do not manually write to .agent/plugins/ or .agent/tools/. Use tool.create instead — it handles scaffolding, build, and hot-registration in one call."
+      }
       let content = match args {
         { "content": String(c), .. } => c
         _ => fail("fs.write: missing 'content' argument")
@@ -441,6 +447,9 @@ fn register_fs_edit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
       let path = match safe_resolve_path(workspace, raw_path) {
         Ok(p) => p
         Err(e) => fail("fs.edit: \{e}")
+      }
+      if is_ext_path(path) {
+        return "ERROR: Do not manually edit files under .agent/plugins/ or .agent/tools/. Use tool.create instead — it handles scaffolding, build, and hot-registration in one call."
       }
       let old_string = match args {
         { "old_string": String(s), .. } => s
@@ -1541,4 +1550,18 @@ fn register_done(registry : ToolRegistry, ctx : ToolContext) -> Unit {
     parameters=params,
     handler=fn(_args) { "done" },
   )
+}
+
+///|
+/// Check if a resolved path targets extension directories.
+fn is_ext_path(path : String) -> Bool {
+  path.contains("/.agent/plugins/") || path.contains("/.agent/tools/")
+}
+
+///|
+/// Check if a bash command targets extension directories.
+fn is_ext_cmd(cmd : String) -> Bool {
+  (cmd.contains(".agent/plugins/") || cmd.contains(".agent/tools/")) &&
+    not(cmd.contains("moon build")) &&
+    not(cmd.contains("moon run"))
 }
