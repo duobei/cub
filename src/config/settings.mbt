@@ -44,7 +44,8 @@ pub fn collect_env_vars() -> Map[String, String] {
     "CUB_RATE_LIMIT_PER_MINUTE", "CUB_TELEGRAM_ENABLED", "CUB_TELEGRAM_TOKEN", "CUB_TELEGRAM_ALLOW_FROM",
     "CUB_TELEGRAM_ALLOW_CHATS", "CUB_TELEGRAM_PROXY", "CUB_DISCORD_ENABLED", "CUB_DISCORD_TOKEN",
     "CUB_DISCORD_ALLOW_FROM", "CUB_DISCORD_ALLOW_CHANNELS", "CUB_DISCORD_COMMAND_PREFIX",
-    "CUB_DISCORD_PROXY", "CUB_HEALTH_PORT", "HOME", "PWD",
+    "CUB_DISCORD_PROXY", "CUB_HEALTH_PORT", "CUB_CONTEXT_BUDGET",
+    "CUB_HANDOFF_THRESHOLD", "HOME", "PWD",
   ]
   for key in keys {
     match getenv(key) {
@@ -88,6 +89,8 @@ pub struct Settings {
   discord_command_prefix : String
   discord_proxy : String?
   health_port : Int?
+  context_budget : Int
+  handoff_threshold : Int
   allowed_tools : Array[String]
   allowed_skills : Array[String]
 } derive(Show)
@@ -126,6 +129,8 @@ pub fn Settings::default() -> Settings {
     discord_command_prefix: "!",
     discord_proxy: None,
     health_port: None,
+    context_budget: 128000,
+    handoff_threshold: 90,
     allowed_tools: [],
     allowed_skills: [],
   }
@@ -430,6 +435,12 @@ pub async fn load_settings(workspace_path? : String? = None) -> Settings {
     ),
     discord_proxy: get_env(combined, "CUB_DISCORD_PROXY"),
     health_port: get_env_int(combined, "CUB_HEALTH_PORT"),
+    context_budget: get_env_int(combined, "CUB_CONTEXT_BUDGET").unwrap_or(
+      defaults.context_budget,
+    ),
+    handoff_threshold: get_env_int(combined, "CUB_HANDOFF_THRESHOLD").unwrap_or(
+      defaults.handoff_threshold,
+    ),
     allowed_tools: [],
     allowed_skills: [],
   }

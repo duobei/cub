@@ -123,6 +123,8 @@ pub struct LLMClient {
   api_base : String
   extra_headers : Map[String, String]
   max_tokens : Int
+  context_budget : Int
+  handoff_threshold : Int
   confirm_fn : ((String, String) -> Bool)?
   on_chunk : ((String) -> Unit)?
 }
@@ -135,6 +137,8 @@ pub fn LLMClient::new(
   api_base? : String? = None,
   extra_headers? : Map[String, String] = Map::new(),
   max_tokens? : Int = 1024,
+  context_budget? : Int = 128000,
+  handoff_threshold? : Int = 90,
   confirm_fn? : ((String, String) -> Bool)? = None,
   on_chunk? : ((String) -> Unit)? = None,
 ) -> LLMClient {
@@ -147,6 +151,8 @@ pub fn LLMClient::new(
     api_base: base,
     extra_headers,
     max_tokens,
+    context_budget,
+    handoff_threshold,
     confirm_fn,
     on_chunk,
   }
@@ -615,10 +621,6 @@ pub async fn LLMClient::retry_chat(
 }
 
 ///|
-/// Context budget warning threshold (80% of 128k default).
-let context_budget_tokens : Int = 128000
-
-///|
 /// Summarize chat messages into a compact handoff state.
 pub fn summarize_messages_for_handoff(
   messages : Array[Json],
@@ -720,8 +722,9 @@ pub async fn LLMClient::run_tools(
   let mut messages = tape.read_messages()
   // Estimate token usage and manage context budget
   let mut estimated = estimate_tokens(messages, system_prompt)
-  let critical_threshold = context_budget_tokens * 9 / 10 // 90%
-  // Auto-handoff at 90%: summarize and truncate context
+  let budget = self.context_budget
+  let critical_threshold = budget * self.handoff_threshold / 100
+  // Auto-handoff at threshold: summarize and truncate context
   if estimated > critical_threshold {
     @log.warn(
       "llm",
@@ -732,9 +735,9 @@ pub async fn LLMClient::run_tools(
     messages = tape.read_messages()
     estimated = estimate_tokens(messages, system_prompt)
   }
-  let threshold = context_budget_tokens * 4 / 5 // 80%
+  let warning_threshold = budget * 4 / 5 // 80%
   let sp : String? = if system_prompt.length() > 0 {
-    if estimated > threshold {
+    if estimated > warning_threshold {
       let warning =
         #|
         #|<context_warning>
