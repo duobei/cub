@@ -1149,15 +1149,16 @@ fn register_tape_tools(
               Json::object(mod_json).stringify(),
             ),
           )
-          // Write moon.pkg with is-main and imports
+          // Write moon.pkg with is-main and imports (moon DSL format, not JSON)
           let pkg_content =
-            #|{
-            #|  "import": [
-            #|    "moonbitlang/core/json",
-            #|    "moonbitlang/core/env"
-            #|  ],
-            #|  "is-main": true
+            #|import {
+            #|  "moonbitlang/core/json",
+            #|  "moonbitlang/core/env",
             #|}
+            #|
+            #|options(
+            #|  "is-main": true,
+            #|)
           ignore(write_file_sync("\{src_dir}/moon.pkg", pkg_content))
           // Write main.mbt
           if not(write_file_sync("\{src_dir}/main.mbt", code)) {
