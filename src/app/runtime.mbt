@@ -1223,7 +1223,9 @@ fn register_tape_tools(
           @ext.ExtType::Script => "script"
           @ext.ExtType::Wasm => "wasm"
         }
-        lines.push("  ext.\{ext.name} [\{type_tag}] [\{ext.scope}] \{ext.description}")
+        lines.push(
+          "  ext.\{ext.name} [\{type_tag}] [\{ext.scope}] \{ext.description}",
+        )
       }
       lines.join("\n")
     },
