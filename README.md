@@ -232,13 +232,150 @@ cub message
 
 Both channels can run simultaneously. A systemd service file (`cub.service`) is included for persistent deployment.
 
+## MCP (Model Context Protocol)
+
+Cub includes a built-in MCP client that connects to external tool servers via JSON-RPC 2.0 over stdio.
+
+Configure servers in `~/.cub/mcp.json`:
+
+```json
+{
+  "servers": [
+    {
+      "name": "my-tools",
+      "command": "/usr/bin/my-tool-server",
+      "args": ["--verbose"],
+      "env": { "API_KEY": "secret" }
+    }
+  ]
+}
+```
+
+Discovered tools are registered as `mcp.<server>.<tool>` and appear alongside built-in tools.
+
+## Extensions
+
+Cub supports custom tools via scripts and WASM plugins.
+
+### Discovery Paths
+
+| Priority | Scripts | WASM Plugins |
+|----------|---------|--------------|
+| 1 (workspace) | `.agent/tools/` | `.agent/plugins/` |
+| 2 (global) | `~/.cub/tools/` | `~/.cub/plugins/` |
+
+### Script Tools
+
+Place an executable script (e.g., `check-pr.sh`) in a tools directory. Optionally add a `check-pr.json` companion manifest for description and parameter schema.
+
+### WASM Plugins
+
+Place a MoonBit WASM plugin directory with a `plugin.json` manifest:
+
+```json
+{
+  "name": "my-plugin",
+  "description": "What the plugin does",
+  "parameters": { "type": "object", "properties": {} }
+}
+```
+
+Use `tool.create`, `ext.list`, and `ext.remove` commands to manage extensions at runtime.
+
+## Multi-Model Routing
+
+Cub supports routing different tasks to different models:
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `CUB_MODEL` | Primary reasoning model | `openrouter:qwen/qwen3-coder-next` |
+| `CUB_MODEL_VISION` | Image analysis | same as primary |
+| `CUB_MODEL_FAST` | Tool continuations | same as primary |
+
+## Health Check
+
+Enable an HTTP health endpoint for monitoring:
+
+```bash
+CUB_HEALTH_PORT=8080
+```
+
+```
+GET /health → {"status":"ok","uptime":123,"sessions":0}
+```
+
+## Configuration Reference
+
+All settings use the `CUB_` prefix. Loaded from `.env` file or environment variables.
+
+### Model & API
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CUB_MODEL` | `openrouter:qwen/qwen3-coder-next` | LLM model (provider:model) |
+| `CUB_MODEL_VISION` | — | Vision model for images |
+| `CUB_MODEL_FAST` | — | Fast model for tool continuations |
+| `CUB_API_KEY` | — | API key (fallback: `LLM_API_KEY`, `OPENROUTER_API_KEY`) |
+| `CUB_API_BASE` | — | Custom API base URL |
+| `CUB_MODEL_TIMEOUT_SECONDS` | `90` | Request timeout |
+
+### Runtime
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CUB_MAX_TOKENS` | `1024` | Max output tokens per response |
+| `CUB_MAX_STEPS` | `100` | Max agent loop steps |
+| `CUB_CONTEXT_BUDGET` | `128000` | Context window token budget |
+| `CUB_HANDOFF_THRESHOLD` | `90` | Auto-handoff at N% of budget |
+| `CUB_SYSTEM_PROMPT` | — | Custom system prompt override |
+| `CUB_HOME` | `~/.cub` | Config home directory |
+| `CUB_TAPE_NAME` | `cub` | Tape store name |
+| `CUB_LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
+| `CUB_RATE_LIMIT_PER_MINUTE` | `10` | Sliding window rate limit per session |
+| `CUB_HEALTH_PORT` | — | HTTP health check port |
+
+### Channels
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CUB_DISCORD_ENABLED` | `false` | Enable Discord bot |
+| `CUB_DISCORD_TOKEN` | — | Discord bot token |
+| `CUB_DISCORD_ALLOW_CHANNELS` | — | Allowed channel IDs (JSON array) |
+| `CUB_DISCORD_ALLOW_FROM` | — | Allowed user IDs (JSON array) |
+| `CUB_DISCORD_COMMAND_PREFIX` | `!` | Command prefix |
+| `CUB_TELEGRAM_ENABLED` | `false` | Enable Telegram bot |
+| `CUB_TELEGRAM_TOKEN` | — | Telegram bot token |
+| `CUB_TELEGRAM_ALLOW_CHATS` | — | Allowed chat IDs (JSON array) |
+| `CUB_TELEGRAM_ALLOW_FROM` | — | Allowed user IDs (JSON array) |
+
+## Architecture
+
+```
+src/
+├── main/       CLI entry, arg parsing, multi-channel dispatch
+├── app/        Runtime, session management, tape tool registration
+├── core/       Router, model runner, agent loop, command detection
+├── llm/        Multi-provider LLM client, streaming SSE, retry
+├── tape/       Append-only JSONL tape, anchor-aware context selection
+├── tools/      Tool registry, progressive disclosure, builtin tools
+├── skills/     Three-level discovery, SKILL.md parsing, builtin skills
+├── channels/   Discord (WebSocket) + Telegram (HTTP long polling)
+├── mcp/        MCP client (JSON-RPC 2.0 over stdio)
+├── config/     .env loading, settings (CUB_ prefix)
+├── cli/        Interactive REPL, async stdin, tool confirmation
+├── ext/        Extension discovery, WASM/script loader
+└── log/        Structured logging, level filtering
+```
+
+Zero C FFI — all I/O uses [moonbitlang/async](https://github.com/nicball/async) (fs, http, process, stdio, socket).
+
 ## Build
 
 ```bash
-moon fmt --check             # format check
-moon check --target native   # type check (strict)
-moon build --target native   # build binary
-moon test --target native    # run tests
+moon fmt --check                       # format check
+moon check --target native --deny-warn # type check (strict)
+moon build --target native             # build binary
+moon test --target native              # run 194 tests
 ```
 
 Binary: `_build/native/debug/build/main/main.exe`
