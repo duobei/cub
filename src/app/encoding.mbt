@@ -250,5 +250,41 @@ async fn run_extension(
     let stderr = stderr_data.text() catch { _ => "" }
     return "extension error (exit \{exit_code}): \{stderr}"
   }
-  stdout
+  // Process JSONL output: intercept tool_call lines and execute them
+  process_extension_output(stdout, registry)
+}
+
+///|
+/// Process extension output, executing any embedded tool_call requests.
+/// Lines with `{"type":"tool_call",...}` are intercepted and executed;
+/// their results are appended. Other lines pass through as-is.
+async fn process_extension_output(
+  stdout : String,
+  registry : @tools.ToolRegistry,
+) -> String {
+  let output_parts : Array[String] = []
+  for line in stdout.split("\n") {
+    let line_str = line.to_string().trim().to_string()
+    if line_str.is_empty() {
+      continue
+    }
+    // Try to parse as a tool_call JSON
+    let json = @json.parse(line_str) catch { _ => Json::object({}) }
+    match json {
+      { "type": String("tool_call"), "name": String(name), "args": args, .. } =>
+        if registry.has(name) {
+          let result = registry.execute(name, kwargs=args) catch {
+            e => {
+              let err_msg = e.to_string()
+              "tool_call error (\{name}): \{err_msg}"
+            }
+          }
+          output_parts.push(result)
+        } else {
+          output_parts.push("tool_call error: unknown tool '\{name}'")
+        }
+      _ => output_parts.push(line_str)
+    }
+  }
+  output_parts.join("\n")
 }
