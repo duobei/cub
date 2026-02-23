@@ -503,7 +503,7 @@ fn runtime_contract() -> String {
     #|7) After completing complex tasks, reflect on useful patterns.
     #|8) For repeated workflows, create reusable skills via skill.create.
     #|9) Update AGENTS.md via agents.update to evolve workspace behavior over time. When you learn important facts about yourself (name, identity, preferences) or the user, persist them to AGENTS.md immediately so all sessions share the knowledge.
-    #|10) Use $git skill hint for git operations; use $project-analyze to understand the workspace.
+    #|10) Use bash for git operations; use fs.list and fs.read to understand the workspace.
     #|11) Use schedule.add to create timed tasks; schedule.list/remove to manage them.
     #|12) Use agent.spawn to delegate complex subtasks to a child agent process.
     #|13) ALWAYS use tool.create to create extension tools. NEVER manually mkdir/write files under .agent/plugins/ or .agent/tools/. tool.create handles scaffolding, build, and hot-registration in one call.

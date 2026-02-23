@@ -114,14 +114,8 @@ fn add_builtin_skills(
   let builtins : Array[(String, String)] = [
     ("cub", "Delegate sub-tasks to a child cub process"),
     ("gh", "GitHub CLI operations: PRs, issues, repos, workflows"),
-    ("commit", "Git commit workflow with conventional commits"),
-    ("review", "Code review checklist and structured findings"),
     ("skill-creator", "Guide for creating new SKILL.md skills"),
     ("skill-installer", "Install community skills via npx @anthropic/skills"),
-    ("git", "Git operations: status, diff, log, commit via bash"),
-    (
-      "project-analyze", "Analyze project structure, detect language/framework/build/test commands",
-    ),
   ]
   for pair in builtins {
     let (name, desc) = pair
@@ -326,14 +320,10 @@ fn load_builtin_skill_body(name : String) -> String {
   match name {
     "cub" => cub_skill_body()
     "gh" => gh_skill_body()
-    "commit" => commit_skill_body()
-    "review" => review_skill_body()
     "skill-creator" => skill_creator_skill_body()
     "skill-installer" => skill_installer_skill_body()
     "discord" => discord_skill_body()
     "telegram" => telegram_skill_body()
-    "git" => git_skill_body()
-    "project-analyze" => project_analyze_skill_body()
     _ => ""
   }
 }
@@ -398,91 +388,6 @@ fn gh_skill_body() -> String {
     #|- Use `--json` flag for structured output: `gh pr list --json number,title,state`
     #|- Use `--jq` for filtering: `gh pr list --json title --jq '.[].title'`
     #|- Set `GH_REPO` env var to avoid specifying repo each time
-  body
-}
-
-///|
-/// Body for the builtin commit skill.
-fn commit_skill_body() -> String {
-  let body =
-    #|# Git Commit Workflow
-    #|
-    #|## Steps
-    #|1. Review changes: `git diff --staged` (or `git diff` for unstaged)
-    #|2. Stage files: `git add <specific-files>` (avoid `git add .`)
-    #|3. Write commit message following conventional commits
-    #|4. Commit: `git commit -m "type(scope): description"`
-    #|
-    #|## Conventional Commits Format
-    #|```
-    #|<type>(<scope>): <description>
-    #|
-    #|[optional body]
-    #|```
-    #|
-    #|### Types
-    #|- `feat`: new feature
-    #|- `fix`: bug fix
-    #|- `docs`: documentation only
-    #|- `style`: formatting, no code change
-    #|- `refactor`: code change that neither fixes nor adds
-    #|- `perf`: performance improvement
-    #|- `test`: adding or correcting tests
-    #|- `chore`: maintenance tasks
-    #|
-    #|## Rules
-    #|- Keep subject line under 72 characters
-    #|- Use imperative mood: "add feature" not "added feature"
-    #|- Don't end subject with period
-    #|- Separate subject from body with blank line
-    #|- Review diff before committing to ensure no secrets or debug code
-    #|- Prefer specific file staging over `git add .`
-  body
-}
-
-///|
-/// Body for the builtin review skill.
-fn review_skill_body() -> String {
-  let body =
-    #|# Code Review Checklist
-    #|
-    #|When reviewing code, check the following areas systematically:
-    #|
-    #|## 1. Correctness
-    #|- Does the code do what it claims to do?
-    #|- Are edge cases handled (null, empty, overflow, concurrent access)?
-    #|- Are error conditions handled properly?
-    #|
-    #|## 2. Security
-    #|- No hardcoded secrets, tokens, or credentials
-    #|- Input validation at system boundaries
-    #|- No SQL injection, XSS, or command injection
-    #|- Proper authentication/authorization checks
-    #|
-    #|## 3. Performance
-    #|- No unnecessary allocations in hot paths
-    #|- Appropriate data structures for the use case
-    #|- No N+1 queries or unbounded loops
-    #|- Resource cleanup (file handles, connections)
-    #|
-    #|## 4. Readability
-    #|- Clear naming for variables, functions, types
-    #|- Appropriate comments for non-obvious logic
-    #|- Consistent style with the rest of the codebase
-    #|- Functions are focused (single responsibility)
-    #|
-    #|## 5. Testing
-    #|- Are critical paths covered by tests?
-    #|- Do tests verify behavior, not implementation?
-    #|- Are test names descriptive?
-    #|
-    #|## Output Format
-    #|For each finding:
-    #|```
-    #|[severity] file:line — description
-    #|  suggestion: how to fix
-    #|```
-    #|Severity: CRITICAL, WARNING, INFO, STYLE
   body
 }
 
@@ -624,97 +529,5 @@ fn discord_skill_body() -> String {
     #|- Do not tag or mention users unless explicitly asked
     #|- Do not send empty messages
     #|- If a tool call produces very long output, summarize it
-  body
-}
-
-///|
-/// Body for the builtin git skill.
-fn git_skill_body() -> String {
-  let body =
-    #|# Git Operations
-    #|
-    #|Use `bash` to run git commands. Always review changes before committing.
-    #|
-    #|## Common Workflows
-    #|
-    #|### Check Status
-    #|```bash
-    #|git status --porcelain
-    #|git diff --stat
-    #|```
-    #|
-    #|### View History
-    #|```bash
-    #|git log --oneline -10
-    #|git log --format="%h %an %ad %s" --date=short -10
-    #|git diff HEAD~1
-    #|```
-    #|
-    #|### Stage and Commit
-    #|```bash
-    #|git add <specific-files>    # prefer specific files over git add .
-    #|git diff --staged           # review staged changes
-    #|git commit -m "type(scope): description"
-    #|```
-    #|
-    #|### Branching
-    #|```bash
-    #|git branch -a
-    #|git checkout -b feature/name
-    #|git merge main
-    #|```
-    #|
-    #|## Conventional Commits
-    #|Format: `<type>(<scope>): <description>`
-    #|Types: feat, fix, docs, style, refactor, perf, test, chore
-    #|
-    #|## Rules
-    #|- Always review `git diff --staged` before committing
-    #|- Prefer specific file staging over `git add .`
-    #|- Keep subject under 72 characters, imperative mood
-    #|- Never commit secrets, debug code, or large binaries
-  body
-}
-
-///|
-/// Body for the builtin project-analyze skill.
-fn project_analyze_skill_body() -> String {
-  let body =
-    #|# Project Analysis
-    #|
-    #|When asked to analyze a project, use `fs.list` and `fs.read` to inspect the workspace.
-    #|
-    #|## Detection Steps
-    #|
-    #|1. **List root files**: `fs.list` at workspace root
-    #|2. **Detect language** by manifest file:
-    #|   - `moon.pkg.json` / `moon.pkg` → MoonBit (build: `moon build --target native`, test: `moon test --target native`)
-    #|   - `package.json` → JavaScript/TypeScript (build: `npm run build`, test: `npm test`)
-    #|   - `Cargo.toml` → Rust (build: `cargo build`, test: `cargo test`)
-    #|   - `go.mod` → Go (build: `go build ./...`, test: `go test ./...`)
-    #|   - `pyproject.toml` / `setup.py` → Python (test: `python -m pytest`)
-    #|   - `pom.xml` → Java/Maven, `build.gradle` → Java/Gradle
-    #|   - `Gemfile` → Ruby, `composer.json` → PHP
-    #|   - `CMakeLists.txt` → C/C++/CMake, `Makefile` → C/C++/Make
-    #|3. **Detect entry point**: check for `src/main/main.mbt`, `src/main.rs`, `main.go`, `src/index.ts`, etc.
-    #|4. **Check project files**: AGENTS.md, README.md, .git directory
-    #|
-    #|## Output Format
-    #|```
-    #|Project Analysis:
-    #|  Language: <detected>
-    #|  Framework: <if applicable>
-    #|  Entry point: <path>
-    #|  Build command: <command>
-    #|  Test command: <command>
-    #|  Git: yes/no
-    #|  AGENTS.md: present/not found
-    #|  README.md: present/not found
-    #|```
-    #|
-    #|## Tips
-    #|- If no manifest is found, check for common patterns (Dockerfile, docker-compose.yml)
-    #|- Read README.md for project-specific build instructions
-    #|- Save findings to AGENTS.md for future reference
   body
 }
