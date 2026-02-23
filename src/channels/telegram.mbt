@@ -156,11 +156,11 @@ async fn TelegramChannel::handle_update(
   }
   // Extract chat_id and from_id
   let chat_id = match message {
-    { "chat": { "id": Number(n, ..), .. }, .. } => n.to_int().to_string()
+    { "chat": { "id": Number(n, ..), .. }, .. } => n.to_int64().to_string()
     _ => return
   }
   let from_id = match message {
-    { "from": { "id": Number(n, ..), .. }, .. } => n.to_int().to_string()
+    { "from": { "id": Number(n, ..), .. }, .. } => n.to_int64().to_string()
     _ => ""
   }
   let from_name = match message {
