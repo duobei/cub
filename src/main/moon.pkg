@@ -7,6 +7,7 @@ import {
   "duobei/cub/config" @config,
   "duobei/cub/channels" @channels,
   "duobei/cub/log" @log,
+  "duobei/cub/mcp" @mcp,
   "moonbitlang/core/env",
 }
 

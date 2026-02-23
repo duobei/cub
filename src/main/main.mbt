@@ -258,6 +258,12 @@ fn main {
           }
         }
       }
+      "serve" => {
+        // MCP server mode — expose tools over JSON-RPC 2.0 stdio
+        let session = runtime.get_session("mcp-server")
+        let server = @mcp.McpServer::new(session.registry)
+        server.run_stdio()
+      }
       "version" => println("cub 0.1.0")
       _ => {
         println("cub - tape-first coding agent")
@@ -267,6 +273,7 @@ fn main {
         println("  cub chat [session_id]      interactive chat")
         println("  cub message                run channels (Discord/Telegram)")
         println("  cub run <msg>              run single message")
+        println("  cub serve                  run MCP server on stdio")
         println("  cub version                show version")
         println("")
         println("options:")

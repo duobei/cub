@@ -1,6 +1,8 @@
 import {
   "moonbitlang/async" @async,
   "moonbitlang/async/process" @process,
+  "moonbitlang/async/stdio" @stdio,
   "duobei/cub/log" @log,
+  "duobei/cub/tools" @tools,
   "moonbitlang/core/json",
 }

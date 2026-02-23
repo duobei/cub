@@ -443,13 +443,21 @@ fn register_tape_tools(
           // Hot-register into registry
           let tool_name = "ext.\{name}"
           let ext_path = script_path
+          let script_reg = tc_registry
+          let script_schema = params_json
           tc_registry.register(
             tool_name,
             description,
             parameters=params_json,
             source="extension",
             handler=async fn(call_args) {
-              run_extension(@ext.ExtType::Script, ext_path, call_args)
+              run_extension(
+                @ext.ExtType::Script,
+                ext_path,
+                call_args,
+                registry=script_reg,
+                schema=script_schema,
+              )
             },
           )
           "created script tool: \{tool_name} at \{script_path}"
@@ -523,13 +531,21 @@ fn register_tape_tools(
           // Hot-register
           let tool_name = "ext.\{name}"
           let ext_wasm = wasm_path
+          let wasm_reg = tc_registry
+          let wasm_schema = params_json
           tc_registry.register(
             tool_name,
             description,
             parameters=params_json,
             source="extension",
             handler=async fn(call_args) {
-              run_extension(@ext.ExtType::Wasm, ext_wasm, call_args)
+              run_extension(
+                @ext.ExtType::Wasm,
+                ext_wasm,
+                call_args,
+                registry=wasm_reg,
+                schema=wasm_schema,
+              )
             },
           )
           "created WASM tool: \{tool_name} (built at \{wasm_path})"

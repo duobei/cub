@@ -149,18 +149,62 @@ async fn register_ext_tools(
   workspace : String,
 ) -> Unit {
   let extensions = @ext.discover_extensions(home, workspace)
+  let reg = registry
   for ext in extensions {
     let tool_name = "ext.\{ext.name}"
     let ext_type = ext.ext_type
     let ext_path = ext.path
+    let ext_params = ext.parameters
     registry.register(
       tool_name,
       ext.description,
-      parameters=ext.parameters,
+      parameters=ext_params,
       source="extension",
-      handler=async fn(args) { run_extension(ext_type, ext_path, args) },
+      handler=async fn(args) {
+        run_extension(ext_type, ext_path, args, registry=reg, schema=ext_params)
+      },
     )
   }
+}
+
+///|
+/// Validate required parameters against a JSON Schema.
+/// Returns an error string if validation fails, empty string if ok.
+pub fn validate_required_params(args : Json, schema : Json) -> String {
+  let required = match schema {
+    { "required": Array(fields), .. } => fields
+    _ => return ""
+  }
+  let provided = match args {
+    Object(m) => m
+    _ => return ""
+  }
+  let missing : Array[String] = []
+  for field in required {
+    match field {
+      String(name) => if not(provided.contains(name)) { missing.push(name) }
+      _ => ()
+    }
+  }
+  if missing.is_empty() {
+    ""
+  } else {
+    let names = missing.join(", ")
+    "missing required parameters: \{names}"
+  }
+}
+
+///|
+/// Build a compact tool summary list for extension context.
+fn build_available_tools_context(registry : @tools.ToolRegistry) -> Json {
+  let tools : Array[Json] = []
+  for desc in registry.descriptors() {
+    let obj : Map[String, Json] = {}
+    obj["name"] = desc.name.to_json()
+    obj["description"] = desc.short_description.to_json()
+    tools.push(Json::object(obj))
+  }
+  tools.to_json()
 }
 
 ///|
@@ -169,8 +213,25 @@ async fn run_extension(
   ext_type : @ext.ExtType,
   path : String,
   args : Json,
+  registry~ : @tools.ToolRegistry,
+  schema~ : Json,
 ) -> String {
-  let args_str = args.stringify()
+  // Validate required parameters
+  let validation = validate_required_params(args, schema)
+  if not(validation.is_empty()) {
+    return validation
+  }
+  // Enrich input with context for WASM plugins
+  let enriched_args = match ext_type {
+    @ext.ExtType::Wasm => {
+      let wrapper : Map[String, Json] = {}
+      wrapper["arguments"] = args
+      wrapper["available_tools"] = build_available_tools_context(registry)
+      Json::object(wrapper)
+    }
+    @ext.ExtType::Script => args
+  }
+  let args_str = enriched_args.stringify()
   let timeout = 30_000
   let (exit_code, stdout_data, stderr_data) = @async.with_timeout(timeout, async fn() {
     match ext_type {
