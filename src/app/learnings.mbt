@@ -225,7 +225,7 @@ pub async fn decay_learnings(home : String, now_ms : Int64) -> Unit {
         }
         // Apply decay: confidence *= 0.905^weeks (approximation of e^(-0.1*weeks))
         let mut new_conf = conf
-        for _i = 0; _i < weeks; _i = _i + 1 {
+        for _ in 0..<weeks {
           new_conf = new_conf * 0.905
         }
         if new_conf >= 0.1 {

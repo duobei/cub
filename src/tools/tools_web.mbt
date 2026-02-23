@@ -280,7 +280,7 @@ fn url_encode(s : String) -> String {
   let buf = StringBuilder::new()
   let hex = "0123456789ABCDEF"
   let utf8 = @utf8.encode(s)
-  for i = 0; i < utf8.length(); i = i + 1 {
+  for i in 0..<utf8.length() {
     let b = utf8[i].to_int()
     if (b >= 'A'.to_int() && b <= 'Z'.to_int()) ||
       (b >= 'a'.to_int() && b <= 'z'.to_int()) ||

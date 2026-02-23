@@ -4,7 +4,7 @@
 /// Generate a short slug from session_id for tape file naming.
 fn session_slug(session_id : String) -> String {
   let mut hash : UInt = 2166136261
-  for i = 0; i < session_id.length(); i = i + 1 {
+  for i in 0..<session_id.length() {
     hash = hash ^ session_id[i].to_uint()
     hash = hash * 16777619
   }
@@ -16,7 +16,7 @@ fn session_slug(session_id : String) -> String {
 fn uint_to_hex(n : UInt) -> String {
   let hex_chars = "0123456789abcdef"
   let buf = StringBuilder::new()
-  for i = 0; i < 8; i = i + 1 {
+  for i in 0..<8 {
     let nibble = ((n >> ((7 - i) * 4)) & 0xf).reinterpret_as_int()
     buf.write_char(hex_chars[nibble].to_int().unsafe_to_char())
   }
@@ -36,7 +36,7 @@ fn decode_tape_filename(filename : String) -> String {
   }
   // Find __ separator
   let mut sep_pos = -1
-  for i = 0; i < base.length() - 1; i = i + 1 {
+  for i in 0..<(base.length() - 1) {
     if base[i] == '_'.to_int().to_uint16() &&
       i + 1 < base.length() &&
       base[i + 1] == '_'.to_int().to_uint16() {

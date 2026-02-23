@@ -336,7 +336,7 @@ async fn DiscordChannel::handle_message_create(
     if self.seen_messages.length() > 1000 {
       let keys = self.seen_messages.keys().collect()
       let half = keys.length() / 2
-      for i = 0; i < half; i = i + 1 {
+      for i in 0..<half {
         self.seen_messages.remove(keys[i])
       }
     }

@@ -30,9 +30,9 @@ fn find_substring(haystack : String, needle : String) -> Int {
   if nlen > hlen {
     return -1
   }
-  for i = 0; i <= hlen - nlen; i = i + 1 {
+  for i in 0..<=(hlen - nlen) {
     let mut matched = true
-    for j = 0; j < nlen; j = j + 1 {
+    for j in 0..<nlen {
       if haystack[i + j] != needle[j] {
         matched = false
         break

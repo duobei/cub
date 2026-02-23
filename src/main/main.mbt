@@ -474,7 +474,7 @@ fn split_comma(s : String) -> Array[String] {
 fn parse_int_or(s : String, default_val : Int) -> Int {
   let mut result = 0
   let mut valid = false
-  for i = 0; i < s.length(); i = i + 1 {
+  for i in 0..<s.length() {
     let ch = s[i].to_int()
     if ch >= 48 && ch <= 57 { // '0' to '9'
       result = result * 10 + (ch - 48)
@@ -566,7 +566,7 @@ fn has_suffix(s : String, suffix : String) -> Bool {
     return false
   }
   let offset = s.length() - suffix.length()
-  for i = 0; i < suffix.length(); i = i + 1 {
+  for i in 0..<suffix.length() {
     if s[offset + i] != suffix[i] {
       return false
     }
@@ -578,7 +578,7 @@ fn has_suffix(s : String, suffix : String) -> Bool {
 /// Extract channel_id from session_id like "discord:123456".
 fn extract_channel_id(session_id : String) -> String {
   let mut colon_pos = -1
-  for i = 0; i < session_id.length(); i = i + 1 {
+  for i in 0..<session_id.length() {
     if session_id[i] == ':'.to_int().to_uint16() {
       colon_pos = i
       break

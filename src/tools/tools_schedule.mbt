@@ -13,7 +13,7 @@ fn generate_job_id() -> String {
   // FNV-1a hash mixing timestamp + counter
   let mut hash : UInt = 2166136261
   // Mix in timestamp bytes
-  for i = 0; i < 8; i = i + 1 {
+  for i in 0..<8 {
     let byte = ((ts >> (i * 8)) & 0xFFL).to_int().reinterpret_as_uint()
     hash = hash ^ byte
     hash = hash * 16777619
@@ -24,7 +24,7 @@ fn generate_job_id() -> String {
   let hex_chars = "0123456789abcdef"
   let buf = StringBuilder::new()
   buf.write_string("job_")
-  for i = 0; i < 8; i = i + 1 {
+  for i in 0..<8 {
     let nibble = ((hash >> ((7 - i) * 4)) & 0xf).reinterpret_as_int()
     buf.write_char(hex_chars[nibble].to_int().unsafe_to_char())
   }

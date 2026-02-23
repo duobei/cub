@@ -167,7 +167,7 @@ pub fn fnv1a_hash(input : String) -> String {
   }
   let hex_chars = "0123456789abcdef"
   let buf = StringBuilder::new()
-  for i = 0; i < 16; i = i + 1 {
+  for i in 0..<16 {
     let shift = (15 - i) * 4
     let nibble = ((hash >> shift) & 0xFUL).to_int()
     buf.write_char(hex_chars[nibble].to_int().unsafe_to_char())

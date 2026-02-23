@@ -227,9 +227,9 @@ fn find_substring_in(haystack : String, needle : String) -> Int {
     return -1
   }
   let limit = haystack.length() - needle.length()
-  for i = 0; i <= limit; i = i + 1 {
+  for i in 0..<=limit {
     let mut matched = true
-    for j = 0; j < needle.length(); j = j + 1 {
+    for j in 0..<needle.length() {
       if haystack[i + j] != needle[j] {
         matched = false
         break

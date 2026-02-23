@@ -172,7 +172,7 @@ pub fn derive_tool_name(filename : String) -> String {
 /// Strip file extension from a filename.
 fn strip_extension(filename : String) -> String {
   let mut last_dot = -1
-  for i = 0; i < filename.length(); i = i + 1 {
+  for i in 0..<filename.length() {
     if filename[i] == '.'.to_int().to_uint16() {
       last_dot = i
     }

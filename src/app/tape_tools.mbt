@@ -47,18 +47,19 @@ fn register_tape_tools(
         None => "tool not found: \{name}"
         Some(d) => {
           let buf = StringBuilder::new()
-          buf.write_string("Tool: ")
-          buf.write_string(d.name)
-          buf.write_string("\nDescription: ")
-          buf.write_string(d.short_description)
+          buf
+          ..write_string("Tool: ")
+          ..write_string(d.name)
+          ..write_string("\nDescription: ")
+          .write_string(d.short_description)
           if d.detail.length() > 0 {
-            buf.write_string("\nDetail: ")
-            buf.write_string(d.detail)
+            buf..write_string("\nDetail: ").write_string(d.detail)
           }
-          buf.write_string("\nSource: ")
-          buf.write_string(d.source)
-          buf.write_string("\nParameters:\n")
-          buf.write_string(d.tool.parameters.stringify())
+          buf
+          ..write_string("\nSource: ")
+          ..write_string(d.source)
+          ..write_string("\nParameters:\n")
+          .write_string(d.tool.parameters.stringify())
           buf.to_string()
         }
       }
@@ -68,19 +69,21 @@ fn register_tape_tools(
   registry.register("tape.info", "Show tape status", handler=async fn(_args) {
     let info = tape.info()
     let buf = StringBuilder::new()
-    buf.write_string("tape: ")
-    buf.write_string(info.name)
-    buf.write_string("\nentries: ")
-    buf.write_string(info.entries.to_string())
-    buf.write_string("\nanchors: ")
-    buf.write_string(info.anchors.to_string())
-    buf.write_string("\nlast_anchor: ")
+    buf
+    ..write_string("tape: ")
+    ..write_string(info.name)
+    ..write_string("\nentries: ")
+    ..write_string(info.entries.to_string())
+    ..write_string("\nanchors: ")
+    ..write_string(info.anchors.to_string())
+    .write_string("\nlast_anchor: ")
     match info.last_anchor {
       Some(a) => buf.write_string(a)
       None => buf.write_string("-")
     }
-    buf.write_string("\nentries_since_last_anchor: ")
-    buf.write_string(info.entries_since_last_anchor.to_string())
+    buf
+    ..write_string("\nentries_since_last_anchor: ")
+    .write_string(info.entries_since_last_anchor.to_string())
     buf.to_string()
   })
   // ,handoff
@@ -866,7 +869,7 @@ fn strip_pkg_declarations(code : String) -> String {
       brace_depth = 0
     }
     if skip {
-      for i = 0; i < trimmed.length(); i = i + 1 {
+      for i in 0..<trimmed.length() {
         let ch = trimmed[i]
         if ch == '{'.to_int().to_uint16() || ch == '('.to_int().to_uint16() {
           brace_depth += 1

@@ -142,7 +142,7 @@ test "smart_truncate short text passes through" {
 ///|
 test "smart_truncate default truncation" {
   let lines : Array[String] = []
-  for i = 0; i < 100; i = i + 1 {
+  for i in 0..<100 {
     lines.push("line \{i}")
   }
   let text = lines.join("\n")
@@ -154,7 +154,7 @@ test "smart_truncate default truncation" {
 ///|
 test "smart_truncate bash keeps tail for errors" {
   let lines : Array[String] = []
-  for i = 0; i < 100; i = i + 1 {
+  for i in 0..<100 {
     lines.push("line \{i}")
   }
   let text = lines.join("\n")
@@ -167,7 +167,7 @@ test "smart_truncate bash keeps tail for errors" {
 ///|
 test "smart_truncate fs.read keeps head and tail" {
   let lines : Array[String] = []
-  for i = 0; i < 100; i = i + 1 {
+  for i in 0..<100 {
     lines.push("line \{i}")
   }
   let text = lines.join("\n")
@@ -181,7 +181,7 @@ test "smart_truncate fs.read keeps head and tail" {
 ///|
 test "smart_truncate grep keeps top 60" {
   let lines : Array[String] = []
-  for i = 0; i < 100; i = i + 1 {
+  for i in 0..<100 {
     lines.push("match \{i}")
   }
   let text = lines.join("\n")
@@ -196,7 +196,7 @@ test "smart_truncate grep keeps top 60" {
 ///|
 test "smart_truncate fs.list keeps top 60" {
   let lines : Array[String] = []
-  for i = 0; i < 100; i = i + 1 {
+  for i in 0..<100 {
     lines.push("file_\{i}.txt")
   }
   let text = lines.join("\n")
@@ -208,7 +208,7 @@ test "smart_truncate fs.list keeps top 60" {
 ///|
 test "smart_truncate bash head=10 tail=30" {
   let lines : Array[String] = []
-  for i = 0; i < 100; i = i + 1 {
+  for i in 0..<100 {
     lines.push("log \{i}")
   }
   let text = lines.join("\n")
@@ -226,7 +226,7 @@ test "smart_truncate bash head=10 tail=30" {
 ///|
 test "smart_truncate exactly at limit passes through" {
   let lines : Array[String] = []
-  for i = 0; i < 80; i = i + 1 {
+  for i in 0..<80 {
     lines.push("line \{i}")
   }
   let text = lines.join("\n")

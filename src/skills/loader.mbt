@@ -272,7 +272,7 @@ pub fn parse_frontmatter(content : String) -> (Map[String, String], String) {
 /// Find the first occurrence of a char in a string. Returns -1 if not found.
 fn find_char(s : String, ch : Char) -> Int {
   let target = ch.to_int()
-  for i = 0; i < s.length(); i = i + 1 {
+  for i in 0..<s.length() {
     if s[i].to_int() == target {
       return i
     }

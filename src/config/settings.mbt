@@ -13,13 +13,13 @@ pub async fn init_env() -> Unit {
   let env : Map[String, String] = {}
   // /proc/self/environ is null-separated KEY=VALUE pairs
   let mut start = 0
-  for i = 0; i < bytes.length(); i = i + 1 {
+  for i in 0..<bytes.length() {
     if bytes[i] == b'\x00' {
       if i > start {
         let entry = @utf8.decode_lossy(bytes[start:i])
         // Find first '=' to split key=value
         let mut eq_pos = -1
-        for j = 0; j < entry.length(); j = j + 1 {
+        for j in 0..<entry.length() {
           if entry[j] == '='.to_int().to_uint16() {
             eq_pos = j
             break

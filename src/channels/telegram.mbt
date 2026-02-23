@@ -569,7 +569,7 @@ pub fn markdown_to_html(text : String) -> String {
 fn parse_placeholder_idx(s : String) -> Int {
   let mut result = 0
   let mut valid = false
-  for i = 0; i < s.length(); i = i + 1 {
+  for i in 0..<s.length() {
     let ch = s[i].to_int()
     if ch >= 48 && ch <= 57 {
       result = result * 10 + (ch - 48)

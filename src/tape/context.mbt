@@ -262,11 +262,11 @@ pub fn smart_truncate(text : String, tool_name : String) -> String {
   }
   if tail > 0 && count > head + tail {
     let head_lines : Array[String] = []
-    for i = 0; i < head; i = i + 1 {
+    for i in 0..<head {
       head_lines.push(lines[i])
     }
     let tail_lines : Array[String] = []
-    for i = count - tail; i < count; i = i + 1 {
+    for i in (count - tail)..<count {
       tail_lines.push(lines[i])
     }
     let omitted = count - head - tail
@@ -275,7 +275,8 @@ pub fn smart_truncate(text : String, tool_name : String) -> String {
     "\{head_text}\n[...\{omitted} lines omitted...]\n\{tail_text}\n[\{count} lines total]"
   } else {
     let kept : Array[String] = []
-    for i = 0; i < head && i < count; i = i + 1 {
+    let limit = if head < count { head } else { count }
+    for i in 0..<limit {
       kept.push(lines[i])
     }
     let kept_text = kept.join("\n")

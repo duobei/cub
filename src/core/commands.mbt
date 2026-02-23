@@ -132,7 +132,7 @@ pub fn parse_kv_arguments(tokens : Array[String]) -> ParsedArgs {
 /// Helper: find character position in string, returns -1 if not found.
 fn find_char(s : String, ch : Char) -> Int {
   let target = ch.to_int().to_uint16()
-  for i = 0; i < s.length(); i = i + 1 {
+  for i in 0..<s.length() {
     if s[i] == target {
       return i
     }

@@ -97,7 +97,7 @@ pub fn is_safe_url(url : String) -> Bool {
   let mut host_end = after_scheme.length()
   let in_bracket = after_scheme.length() > 0 &&
     after_scheme[0] == '['.to_int().to_uint16()
-  for i = 0; i < after_scheme.length(); i = i + 1 {
+  for i in 0..<after_scheme.length() {
     let ch = after_scheme[i]
     if in_bracket {
       if ch == ']'.to_int().to_uint16() {
