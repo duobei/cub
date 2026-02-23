@@ -129,6 +129,7 @@ async fn AppRuntime::create_session(
   // Create tape service
   let tape_name = "\{self.settings.tape_name}:\{session_slug(session_id)}"
   let tape = @tape.TapeService::new(tape_name, self.store)
+  tape.ensure_bootstrap_anchor()
   // Create tool registry and register builtin tools
   let allowed = if self.settings.allowed_tools.length() > 0 {
     Some(self.settings.allowed_tools)
@@ -230,15 +231,11 @@ async fn AppRuntime::create_session(
     self.settings.system_prompt,
     async fn() {
       let agents = read_agents_md(ws)
-      let memory = read_memory_md(home)
       let startup = read_startup_md(ws)
       let learnings = render_learnings(home)
       let parts : Array[String] = []
       if not(agents.is_empty()) {
         parts.push(agents)
-      }
-      if not(memory.is_empty()) {
-        parts.push(memory)
       }
       if not(startup.is_empty()) {
         parts.push(startup)

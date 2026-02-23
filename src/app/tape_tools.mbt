@@ -260,51 +260,6 @@ fn register_tape_tools(
     sessions.map(fn(s) { "  \{s}" }).join("\n") +
     "\n\nUse `,session <name>` to switch."
   })
-  // ,memory.read
-  let mem_home_read = home
-  registry.register(
-    "memory.read",
-    "Read persistent workspace memory (MEMORY.md)",
-    handler=async fn(_args) {
-      let text = read_file_sync("\{mem_home_read}/MEMORY.md")
-      if text.is_empty() {
-        "no memory saved yet"
-      } else {
-        text
-      }
-    },
-  )
-  // ,memory.save
-  let mem_home_save = home
-  let mem_props : Map[String, Json] = Map::new()
-  mem_props["content"] = @tools.string_prop(
-    "Content to save — facts, conventions, preferences (not conversation summaries)",
-  )
-  let mem_params = @tools.make_params(mem_props, ["content"])
-  registry.register(
-    "memory.save",
-    "Save persistent facts to workspace memory (MEMORY.md) — survives across sessions",
-    parameters=mem_params,
-    handler=async fn(args) {
-      let content = match args {
-        { "content": String(c), .. } => c
-        _ => return "memory.save: missing content"
-      }
-      let path = "\{mem_home_save}/MEMORY.md"
-      // Read existing content and append
-      let existing = read_file_sync(path)
-      let new_content = if existing.is_empty() {
-        "# Workspace Memory\n\n\{content}\n"
-      } else {
-        "\{existing}\n\{content}\n"
-      }
-      if write_file_sync(path, new_content) {
-        "saved to MEMORY.md"
-      } else {
-        "memory.save: write failed"
-      }
-    },
-  )
   // ,skill.create
   let skill_ws = workspace
   let skill_home = home

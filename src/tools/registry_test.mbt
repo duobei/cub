@@ -43,7 +43,7 @@ test "ToolRegistry::allowed_tools filter" {
 ///|
 test "to_model_name converts dots to underscores" {
   inspect(@tools.to_model_name("fs.read"), content="fs_read")
-  inspect(@tools.to_model_name("memory.save"), content="memory_save")
+  inspect(@tools.to_model_name("tape.search"), content="tape_search")
   inspect(@tools.to_model_name("bash"), content="bash")
 }
 

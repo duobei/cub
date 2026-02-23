@@ -80,17 +80,6 @@ async fn read_agents_md(workspace : String) -> String {
 }
 
 ///|
-/// Read MEMORY.md from home directory, returns empty string if not found.
-async fn read_memory_md(home : String) -> String {
-  let path = "\{home}/MEMORY.md"
-  let text = read_file_sync(path)
-  if text.is_empty() {
-    return ""
-  }
-  "<workspace_memory>\n\{text}\n</workspace_memory>"
-}
-
-///|
 /// Export tape entries to readable markdown format.
 fn export_tape_to_markdown(entries : Array[@tape.TapeEntry]) -> String {
   let buf = StringBuilder::new()

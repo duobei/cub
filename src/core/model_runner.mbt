@@ -500,7 +500,7 @@ fn runtime_contract() -> String {
     #|4) Never emit '<command ...>' blocks yourself; those are runtime-generated.
     #|5) When enough evidence is collected, return plain natural language answer.
     #|6) Use '$name' hints to request detail expansion for tools/skills when needed.
-    #|7) After completing complex tasks, reflect and save useful patterns via memory.save.
+    #|7) After completing complex tasks, reflect on useful patterns.
     #|8) For repeated workflows, create reusable skills via skill.create.
     #|9) Update AGENTS.md via agents.update to evolve workspace behavior over time.
     #|10) Use $git skill hint for git operations; use $project-analyze to understand the workspace.
@@ -515,9 +515,7 @@ fn runtime_contract() -> String {
     #|In the handoff state, describe the CURRENT task status and NEXT steps — not a summary of history.
     #|Example: handoff(name="refactor/phase2", summary="Completed router refactor. Next: update tests.", context="Files changed: router.mbt, types.mbt", next_steps="Run tests and fix failures")
     #|If you need to recall earlier conversation, use tape.search to retrieve specific information.
-    #|MEMORY.md is already loaded into your system prompt — do NOT call memory.read unless the user asks.
-    #|Use memory.save to persist important facts (project conventions, user preferences) across sessions.
-    #|When you discover important information worth remembering, proactively call memory.save.
+    #|Use tape.search to recall information from earlier conversations when needed.
     #|</context_contract>
   contract
 }

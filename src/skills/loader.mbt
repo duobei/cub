@@ -715,6 +715,6 @@ fn project_analyze_skill_body() -> String {
     #|## Tips
     #|- If no manifest is found, check for common patterns (Dockerfile, docker-compose.yml)
     #|- Read README.md for project-specific build instructions
-    #|- Save findings to memory via `memory.save` for future reference
+    #|- Save findings to AGENTS.md for future reference
   body
 }
