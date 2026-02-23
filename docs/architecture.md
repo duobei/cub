@@ -35,7 +35,7 @@ src/
 
 ## Zero C FFI
 
-All I/O uses [moonbitlang/async](https://github.com/nicball/async) — file system, HTTP, process spawning, stdio, and sockets. No C foreign function interface calls.
+All I/O uses [moonbitlang/async](https://github.com/moonbitlang/async) — file system, HTTP, process spawning, stdio, and sockets. No C foreign function interface calls.
 
 ## Data Flow
 
@@ -211,6 +211,6 @@ Each is registered as `ext.{name}` in the tool registry, deduplicated by name (f
 
 Cub currently only compiles to `--target native`. The `wasm`, `wasm-gc`, and `js` targets are blocked because `moonbitlang/async` (the sole I/O dependency) only supports native — its runtime relies on native async primitives (epoll, kqueue) that have no WASM/JS equivalent yet.
 
-Upstream tracking: [moonbitlang/async#233](https://github.com/nicball/async/issues/233). A related proposal for abstracting I/O primitives: [moonbitlang/async#201](https://github.com/nicball/async/issues/201).
+Upstream tracking: [moonbitlang/async#233](https://github.com/moonbitlang/async/issues/233). A related proposal for abstracting I/O primitives: [moonbitlang/async#201](https://github.com/moonbitlang/async/issues/201).
 
 Once upstream adds WASM support, Cub can compile to browser or edge runtimes with no code changes — the codebase has zero C FFI and no platform-specific stubs.

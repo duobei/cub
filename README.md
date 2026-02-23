@@ -98,7 +98,7 @@ src/
 └── log/        Structured logging, level filtering
 ```
 
-Zero C FFI — all I/O uses [moonbitlang/async](https://github.com/nicball/async) (fs, http, process, stdio, socket). See [docs/architecture.md](docs/architecture.md) for detailed design.
+Zero C FFI — all I/O uses [moonbitlang/async](https://github.com/moonbitlang/async) (fs, http, process, stdio, socket). See [docs/architecture.md](docs/architecture.md) for detailed design.
 
 ## Build
 
