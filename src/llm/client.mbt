@@ -301,6 +301,9 @@ pub async fn LLMClient::chat_streaming(
   }
   // Read SSE stream
   let content_buf = StringBuilder::new()
+  // For streaming think-block suppression: buffer chunks and only emit non-think content
+  let chunk_buf = StringBuilder::new()
+  let mut in_think = false
   // For tool calls, we accumulate argument fragments by index
   let tc_ids : Map[Int, String] = {} // index → id
   let tc_names : Map[Int, String] = {} // index → function name
@@ -335,8 +338,68 @@ pub async fn LLMClient::chat_streaming(
             } =>
               if c.length() > 0 {
                 content_buf.write_string(c)
+                // Filter <think> blocks from streaming output
                 match self.on_chunk {
-                  Some(cb) => cb(c)
+                  Some(cb) => {
+                    chunk_buf.write_string(c)
+                    let buf = chunk_buf.to_string()
+                    // Process complete tags in buffer
+                    let open_tag = "<think>"
+                    let close_tag = "</think>"
+                    if in_think {
+                      let end_pos = find_substring(buf, close_tag)
+                      if end_pos >= 0 {
+                        // Think block ended — emit content after close tag
+                        in_think = false
+                        let after = buf[end_pos + 8:].to_string() catch {
+                          _ => ""
+                        }
+                        chunk_buf.reset()
+                        if after.length() > 0 {
+                          chunk_buf.write_string(after)
+                        }
+                      }
+                      // else: still inside think block, keep buffering
+                    } else {
+                      let start_pos = find_substring(buf, open_tag)
+                      if start_pos >= 0 {
+                        // Think block starting — emit content before it
+                        let before = buf[:start_pos].to_string() catch {
+                          _ => ""
+                        }
+                        if before.length() > 0 {
+                          cb(before)
+                        }
+                        in_think = true
+                        // Check if close tag is also in this chunk
+                        let rest = buf[start_pos + 7:].to_string() catch {
+                          _ => ""
+                        }
+                        let end_pos = find_substring(rest, close_tag)
+                        if end_pos >= 0 {
+                          in_think = false
+                          let after = rest[end_pos + 8:].to_string() catch {
+                            _ => ""
+                          }
+                          chunk_buf.reset()
+                          if after.length() > 0 {
+                            chunk_buf.write_string(after)
+                          }
+                        } else {
+                          chunk_buf.reset()
+                          chunk_buf.write_string(rest)
+                        }
+                      } else if find_substring(buf, "<") >= 0 &&
+                        buf.length() < open_tag.length() {
+                        // Partial tag — keep buffering
+                        ()
+                      } else {
+                        // No think tag — emit and clear buffer
+                        cb(buf)
+                        chunk_buf.reset()
+                      }
+                    }
+                  }
                   None => ()
                 }
               }
