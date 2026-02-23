@@ -27,21 +27,7 @@ fn main {
     } else {
       None
     }
-    // Streaming buffer for channel mode: on_chunk appends text,
-    // a background task periodically flushes to the channel.
-    let stream_buf : Ref[String] = { val: "" }
-    let stream_send_fn : Ref[(async (String) -> Unit)?] = { val: None }
-    let on_chunk : ((String) -> Unit)? = if command == "message" {
-      Some(fn(chunk) { stream_buf.val = stream_buf.val + chunk })
-    } else {
-      None
-    }
-    let runtime = @app.AppRuntime::new(
-      settings,
-      workspace,
-      confirm_fn~,
-      on_chunk~,
-    )
+    let runtime = @app.AppRuntime::new(settings, workspace, confirm_fn~)
     match command {
       "chat" => {
         // Interactive CLI mode
@@ -209,24 +195,7 @@ fn main {
                   allow_failure=true,
                 )
               }
-              // Background: flush streaming buffer every 3s
-              group.spawn_bg(
-                async fn() {
-                  while typing_active.val {
-                    @async.sleep(3000)
-                    let text = stream_buf.val
-                    if text.length() > 0 {
-                      stream_buf.val = ""
-                      match stream_send_fn.val {
-                        Some(send) => send(text)
-                        None => ()
-                      }
-                    }
-                  }
-                },
-                allow_failure=true,
-              )
-              // Set up streaming send function for this message
+              // Send helper for this message
               let send_to_channel : async (String) -> Unit = async fn(text) {
                 if text.is_empty() || channel_id.is_empty() {
                   return
@@ -243,8 +212,6 @@ fn main {
                   }
                 }
               }
-              stream_buf.val = ""
-              stream_send_fn.val = Some(send_to_channel)
               // Foreground: process document attachments then handle input
               let prompt = process_documents(msg.prompt, msg.documents)
               let result = runtime.handle_input(
@@ -253,20 +220,12 @@ fn main {
                 image_urls=msg.attachments,
               )
               typing_active.val = false
-              // Flush any remaining streamed content
-              let leftover = stream_buf.val
-              stream_buf.val = ""
-              stream_send_fn.val = None
-              // Build final output (skip assistant_output if already streamed)
+              // Send complete response at once
               let output_parts : Array[String] = []
               if result.immediate_output.length() > 0 {
                 output_parts.push(result.immediate_output)
               }
-              // If we streamed chunks, the assistant text was already sent
-              if leftover.length() > 0 {
-                // Send any buffered remainder that wasn't flushed yet
-                send_to_channel(leftover)
-              } else if result.assistant_output.length() > 0 {
+              if result.assistant_output.length() > 0 {
                 output_parts.push(result.assistant_output)
               }
               match result.error {
