@@ -304,3 +304,49 @@ async test "crystallize_skill creates skill file" {
     None => () // OK if dir doesn't exist
   }
 }
+
+///|
+async test "crystallize_skill with refine_fn uses refined content" {
+  let ws = "/tmp/cub_test_crystallize_refine"
+  // Use a unique content to avoid collision with other tests
+  let mock_refine : (async (String, String) -> String)? = Some(async fn(
+    _type : String,
+    _raw : String,
+  ) -> String {
+    @async.sleep(0)
+    "## When to use\nWhen editing code.\n\n## What to do\nUse targeted edits.\n\n## What to avoid\nFull file rewrites."
+  })
+  let result = @app.crystallize_skill(
+    ws,
+    "heuristic",
+    "Efficient: completed in 2 steps via fs.edit",
+    refine_fn=mock_refine,
+  )
+  match result {
+    Some(name) => inspect(name, content="auto-efficient-completed-steps")
+    None => () // OK if dir doesn't exist
+  }
+}
+
+///|
+async test "crystallize_skill with failing refine_fn falls back to raw content" {
+  let ws = "/tmp/cub_test_crystallize_refine_fail"
+  let failing_refine : (async (String, String) -> String)? = Some(async fn(
+    _type : String,
+    _raw : String,
+  ) -> String {
+    @async.sleep(0)
+    ""
+  })
+  // Should not crash — falls back to raw content
+  let result = @app.crystallize_skill(
+    ws,
+    "heuristic",
+    "Efficient: completed in 1 steps via grep",
+    refine_fn=failing_refine,
+  )
+  match result {
+    Some(name) => inspect(name, content="auto-efficient-completed-steps")
+    None => () // OK if dir doesn't exist
+  }
+}

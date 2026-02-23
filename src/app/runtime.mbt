@@ -138,22 +138,9 @@ async fn AppRuntime::create_session(
   let registry = @tools.ToolRegistry::new(allowed_tools=allowed)
   let tool_ctx = @tools.ToolContext::new(tape, self.workspace, session_id~)
   @tools.register_builtin_tools(registry, tool_ctx)
-  // Register tape tools
-  let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
-  register_tape_tools(
-    registry,
-    tape,
-    self.workspace,
-    home,
-    allowed_skills=self.settings.allowed_skills,
-  )
-  // Register MCP tools
-  register_mcp_tools(registry, self.mcp_clients)
-  // Register extension tools (script + WASM)
-  register_ext_tools(registry, home, self.workspace)
-  // Create tool view
-  let tool_view = @tools.ProgressiveToolView::new(registry)
   // Create LLM client — auto-detect Ollama if no API key configured
+  // (moved before register_tape_tools so handoff handler can use it)
+  let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
   let api_key = resolve_api_key(self.settings)
   let (model, api_base) = if api_key.is_empty() {
     match detect_ollama() {
@@ -176,6 +163,21 @@ async fn AppRuntime::create_session(
     confirm_fn=self.confirm_fn,
     on_chunk=self.on_chunk,
   )
+  // Register tape tools (with LLM for auto-summarization)
+  register_tape_tools(
+    registry,
+    tape,
+    self.workspace,
+    home,
+    allowed_skills=self.settings.allowed_skills,
+    llm=Some(llm),
+  )
+  // Register MCP tools
+  register_mcp_tools(registry, self.mcp_clients)
+  // Register extension tools (script + WASM)
+  register_ext_tools(registry, home, self.workspace)
+  // Create tool view
+  let tool_view = @tools.ProgressiveToolView::new(registry)
   // Create optional vision and fast LLM clients
   let llm_vision : @llm.LLMClient? = match self.settings.model_vision {
     Some(m) =>
@@ -255,6 +257,7 @@ async fn AppRuntime::create_session(
   let learn_home = home
   let learn_tape = tape
   let learn_ws = self.workspace
+  let learn_llm = llm
   let agent_loop = @core.AgentLoop::new(router, model_runner, tape, post_task_fn=async fn(
     steps,
     error,
@@ -269,6 +272,7 @@ async fn AppRuntime::create_session(
       learn_home,
       now_ms,
       workspace=learn_ws,
+      llm=Some(learn_llm),
     )
     update_skill_stats(learn_home, expanded_skills, steps, error)
   })

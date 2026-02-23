@@ -263,6 +263,31 @@ pub async fn decay_learnings(home : String, now_ms : Int64) -> Unit {
 }
 
 ///|
+/// Refine a raw learning into a structured skill description using an LLM.
+/// Returns the refined content, or the original on failure.
+pub async fn refine_learning_to_skill(
+  llm : @llm.LLMClient,
+  type_ : String,
+  raw_content : String,
+) -> String {
+  let sys = "You are a skill writer. Convert the raw learning below into a structured skill instruction. Output ONLY the instruction with these sections: ## When to use, ## What to do, ## What to avoid. Keep it under 200 words. No preamble."
+  let user_msg : Map[String, Json] = {}
+  user_msg["role"] = "user".to_json()
+  user_msg["content"] = "Type: \{type_}\nLearning: \{raw_content}".to_json()
+  let resp = llm.chat(
+    [Json::object(user_msg)],
+    max_tokens=300,
+    system_prompt=Some(sys),
+  ) catch {
+    _ => return raw_content
+  }
+  match resp.error {
+    Some(_) => raw_content
+    None => if resp.text.is_empty() { raw_content } else { resp.text }
+  }
+}
+
+///|
 /// Extract learnings from tape after task completion (zero-token, no LLM).
 pub async fn extract_learnings_from_tape(
   entries : Array[@tape.TapeEntry],
@@ -271,6 +296,7 @@ pub async fn extract_learnings_from_tape(
   home : String,
   now_ms : Int64,
   workspace? : String = "",
+  llm? : @llm.LLMClient? = None,
 ) -> Unit {
   // Collect tool calls since last anchor
   let tool_names : Array[String] = []
@@ -300,6 +326,14 @@ pub async fn extract_learnings_from_tape(
   if tool_names.is_empty() {
     return
   }
+  // Build optional refine callback from LLM
+  let refine_fn : (async (String, String) -> String)? = match llm {
+    Some(l) =>
+      Some(async fn(type_ : String, raw : String) -> String {
+        refine_learning_to_skill(l, type_, raw)
+      })
+    None => None
+  }
   // Detect patterns
   match error {
     Some(err) => {
@@ -327,7 +361,7 @@ pub async fn extract_learnings_from_tape(
       match add_learning(home, "anti_pattern", content, now_ms) {
         Some(c) =>
           if not(workspace.is_empty()) {
-            ignore(crystallize_skill(workspace, "anti_pattern", c))
+            ignore(crystallize_skill(workspace, "anti_pattern", c, refine_fn~))
           }
         None => ()
       }
@@ -352,7 +386,7 @@ pub async fn extract_learnings_from_tape(
         match add_learning(home, "heuristic", content, now_ms) {
           Some(c) =>
             if not(workspace.is_empty()) {
-              ignore(crystallize_skill(workspace, "heuristic", c))
+              ignore(crystallize_skill(workspace, "heuristic", c, refine_fn~))
             }
           None => ()
         }
@@ -370,7 +404,9 @@ pub async fn extract_learnings_from_tape(
             match add_learning(home, "preference", content, now_ms) {
               Some(c) =>
                 if not(workspace.is_empty()) {
-                  ignore(crystallize_skill(workspace, "preference", c))
+                  ignore(
+                    crystallize_skill(workspace, "preference", c, refine_fn~),
+                  )
                 }
               None => ()
             }
@@ -492,10 +528,12 @@ pub fn skill_name_from_content(content : String) -> String {
 ///|
 /// Crystallize a learning into a skill file.
 /// Creates .agent/skills/auto-{name}/SKILL.md from a reinforced learning.
+/// If refine_fn is provided, uses it to transform raw content into structured skill instructions.
 pub async fn crystallize_skill(
   workspace : String,
   type_ : String,
   content : String,
+  refine_fn? : (async (String, String) -> String)? = None,
 ) -> String? {
   let name = skill_name_from_content(content)
   match @tools.sanitize_name(name) {
@@ -515,7 +553,19 @@ pub async fn crystallize_skill(
     "preference" => "Preferred pattern"
     _ => "Learned pattern"
   }
-  let body = "---\nname: \{name}\ndescription: \{tag} - crystallized from repeated experience\n---\n\n## \{tag}\n\n\{content}\n\nThis skill was auto-crystallized from repeated task patterns.\n"
+  // Optionally refine the content via LLM
+  let refined = match refine_fn {
+    Some(rfn) => {
+      let result = rfn(type_, content) catch { _ => content }
+      if result.is_empty() {
+        content
+      } else {
+        result
+      }
+    }
+    None => content
+  }
+  let body = "---\nname: \{name}\ndescription: \{tag} - crystallized from repeated experience\n---\n\n\{refined}\n\nThis skill was auto-crystallized from repeated task patterns.\n"
   if write_file_sync(skill_path, body) {
     Some(name)
   } else {

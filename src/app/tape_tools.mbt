@@ -8,6 +8,7 @@ fn register_tape_tools(
   workspace : String,
   home : String,
   allowed_skills? : Array[String] = [],
+  llm? : @llm.LLMClient? = None,
 ) -> Unit {
   // ,help
   registry.register("help", "Show available commands", handler=fn(_args) {
@@ -92,6 +93,7 @@ fn register_tape_tools(
   props["next_steps"] = @tools.string_prop("What should happen next")
   props["task"] = @tools.string_prop("Current task description")
   let handoff_params = @tools.make_params(props, ["name"])
+  let handoff_llm = llm
   registry.register(
     "handoff",
     "Create a stage transition — carry forward state, not history",
@@ -118,7 +120,22 @@ fn register_tape_tools(
         { "task": String(t), .. } => state["task"] = t.to_json()
         _ => ()
       }
-      ignore(tape.handoff(name, state=Some(state)))
+      // Auto-summarize via LLM when no state fields were provided
+      let final_state = if state.is_empty() {
+        match handoff_llm {
+          Some(l) => {
+            let messages = tape.tape().read_messages()
+            let auto_state = l.summarize_for_handoff(messages) catch {
+              _ => @llm.summarize_messages_for_handoff(messages)
+            }
+            auto_state
+          }
+          None => state
+        }
+      } else {
+        state
+      }
+      ignore(tape.handoff(name, state=Some(final_state)))
       "handoff: \{name}"
     },
   )

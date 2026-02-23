@@ -690,6 +690,88 @@ pub fn summarize_messages_for_handoff(
 }
 
 ///|
+/// Summarize chat messages for handoff using an LLM call.
+/// Falls back to heuristic summarize_messages_for_handoff on failure.
+pub async fn LLMClient::summarize_for_handoff(
+  self : LLMClient,
+  messages : Array[Json],
+) -> Map[String, Json] {
+  // Take last 20 messages, truncate each to 500 chars
+  let start = if messages.length() > 20 { messages.length() - 20 } else { 0 }
+  let buf = StringBuilder::new()
+  for i = start; i < messages.length(); i = i + 1 {
+    let msg = messages[i]
+    let role = match msg {
+      { "role": String(r), .. } => r
+      _ => "unknown"
+    }
+    let content = match msg {
+      { "content": String(c), .. } => c
+      _ => continue
+    }
+    let truncated = if content.length() > 500 {
+      content[:500].to_string() catch {
+        _ => content
+      }
+    } else {
+      content
+    }
+    buf.write_string(role)
+    buf.write_string(": ")
+    buf.write_string(truncated)
+    buf.write_string("\n")
+  }
+  let sys =
+    #|Summarize this conversation for handoff to a fresh context.
+    #|Output ONLY valid JSON with these keys:
+    #|{"task": "original user request", "summary": "what was accomplished", "decisions": "key decisions made", "pending": "what remains to do"}
+    #|Be concise. No markdown, no explanation.
+  let user_msg : Map[String, Json] = {}
+  user_msg["role"] = "user".to_json()
+  user_msg["content"] = buf.to_string().to_json()
+  let resp = self.chat(
+    [Json::object(user_msg)],
+    max_tokens=500,
+    system_prompt=Some(sys),
+  ) catch {
+    _ => return summarize_messages_for_handoff(messages)
+  }
+  match resp.error {
+    Some(_) => return summarize_messages_for_handoff(messages)
+    None => ()
+  }
+  if resp.text.is_empty() {
+    return summarize_messages_for_handoff(messages)
+  }
+  // Parse the JSON response
+  let json = @json.parse(resp.text) catch {
+    _ => return summarize_messages_for_handoff(messages)
+  }
+  let state : Map[String, Json] = {}
+  match json {
+    { "task": String(t), .. } => state["task"] = t.to_json()
+    _ => ()
+  }
+  match json {
+    { "summary": String(s), .. } => state["summary"] = s.to_json()
+    _ => ()
+  }
+  match json {
+    { "decisions": String(d), .. } => state["context"] = d.to_json()
+    _ => ()
+  }
+  match json {
+    { "pending": String(p), .. } => state["next_steps"] = p.to_json()
+    _ => ()
+  }
+  // If we got nothing useful, fall back
+  if state.is_empty() {
+    return summarize_messages_for_handoff(messages)
+  }
+  state
+}
+
+///|
 /// Run a single tool-use cycle: chat → execute tools → return result.
 pub async fn LLMClient::run_tools(
   self : LLMClient,
@@ -730,7 +812,7 @@ pub async fn LLMClient::run_tools(
       "llm",
       "context at ~\{estimated} tokens (>\{critical_threshold}), auto-handoff",
     )
-    let state = summarize_messages_for_handoff(messages)
+    let state = self.summarize_for_handoff(messages)
     ignore(tape.handoff("auto/context_overflow", state=Some(state)))
     messages = tape.read_messages()
     estimated = estimate_tokens(messages, system_prompt)
