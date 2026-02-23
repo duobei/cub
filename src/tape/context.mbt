@@ -55,11 +55,14 @@ pub fn select_messages(entries : Array[TapeEntry]) -> Array[Json] {
     if entry.kind == "tool_result" {
       // Emit the buffered assistant message now that we have the result
       match pending_assistant_msg {
-        Some(msg) => messages.push(msg)
+        Some(msg) => {
+          messages.push(msg)
+          pending_assistant_msg = None
+          append_tool_result_entry(messages, pending_calls, entry)
+        }
+        // No assistant message (all tool_calls filtered) → drop results too
         None => ()
       }
-      pending_assistant_msg = None
-      append_tool_result_entry(messages, pending_calls, entry)
       pending_calls = []
       continue
     }
@@ -125,6 +128,8 @@ fn build_tool_call_message(entry : TapeEntry) -> (Json?, Array[Json]) {
 
 ///|
 /// Append tool_result entries, correlating with pending tool calls.
+/// Skips results whose tool_call_id doesn't match any accepted call
+/// (prevents orphan tool results when tool_calls were filtered out).
 fn append_tool_result_entry(
   messages : Array[Json],
   pending_calls : Array[Json],
@@ -134,7 +139,25 @@ fn append_tool_result_entry(
     { "results": Array(rs), .. } => rs
     _ => return
   }
+  // Collect accepted call IDs for filtering
+  let accepted_ids : Array[String] = []
+  for call in pending_calls {
+    match call {
+      { "id": String(id), .. } => accepted_ids.push(id)
+      _ => ()
+    }
+  }
   for index, result in results {
+    // Skip results referencing tool_call_ids that were filtered out
+    let result_id = match result {
+      { "tool_call_id": String(id), .. } => id
+      _ => ""
+    }
+    if result_id.length() > 0 &&
+      accepted_ids.length() > 0 &&
+      not(accepted_ids.contains(result_id)) {
+      continue
+    }
     messages.push(build_tool_result_message(result, pending_calls, index))
   }
 }

@@ -236,6 +236,85 @@ test "smart_truncate exactly at limit passes through" {
 }
 
 ///|
+test "select_messages drops tool_result when tool_call has invalid args" {
+  // Simulate a tool_call with invalid JSON arguments (truncated by model)
+  let call_json : Map[String, Json] = {}
+  call_json["id"] = "call_bad".to_json()
+  let func : Map[String, Json] = {}
+  func["name"] = "fs_write".to_json()
+  func["arguments"] = "{\"content\": \"truncated...".to_json() // invalid JSON
+  call_json["function"] = Json::object(func)
+  // The tool_result references the bad call's id
+  let result_json : Map[String, Json] = {}
+  result_json["tool_call_id"] = "call_bad".to_json()
+  result_json["name"] = "fs_write".to_json()
+  result_json["content"] = "Error: missing path".to_json()
+  let entries = [
+    TapeEntry::message("user", "write a file"),
+    TapeEntry::tool_call([Json::object(call_json)]),
+    TapeEntry::tool_result([Json::object(result_json)]),
+    TapeEntry::message("user", "next question"),
+  ]
+  let msgs = select_messages(entries)
+  // Should have 2 user messages only — tool_call and tool_result both dropped
+  inspect(msgs.length(), content="2")
+  match msgs[0] {
+    { "content": String(c), .. } => inspect(c, content="write a file")
+    _ => fail("expected first user message")
+  }
+  match msgs[1] {
+    { "content": String(c), .. } => inspect(c, content="next question")
+    _ => fail("expected second user message")
+  }
+}
+
+///|
+test "select_messages keeps valid tool_call but drops filtered result" {
+  // One valid call, one invalid call in the same tool_call entry
+  let good_call : Map[String, Json] = {}
+  good_call["id"] = "call_good".to_json()
+  let good_func : Map[String, Json] = {}
+  good_func["name"] = "bash".to_json()
+  good_func["arguments"] = "{\"command\": \"ls\"}".to_json()
+  good_call["function"] = Json::object(good_func)
+  let bad_call : Map[String, Json] = {}
+  bad_call["id"] = "call_bad".to_json()
+  let bad_func : Map[String, Json] = {}
+  bad_func["name"] = "fs_write".to_json()
+  bad_func["arguments"] = "not valid json".to_json()
+  bad_call["function"] = Json::object(bad_func)
+  // Results for both
+  let good_result : Map[String, Json] = {}
+  good_result["tool_call_id"] = "call_good".to_json()
+  good_result["name"] = "bash".to_json()
+  good_result["content"] = "file1 file2".to_json()
+  let bad_result : Map[String, Json] = {}
+  bad_result["tool_call_id"] = "call_bad".to_json()
+  bad_result["name"] = "fs_write".to_json()
+  bad_result["content"] = "Error".to_json()
+  let entries = [
+    TapeEntry::message("user", "do stuff"),
+    TapeEntry::tool_call([Json::object(good_call), Json::object(bad_call)]),
+    TapeEntry::tool_result([Json::object(good_result), Json::object(bad_result)]),
+  ]
+  let msgs = select_messages(entries)
+  // user msg + assistant (with only good call) + good tool result = 3
+  inspect(msgs.length(), content="3")
+  // Assistant should have only 1 tool_call
+  match msgs[1] {
+    { "role": String("assistant"), "tool_calls": Array(calls), .. } =>
+      inspect(calls.length(), content="1")
+    _ => fail("expected assistant with tool_calls")
+  }
+  // Tool result should be for good call only
+  match msgs[2] {
+    { "role": String("tool"), "tool_call_id": String(id), .. } =>
+      inspect(id, content="call_good")
+    _ => fail("expected tool result for good call")
+  }
+}
+
+///|
 test "validate_tool_call valid call" {
   let call : Map[String, Json] = {}
   call["id"] = "call_1".to_json()
