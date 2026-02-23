@@ -31,7 +31,7 @@ pub async fn Tape::append(self : Tape, entry : TapeEntry) -> Unit {
 }
 
 ///|
-/// Perform a handoff: create an anchor and return entries after it.
+/// Perform a handoff: create an anchor, compact old entries, return current entries.
 pub async fn Tape::handoff(
   self : Tape,
   name : String,
@@ -39,7 +39,15 @@ pub async fn Tape::handoff(
 ) -> Array[TapeEntry] {
   let anchor = TapeEntry::anchor(name, state~)
   self.append(anchor)
+  // Compact: discard entries before the last anchor to keep tape size bounded
+  ignore(self.store.compact(self.name))
   self.read_entries()
+}
+
+///|
+/// Compact this tape (discard entries before last anchor).
+pub async fn Tape::compact(self : Tape) -> Int {
+  self.store.compact(self.name)
 }
 
 ///|

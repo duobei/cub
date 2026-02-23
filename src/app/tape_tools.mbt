@@ -150,24 +150,28 @@ fn register_tape_tools(
     }
     anchors.map(fn(a) { a.name }).join("\n")
   })
-  // ,tape.search
+  // ,tape.search (searches across all tapes in workspace)
   let search_props : Map[String, Json] = Map::new()
   search_props["query"] = @tools.string_prop("Search query")
   let search_params = @tools.make_params(search_props, ["query"])
   registry.register(
     "tape.search",
-    "Search tape entries",
+    "Search across all tape sessions in this workspace",
     parameters=search_params,
     handler=async fn(args) {
       let query = match args {
         { "query": String(q), .. } => q
         _ => return "tape.search: missing query"
       }
-      let results = tape.search(query)
+      let results = tape.search_all(query)
       if results.is_empty() {
         return "no results"
       }
-      results.map(fn(e) { "\{e.kind}: \{e.payload.stringify()}" }).join("\n")
+      results
+      .map(fn(pair) {
+        "[\{pair.0}] \{pair.1.kind}: \{pair.1.payload.stringify()}"
+      })
+      .join("\n")
     },
   )
   // ,tape.reset

@@ -47,3 +47,19 @@ test "url_encode space encoded" {
   let result = url_encode("hello world")
   inspect(result, content="hello%20world")
 }
+
+///|
+test "url_decode reverses url_encode" {
+  inspect(@tape.url_decode("hello123"), content="hello123")
+  inspect(@tape.url_decode("a%3Ab%2Fc"), content="a:b/c")
+  inspect(@tape.url_decode("hello%20world"), content="hello world")
+  inspect(@tape.url_decode("a-b_c.d"), content="a-b_c.d")
+}
+
+///|
+test "url_decode roundtrip" {
+  let original = "cub:e341d29d3de6d917"
+  let encoded = url_encode(original)
+  let decoded = @tape.url_decode(encoded)
+  inspect(decoded, content=original)
+}

@@ -158,7 +158,7 @@ pub async fn TapeService::anchors(
   } else {
     0
   }
-  for i = start; i < anchor_entries.length(); i = i + 1 {
+  for i in start..<anchor_entries.length() {
     let e = anchor_entries[i]
     let name = match e.payload {
       { "name": String(n), .. } => n
@@ -174,7 +174,7 @@ pub async fn TapeService::anchors(
 }
 
 ///|
-/// Search tape entries by substring match.
+/// Search tape entries by substring match (current tape only).
 pub async fn TapeService::search(
   self : TapeService,
   query : String,
@@ -196,4 +196,14 @@ pub async fn TapeService::search(
     i -= 1
   }
   results
+}
+
+///|
+/// Search across all tapes in this workspace.
+pub async fn TapeService::search_all(
+  self : TapeService,
+  query : String,
+  limit? : Int = 20,
+) -> Array[(String, TapeEntry)] {
+  self.store.search_all(query, limit~)
 }

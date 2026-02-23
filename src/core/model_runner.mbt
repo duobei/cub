@@ -294,7 +294,31 @@ async fn ModelRunner::chat(
   let execute_tool : async (String, Json) -> String = async fn(name, args) {
     // Convert model name back to registry name
     let tool_name = @tools.from_model_name(name, self.registry)
-    self.registry.execute(tool_name, kwargs=args)
+    // Audit: record tool execution start
+    let start_ts = @async.now()
+    let start_data : Map[String, Json] = {}
+    start_data["name"] = tool_name.to_json()
+    self.tape.append_event("tool.exec.start", Json::object(start_data))
+    let result = self.registry.execute(tool_name, kwargs=args) catch {
+      e => {
+        // Audit: record tool execution error
+        let duration = @async.now() - start_ts
+        let fin_data : Map[String, Json] = {}
+        fin_data["name"] = tool_name.to_json()
+        fin_data["duration_ms"] = duration.to_json()
+        fin_data["error"] = e.to_string().to_json()
+        self.tape.append_event("tool.exec.finish", Json::object(fin_data))
+        raise e
+      }
+    }
+    // Audit: record tool execution finish
+    let duration = @async.now() - start_ts
+    let fin_data : Map[String, Json] = {}
+    fin_data["name"] = tool_name.to_json()
+    fin_data["duration_ms"] = duration.to_json()
+    fin_data["result_len"] = result.length().to_json()
+    self.tape.append_event("tool.exec.finish", Json::object(fin_data))
+    result
   }
   let registry = self.registry
   let needs_confirmation : (String) -> Bool = fn(name) {
