@@ -5,3 +5,4 @@ _build/
 .env
 .agent/
 /skills/
+AGENTS.md

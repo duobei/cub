@@ -2,7 +2,7 @@
 
 ///|
 /// Tool continue prompt sent after tool execution.
-let tool_continue_prompt : String = "Continue the task."
+let tool_continue_prompt : String = "[system: tools executed, continue your response to the user]"
 
 ///|
 /// Runs assistant loop over tape with command-aware follow-up handling.
@@ -502,7 +502,7 @@ fn runtime_contract() -> String {
     #|6) Use '$name' hints to request detail expansion for tools/skills when needed.
     #|7) After completing complex tasks, reflect on useful patterns.
     #|8) For repeated workflows, create reusable skills via skill.create.
-    #|9) Update AGENTS.md via agents.update to evolve workspace behavior over time.
+    #|9) Update AGENTS.md via agents.update to evolve workspace behavior over time. When you learn important facts about yourself (name, identity, preferences) or the user, persist them to AGENTS.md immediately so all sessions share the knowledge.
     #|10) Use $git skill hint for git operations; use $project-analyze to understand the workspace.
     #|11) Use schedule.add to create timed tasks; schedule.list/remove to manage them.
     #|12) Use agent.spawn to delegate complex subtasks to a child agent process.
