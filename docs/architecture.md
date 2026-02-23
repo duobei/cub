@@ -26,7 +26,7 @@ src/
 ├── tools/      Tool registry, progressive disclosure, builtin tools (bash, fs, grep, web, schedule, agent)
 ├── skills/     Three-level discovery, SKILL.md parsing, 5 builtin skills, async fs
 ├── channels/   Discord (WebSocket, heartbeat, context quoting) + Telegram (HTTP long polling, markdown→HTML)
-├── mcp/        MCP client (JSON-RPC 2.0 over stdio, async process pipes, tool discovery)
+├── mcp/        MCP client + server (JSON-RPC 2.0 over stdio, async process pipes, tool discovery)
 ├── config/     .env loading via /proc/self/environ, settings (CUB_ prefix)
 ├── cli/        Interactive REPL with async stdin, history, session switching, tool confirmation
 ├── ext/        Extension discovery, WASM/script loader, hot-registration
@@ -64,7 +64,9 @@ User Input
 
 - **Tool confirmation** — `confirm_fn` callback: auto-approve in channels, interactive `[y/N]` in CLI
 - **Streaming SSE** — `chat_streaming()` with `on_chunk` callback for real-time output
+- **Channel streaming** — `on_chunk` buffers text, background flusher sends every 3s to Discord/Telegram
 - **Parallel tool execution** — non-confirmation tool calls run concurrently via `task_group`
+- **Per-session queuing** — messages for a busy session are queued and processed sequentially
 - **Channel typing indicators** — 5-second loop via `task_group`, cancelled when response ready
 
 ## Self-Evolution Pipeline

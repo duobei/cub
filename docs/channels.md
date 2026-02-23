@@ -37,3 +37,11 @@ Features: HTTP long polling, markdown-to-HTML conversion (code blocks, bold, ita
 Both channels can run simultaneously. A systemd service file (`cub.service`) is included for persistent deployment.
 
 Use `cub message` to start channel listeners. The same agent loop, tools, and skills are available in channel mode as in interactive CLI mode.
+
+## Streaming Output
+
+In channel mode, LLM output is streamed to users in real-time. A background flusher sends buffered text every 3 seconds, so users see partial responses before the full answer is ready.
+
+## Per-Session Queuing
+
+Messages for a session that is currently processing are queued and handled sequentially. This prevents concurrent requests from interleaving tool calls or corrupting tape state.

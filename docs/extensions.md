@@ -4,7 +4,21 @@ Cub supports external tool integration via MCP servers, script tools, and WASM p
 
 ## MCP (Model Context Protocol)
 
-Cub includes a built-in MCP client that connects to external tool servers via JSON-RPC 2.0 over stdio.
+Cub includes both an MCP client and an MCP server, communicating via JSON-RPC 2.0 over stdio.
+
+### MCP Server Mode
+
+Run `cub serve` to expose all registered tools as an MCP server. External agents or tools can call Cub's tools via the standard MCP protocol:
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test"}}}' | cub serve
+```
+
+Supported methods: `initialize`, `tools/list`, `tools/call`.
+
+### MCP Client
+
+Cub's built-in MCP client connects to external tool servers.
 
 Configure servers in `~/.cub/mcp.json`:
 
@@ -45,6 +59,12 @@ Place a MoonBit WASM plugin directory with a `plugin.json` manifest:
 |----------|---------|--------------|
 | 1 (workspace) | `.agent/tools/` | `.agent/plugins/` |
 | 2 (global) | `~/.cub/tools/` | `~/.cub/plugins/` |
+
+## WASM Plugin Features
+
+- **Parameter validation** — if `plugin.json` defines `required` fields, they are validated before execution
+- **Available tools context** — WASM plugins receive an `available_tools` array in their input JSON, listing all registered tools
+- **Bidirectional tool calls** — plugins can output `{"type":"tool_call","name":"...","args":{}}` JSONL lines to invoke other registered tools; results are appended to the output
 
 ## Management
 

@@ -57,6 +57,7 @@ cub [options]              interactive chat (default)
 cub chat [session_id]      interactive chat
 cub message                run Discord/Telegram channel
 cub run <msg>              run single message
+cub serve                  run MCP server on stdio
 cub version                show version
 ```
 
@@ -91,7 +92,7 @@ src/
 ├── tools/      Tool registry, progressive disclosure, builtin tools
 ├── skills/     Three-level discovery, SKILL.md parsing, builtin skills
 ├── channels/   Discord (WebSocket) + Telegram (HTTP long polling)
-├── mcp/        MCP client (JSON-RPC 2.0 over stdio)
+├── mcp/        MCP client + server (JSON-RPC 2.0 over stdio)
 ├── config/     .env loading, settings (CUB_ prefix)
 ├── cli/        Interactive REPL, async stdin, tool confirmation
 ├── ext/        Extension discovery, WASM/script loader
@@ -106,7 +107,7 @@ Zero C FFI — all I/O uses [moonbitlang/async](https://github.com/moonbitlang/a
 moon fmt --check                       # format check
 moon check --target native --deny-warn # type check (strict)
 moon build --target native             # build binary
-moon test --target native              # run 196 tests
+moon test --target native              # run 255 tests
 ```
 
 Binary: `_build/native/debug/build/main/main.exe`
