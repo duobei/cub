@@ -835,6 +835,18 @@ pub async fn LLMClient::summarize_for_handoff(
 }
 
 ///|
+/// Try to parse tool arguments JSON. Returns Ok(Json) or Err with descriptive message.
+fn try_parse_tool_args(name : String, args_str : String) -> (Json, Bool) {
+  let parsed = @json.parse(args_str) catch {
+    _ => {
+      @log.warn("llm", "invalid JSON args for \{name} (truncated?)")
+      return (Json::object(Map::new()), false)
+    }
+  }
+  (parsed, true)
+}
+
+///|
 /// Run a single tool-use cycle: chat → execute tools → return result.
 pub async fn LLMClient::run_tools(
   self : LLMClient,
@@ -957,14 +969,13 @@ pub async fn LLMClient::run_tools(
         let tc_name = tc.function_.name
         let slot = idx
         group.spawn_bg(async fn() {
-          let args : Json = @json.parse(tc_args_str) catch {
-            _ => {
-              @log.warn("llm", "failed to parse tool args for \{tc_name}")
-              Json::object(Map::new())
+          let (args, ok) = try_parse_tool_args(tc_name, tc_args_str)
+          let result_text = if ok {
+            execute_tool(tc_name, args) catch {
+              e => "Error: \{e}"
             }
-          }
-          let result_text = execute_tool(tc_name, args) catch {
-            e => "Error: \{e}"
+          } else {
+            "Error: tool arguments are not valid JSON (likely truncated by model). Try splitting the content into smaller pieces or using a shorter argument."
           }
           parallel_results[slot] = result_text
         })
@@ -985,17 +996,20 @@ pub async fn LLMClient::run_tools(
   } else {
     // Single parallel call or none — execute sequentially
     for tc in parallel_calls {
-      let args : Json = @json.parse(tc.function_.arguments) catch {
-        _ => {
-          @log.warn("llm", "failed to parse tool args for \{tc.function_.name}")
-          Json::object(Map::new())
+      let (args, ok) = try_parse_tool_args(
+        tc.function_.name,
+        tc.function_.arguments,
+      )
+      let result_text = if ok {
+        execute_tool(tc.function_.name, args) catch {
+          e => {
+            any_tool_error = true
+            "Error: \{e}"
+          }
         }
-      }
-      let result_text = execute_tool(tc.function_.name, args) catch {
-        e => {
-          any_tool_error = true
-          "Error: \{e}"
-        }
+      } else {
+        any_tool_error = true
+        "Error: tool arguments are not valid JSON (likely truncated by model). Try splitting the content into smaller pieces or using a shorter argument."
       }
       let result_obj : Map[String, Json] = Map::new()
       result_obj["tool_call_id"] = tc.id.to_json()
@@ -1006,8 +1020,18 @@ pub async fn LLMClient::run_tools(
   }
   // Execute confirmation-required tools serially
   for tc in serial_calls {
-    let args : Json = @json.parse(tc.function_.arguments) catch {
-      _ => Json::object(Map::new())
+    let (args, ok) = try_parse_tool_args(
+      tc.function_.name,
+      tc.function_.arguments,
+    )
+    if not(ok) {
+      any_tool_error = true
+      let result_obj : Map[String, Json] = Map::new()
+      result_obj["tool_call_id"] = tc.id.to_json()
+      result_obj["name"] = tc.function_.name.to_json()
+      result_obj["content"] = "Error: tool arguments are not valid JSON (likely truncated by model). Try splitting the content into smaller pieces or using a shorter argument.".to_json()
+      result_jsons.push(Json::object(result_obj))
+      continue
     }
     // Check if tool requires user confirmation (not just serial execution)
     if needs_confirmation(tc.function_.name) {
