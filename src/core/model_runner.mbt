@@ -370,13 +370,13 @@ async fn ModelRunner::render_system_prompt(self : ModelRunner) -> String {
 
 ///|
 /// Join non-empty blocks with double newlines.
-fn join_blocks(blocks : Array[String]) -> String {
+pub fn join_blocks(blocks : Array[String]) -> String {
   blocks.filter(fn(b) { not(b.trim().to_string().is_empty()) }).join("\n\n")
 }
 
 ///|
 /// Join visible parts with double newlines.
-fn join_visible_parts(parts : Array[String]) -> String {
+pub fn join_visible_parts(parts : Array[String]) -> String {
   parts.filter(fn(p) { not(p.is_empty()) }).join("\n\n").trim().to_string()
 }
 
@@ -461,7 +461,7 @@ async fn ModelRunner::expand_skill_hints(
 
 ///|
 /// Check if an error string indicates an API 400 bad request.
-fn is_api_bad_request(err : String) -> Bool {
+pub fn is_api_bad_request(err : String) -> Bool {
   err.contains("API error (400)") || err.contains("bad_request_error")
 }
 

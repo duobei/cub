@@ -375,7 +375,7 @@ async fn InputRouter::execute_internal(
 
 ///|
 /// Resolve internal command name aliases.
-fn resolve_internal_name(name : String) -> String {
+pub fn resolve_internal_name(name : String) -> String {
   match name {
     "tool" => "tool.describe"
     "tape" => "tape.info"
@@ -405,7 +405,7 @@ async fn InputRouter::record_command(
 
 ///|
 /// Join string array with newlines, trimming result.
-fn join_lines(lines : Array[String]) -> String {
+pub fn join_lines(lines : Array[String]) -> String {
   let buf = StringBuilder::new()
   for i, line in lines {
     if i > 0 {
