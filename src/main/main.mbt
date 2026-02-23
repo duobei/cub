@@ -101,6 +101,10 @@ fn main {
         // Rate limiter: sliding window per session
         let rate_timestamps : Map[String, Array[Int64]] = {}
         let rate_limit = settings.rate_limit_per_minute
+        // Per-session request queue: prevents interleaving when multiple
+        // messages arrive for the same session while one is still processing.
+        let session_busy : Map[String, Bool] = {}
+        let session_queue : Map[String, Array[@channels.ChannelMessage]] = {}
         @log.info("cub", "starting message channels...")
         // Resume active sessions from last run
         let active_sessions = runtime.load_active_sessions()
@@ -132,7 +136,8 @@ fn main {
               )
             None => ()
           }
-          manager.run(async fn(msg) {
+          // Process a single message (extracted for queue drain reuse)
+          async fn process_message(msg : @channels.ChannelMessage) -> Unit {
             // Check rate limit
             if rate_limit > 0 {
               let now = @async.now()
@@ -279,6 +284,42 @@ fn main {
                 channel_id,
               )
             })
+          }
+          // Queue-aware message dispatcher
+          manager.run(async fn(msg) {
+            let sid = msg.session_id
+            // If this session is already processing, queue the message
+            if session_busy.get(sid).unwrap_or(false) {
+              let q = match session_queue.get(sid) {
+                Some(q) => q
+                None => {
+                  let q : Array[@channels.ChannelMessage] = []
+                  session_queue[sid] = q
+                  q
+                }
+              }
+              q.push(msg)
+              @log.info(
+                "queue",
+                "queued message for busy session \{sid} (depth: \{q.length()})",
+              )
+              return
+            }
+            // Mark session as busy and process
+            session_busy[sid] = true
+            process_message(msg)
+            // Drain queued messages for this session
+            while true {
+              let next = match session_queue.get(sid) {
+                Some(q) => if q.length() > 0 { Some(q.remove(0)) } else { None }
+                None => None
+              }
+              match next {
+                Some(queued_msg) => process_message(queued_msg)
+                None => break
+              }
+            }
+            session_busy[sid] = false
           })
         }) // outer_group for health check
       }
