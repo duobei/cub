@@ -92,23 +92,6 @@ fn main {
         let session_busy : Map[String, Bool] = {}
         let session_queue : Map[String, Array[@channels.ChannelMessage]] = {}
         @log.info("cub", "starting message channels...")
-        // Resume active sessions from last run
-        let active_sessions = runtime.load_active_sessions()
-        for entry in active_sessions {
-          let (_, channel, channel_id) = entry
-          @log.info("cub", "resuming session on \{channel}:\{channel_id}")
-          if channel == "telegram" {
-            match telegram {
-              Some(tg) => tg.send_message(channel_id, "Session resumed.")
-              None => ()
-            }
-          } else if channel == "discord" {
-            match discord {
-              Some(dc) => dc.send_message(channel_id, "Session resumed.")
-              None => ()
-            }
-          }
-        }
         // Run health server and channel manager concurrently
         let health_port = settings.health_port
         let start_time = @async.now()
@@ -236,12 +219,6 @@ fn main {
                 let response = output_parts.join("\n\n")
                 send_to_channel(response)
               }
-              // Save active session state for resume
-              runtime.save_active_session(
-                msg.session_id,
-                msg.channel,
-                channel_id,
-              )
             })
           }
           // Queue-aware message dispatcher
