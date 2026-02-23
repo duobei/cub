@@ -141,6 +141,8 @@ fn append_tool_result_entry(
 
 ///|
 /// Build a single tool result message.
+/// Prefers tool_call_id/name stored directly in the result entry,
+/// falls back to correlating with pending_calls by index.
 fn build_tool_result_message(
   result : Json,
   pending_calls : Array[Json],
@@ -149,21 +151,47 @@ fn build_tool_result_message(
   let msg : Map[String, Json] = {}
   msg["role"] = "tool".to_json()
   msg["content"] = render_tool_result(result).to_json()
-  if index < pending_calls.length() {
-    let call = pending_calls[index]
-    match call {
-      { "id": String(call_id), .. } =>
-        if call_id.length() > 0 {
-          msg["tool_call_id"] = call_id.to_json()
+  // First: try to use tool_call_id and name stored in the result itself
+  let mut has_id = false
+  let mut has_name = false
+  match result {
+    { "tool_call_id": String(id), .. } =>
+      if id.length() > 0 {
+        msg["tool_call_id"] = id.to_json()
+        has_id = true
+      }
+    _ => ()
+  }
+  match result {
+    { "name": String(n), .. } =>
+      if n.length() > 0 {
+        msg["name"] = n.to_json()
+        has_name = true
+      }
+    _ => ()
+  }
+  // Fallback: correlate with pending_calls by index
+  if not(has_id) || not(has_name) {
+    if index < pending_calls.length() {
+      let call = pending_calls[index]
+      if not(has_id) {
+        match call {
+          { "id": String(call_id), .. } =>
+            if call_id.length() > 0 {
+              msg["tool_call_id"] = call_id.to_json()
+            }
+          _ => ()
         }
-      _ => ()
-    }
-    match call {
-      { "function": { "name": String(name), .. }, .. } =>
-        if name.length() > 0 {
-          msg["name"] = name.to_json()
+      }
+      if not(has_name) {
+        match call {
+          { "function": { "name": String(name), .. }, .. } =>
+            if name.length() > 0 {
+              msg["name"] = name.to_json()
+            }
+          _ => ()
         }
-      _ => ()
+      }
     }
   }
   Json::object(msg)
