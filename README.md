@@ -106,7 +106,7 @@ Zero C FFI — all I/O uses [moonbitlang/async](https://github.com/moonbitlang/a
 moon fmt --check                       # format check
 moon check --target native --deny-warn # type check (strict)
 moon build --target native             # build binary
-moon test --target native              # run 194 tests
+moon test --target native              # run 196 tests
 ```
 
 Binary: `_build/native/debug/build/main/main.exe`

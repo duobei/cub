@@ -53,7 +53,7 @@ Cub is designed to learn and improve over time through a zero-token self-evoluti
 
 ### Learning & Memory
 
-- **Learning extraction** — after each task, heuristic analysis of the tape detects anti-patterns (failures), efficient completions (≤3 steps), and repeated tool usage patterns. No LLM calls required.
+- **Learning extraction** — after each task, heuristic analysis of the tape detects anti-patterns (failures), efficient completions (≤3 steps), and repeated tool usage patterns. No LLM calls at this stage.
 - **Dedup-as-reinforcement** — similar learnings increment a `reinforced` counter instead of duplicating, tracking how often a pattern recurs.
 - **Confidence decay** — learnings decay over time (`0.905^weeks`), pruning stale knowledge below 0.1 confidence.
 - **Memory recall** — high-confidence learnings (≥0.3) are injected into the system prompt with `[avoid]`, `[effective]`, or `[pattern]` tags.
@@ -61,7 +61,7 @@ Cub is designed to learn and improve over time through a zero-token self-evoluti
 ### Skill Evolution
 
 - **Skill tracking** — `skill_stats.json` records uses, successes, failures, and total steps per expanded skill.
-- **Skill crystallization** — when a learning is reinforced 3+ times, it auto-generates a `SKILL.md` in `.agent/skills/auto-*/`, turning recurring patterns into reusable skills.
+- **Skill crystallization** — when a learning is reinforced 3+ times, it auto-generates a `SKILL.md` in `.agent/skills/auto-*/`, turning recurring patterns into reusable skills. A short LLM call (~300 tokens) refines raw learning text into structured instructions (When to use / What to do / What to avoid), falling back to raw content on failure.
 - **skill.create** — the agent creates reusable skills from successful workflows.
 - **skill.install** — install community skills from URL.
 

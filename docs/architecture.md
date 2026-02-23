@@ -4,13 +4,13 @@
 
 **Tape as truth.** All agent state lives in an append-only JSONL tape — messages, tool calls, tool results, events, anchors. There is no hidden state, no in-memory-only context, no implicit branching. The tape is the single source of truth, and any session can be replayed or inspected from the log alone.
 
-**Anchors, not branches.** When context grows too large or the task pivots, Cub writes an anchor entry that summarizes the current state and marks a resumption point. Subsequent context selection starts from the last anchor instead of replaying the full history. This makes handoff explicit — no silent context truncation.
+**Anchors, not branches.** When context grows too large or the task pivots, Cub writes an anchor entry that summarizes the current state and marks a resumption point. Subsequent context selection starts from the last anchor instead of replaying the full history. This makes handoff explicit — no silent context truncation. Auto-handoffs use a short LLM call to produce structured summaries (task, summary, decisions, pending) instead of heuristic extraction, with automatic fallback on failure.
 
 **Router-first control flow.** Every user message and every assistant response passes through the same router. The router detects `,commands` before the LLM sees them, matches `$skill` hints to expand skill prompts, and strips `<think>` blocks from thinking models. The LLM only receives what the router decides to forward.
 
 **Tools are data, not code paths.** Each tool is a `(name, schema, handler)` triple registered in a flat registry. The agent loop doesn't know what tools exist — it calls the registry by name. Adding a tool (builtin, MCP, extension, or auto-crystallized skill) is just a `registry.register()` call. Progressive disclosure shows the model only the tool names it needs, expanding full schemas on demand.
 
-**Learn without tokens.** After each task, heuristic analysis of the tape extracts patterns (anti-patterns from failures, effective patterns from short completions, tool usage frequencies) without any LLM call. Similar learnings reinforce rather than duplicate. Confidence decays over time, and patterns reinforced 3+ times auto-crystallize into reusable skills.
+**Learn cheaply.** After each task, heuristic analysis of the tape extracts patterns (anti-patterns from failures, effective patterns from short completions, tool usage frequencies) without any LLM call. Similar learnings reinforce rather than duplicate. Confidence decays over time, and patterns reinforced 3+ times auto-crystallize into reusable skills — with an optional short LLM call to refine raw learnings into structured instructions.
 
 **Zero FFI, fully async.** All I/O — file system, HTTP, process spawning, stdin, sockets — uses `moonbitlang/async`. No C glue code, no platform-specific stubs. The binary is pure MoonBit native.
 
@@ -69,14 +69,14 @@ User Input
 
 ## Self-Evolution Pipeline
 
-Cub evolves its behavior through a four-stage pipeline that requires zero LLM tokens:
+Cub evolves its behavior through a multi-stage pipeline. Extraction and dedup are zero-token (heuristic). Crystallization and handoff use a short LLM call (~300-500 tokens) with automatic fallback to heuristic behavior on failure:
 
 ```
 Task Completes
   → Extract (heuristic tape analysis)
     → Deduplicate (Jaccard similarity ≥ 0.6, reinforce counter++)
       → Decay (confidence × 0.905^weeks, prune < 0.1)
-        → Crystallize (reinforced ≥ 3 → auto-generate SKILL.md)
+        → Crystallize (reinforced ≥ 3 → LLM refine → auto-generate SKILL.md)
 ```
 
 ### 1. Extraction (`extract_learnings_from_tape`)
@@ -89,7 +89,7 @@ After each task, the tape is scanned from the last anchor forward. Tool call ent
 | Efficiency | Task succeeded in ≤ 3 steps | `heuristic` — records tool combination that worked |
 | Repetition | Same tool called 5+ times consecutively (excluding bash/fs.read/grep) | `preference` — records the repeated tool pattern |
 
-No LLM is called. Pattern detection is purely rule-based on tape structure.
+Pattern detection is purely rule-based on tape structure — no LLM call at this stage.
 
 ### 2. Dedup-as-Reinforcement (`add_learning`)
 
@@ -130,6 +130,8 @@ High-confidence learnings (≥ 0.3) are injected into the system prompt, sorted 
 ### 5. Skill Crystallization (`crystallize_skill`)
 
 When a learning is reinforced 3+ times, it auto-generates a `SKILL.md` at `.agent/skills/auto-{name}/SKILL.md`. The skill name is derived from the 3 most meaningful words in the learning content (skipping stop words). Existing skills are never overwritten.
+
+Before writing the skill file, a short LLM call (`refine_learning_to_skill`, ~300 tokens) transforms the raw learning text into structured instructions with "When to use", "What to do", and "What to avoid" sections. If the LLM call fails or returns empty, the original raw content is used as fallback.
 
 ### 6. Skill Tracking (`update_skill_stats`)
 
