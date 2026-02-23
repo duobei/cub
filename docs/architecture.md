@@ -204,3 +204,13 @@ Each is registered as `ext.{name}` in the tool registry, deduplicated by name (f
 - **Timeout retry** — on timeout, retries once with 2× the original timeout
 - **API retry with backoff** — exponential backoff (1s → 2s → 4s), retries 429/5xx, skips 400/401/403
 - **Confidence decay** — learnings decay at `0.905^weeks`, auto-pruned below 0.1
+
+## Limitations & Roadmap
+
+### Native-only target
+
+Cub currently only compiles to `--target native`. The `wasm`, `wasm-gc`, and `js` targets are blocked because `moonbitlang/async` (the sole I/O dependency) only supports native — its runtime relies on native async primitives (epoll, kqueue) that have no WASM/JS equivalent yet.
+
+Upstream tracking: [moonbitlang/async#233](https://github.com/nicball/async/issues/233). A related proposal for abstracting I/O primitives: [moonbitlang/async#201](https://github.com/nicball/async/issues/201).
+
+Once upstream adds WASM support, Cub can compile to browser or edge runtimes with no code changes — the codebase has zero C FFI and no platform-specific stubs.
