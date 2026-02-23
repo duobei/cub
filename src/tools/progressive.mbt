@@ -71,10 +71,9 @@ pub fn ProgressiveToolView::expanded_block(
   if self.expanded.is_empty() {
     return ""
   }
-  let entries : Array[String] = []
-  for name, _ in self.expanded {
-    let detail = self.registry.detail(name)
-    entries.push("## \{name}: \{detail}")
-  }
-  "<tool_details>\n" + entries.join("\n") + "\n</tool_details>"
+  let entries = self.expanded
+    .keys()
+    .map(fn(name) { "## \{name}: \{self.registry.detail(name)}" })
+  let body = entries.join("\n")
+  "<tool_details>\n\{body}\n</tool_details>"
 }

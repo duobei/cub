@@ -377,16 +377,13 @@ pub fn load_mcp_configs(json_str : String) -> Array[McpServerConfig] {
       _ => continue
     }
     let args : Array[String] = match server {
-      { "args": Array(a), .. } => {
-        let result : Array[String] = []
-        for item in a {
+      { "args": Array(a), .. } =>
+        a.filter_map(fn(item) {
           match item {
-            String(s) => result.push(s)
-            _ => ()
+            String(s) => Some(s)
+            _ => None
           }
-        }
-        result
-      }
+        })
       _ => []
     }
     let env : Map[String, String] = match server {

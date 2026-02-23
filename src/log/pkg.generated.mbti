@@ -15,7 +15,7 @@ pub fn warn(String, String) -> Unit
 // Errors
 
 // Types and methods
-pub enum LogLevel {
+pub(all) enum LogLevel {
   Debug
   Info
   Warn

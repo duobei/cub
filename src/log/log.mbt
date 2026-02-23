@@ -2,7 +2,7 @@
 
 ///|
 /// Log severity levels.
-pub enum LogLevel {
+pub(all) enum LogLevel {
   Debug
   Info
   Warn
