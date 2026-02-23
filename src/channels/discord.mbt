@@ -442,28 +442,26 @@ async fn DiscordChannel::handle_message_create(
     "discord",
     "message from \{author_name} in \{channel_id}: \{truncate(content, 100)}",
   )
-  // Build prompt with optional quoted context
-  let prompt = if quoted_content.length() > 0 {
-    "> \{quoted_content}\n\n\{content}"
-  } else {
-    content
-  }
-  // Build ChannelMessage
+  // Build prompt as metadata JSON so the model knows who's speaking
   let session_id = "discord:\{channel_id}"
-  let metadata : Map[String, Json] = Map::new()
-  metadata["channel"] = "discord".to_json()
-  metadata["channel_id"] = channel_id.to_json()
-  metadata["sender_id"] = author_id.to_json()
-  metadata["username"] = author_name.to_json()
+  let prompt_obj : Map[String, Json] = {}
+  prompt_obj["message"] = content.to_json()
+  prompt_obj["channel_id"] = channel_id.to_json()
+  prompt_obj["username"] = author_name.to_json()
+  prompt_obj["sender_id"] = author_id.to_json()
   match data {
-    { "id": String(mid), .. } => metadata["message_id"] = mid.to_json()
+    { "id": String(mid), .. } => prompt_obj["message_id"] = mid.to_json()
     _ => ()
   }
+  if quoted_content.length() > 0 {
+    prompt_obj["reply_to_message"] = quoted_content.to_json()
+  }
+  let prompt = "channel: $discord\n" + Json::object(prompt_obj).stringify()
   let msg : ChannelMessage = {
     channel: "discord",
     session_id,
     prompt,
-    metadata: Json::object(metadata),
+    metadata: Json::object(prompt_obj),
     attachments: image_urls,
     documents,
   }

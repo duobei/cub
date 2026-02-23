@@ -38,9 +38,20 @@ Both channels can run simultaneously. A systemd service file (`cub.service`) is 
 
 Use `cub message` to start channel listeners. The same agent loop, tools, and skills are available in channel mode as in interactive CLI mode.
 
-## Streaming Output
+## Prompt Format
 
-In channel mode, LLM output is streamed to users in real-time. A background flusher sends buffered text every 3 seconds, so users see partial responses before the full answer is ready.
+Channel messages are formatted as metadata JSON with a channel prefix, so the model knows who's speaking:
+
+```
+channel: $discord
+{"message":"hello","channel_id":"123","username":"alice","sender_id":"456","message_id":"789"}
+```
+
+This enables multi-user awareness in group chats. Each session is keyed by `{channel}:{channel_id}`, so Discord and Telegram maintain separate tapes.
+
+## Session Management
+
+Sessions are created on demand and kept in memory. Tape files (`.cub/tapes/`) provide persistence — on restart, sessions are recreated from tape when the next message arrives. No separate session persistence file is needed.
 
 ## Per-Session Queuing
 

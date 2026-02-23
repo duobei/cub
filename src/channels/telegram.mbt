@@ -186,17 +186,24 @@ async fn TelegramChannel::handle_update(
     "telegram",
     "message from \{from_name} (\{from_id}) in chat \{chat_id}",
   )
-  // Build channel message
+  // Build prompt as metadata JSON so the model knows who's speaking
   let session_id = "telegram:\{chat_id}"
-  let metadata : Map[String, Json] = {}
-  metadata["from_id"] = from_id.to_json()
-  metadata["from_name"] = from_name.to_json()
-  metadata["chat_id"] = chat_id.to_json()
+  let from_username = match message {
+    { "from": { "username": String(u), .. }, .. } => u
+    _ => ""
+  }
+  let prompt_obj : Map[String, Json] = {}
+  prompt_obj["message"] = text.to_json()
+  prompt_obj["chat_id"] = chat_id.to_json()
+  prompt_obj["username"] = from_username.to_json()
+  prompt_obj["full_name"] = from_name.to_json()
+  prompt_obj["sender_id"] = from_id.to_json()
+  let prompt = "channel: $telegram\n" + Json::object(prompt_obj).stringify()
   let msg = ChannelMessage::{
     channel: "telegram",
     session_id,
-    prompt: text,
-    metadata: Json::object(metadata),
+    prompt,
+    metadata: Json::object(prompt_obj),
     attachments: image_urls,
     documents,
   }
