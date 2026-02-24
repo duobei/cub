@@ -122,8 +122,7 @@ async fn find_wasm_file(plugin_dir : String) -> String {
     "\{plugin_dir}/main.wasm",
   ]
   for path in candidates {
-    let content = read_ext_file(path)
-    if not(content.is_empty()) {
+    if @fs.exists(path) {
       return path
     }
   }
