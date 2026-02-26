@@ -488,7 +488,8 @@ async fn process_documents(
       } else {
         parts.push("[Attachment: \{doc.filename} (HTTP \{resp.code})]")
       }
-    } else if doc.content_type == "application/pdf" || has_suffix(doc.filename, ".pdf") {
+    } else if doc.content_type == "application/pdf" ||
+      has_suffix(doc.filename, ".pdf") {
       // Extract text from PDF using pdftotext via curl pipeline
       let (exit_code, stdout_data, _stderr_data) = @process.collect_output(
         "bash",
