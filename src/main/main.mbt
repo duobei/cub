@@ -488,6 +488,35 @@ async fn process_documents(
       } else {
         parts.push("[Attachment: \{doc.filename} (HTTP \{resp.code})]")
       }
+    } else if doc.content_type == "application/pdf" || has_suffix(doc.filename, ".pdf") {
+      // Extract text from PDF using pdftotext via curl pipeline
+      let (exit_code, stdout_data, _stderr_data) = @process.collect_output(
+        "bash",
+        ["-c", "curl -sL \"$1\" | pdftotext - -", "bash", doc.url],
+      ) catch {
+        _ => {
+          parts.push("[Attachment: \{doc.filename} (PDF extraction failed)]")
+          continue
+        }
+      }
+      if exit_code == 0 {
+        let text = stdout_data.text() catch { _ => "" }
+        if text.length() > 0 {
+          let truncated = if text.length() > 20000 {
+            let prefix = text[:20000].to_string() catch { _ => text }
+            "\{prefix}\n[...truncated]"
+          } else {
+            text
+          }
+          parts.push(
+            "--- File: \{doc.filename} ---\n\{truncated}\n--- End of \{doc.filename} ---",
+          )
+        } else {
+          parts.push("[Attachment: \{doc.filename} (no text extracted)]")
+        }
+      } else {
+        parts.push("[Attachment: \{doc.filename} (PDF extraction failed)]")
+      }
     } else {
       parts.push("[Attachment: \{doc.filename}]")
     }
