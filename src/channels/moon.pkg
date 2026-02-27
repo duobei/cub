@@ -8,4 +8,5 @@ import {
   "moonbitlang/core/encoding/utf8" @utf8,
   "moonbitlang/core/buffer",
   "duobei/cub/log" @log,
+  "duobei/cub/crypto" @crypto,
 }
