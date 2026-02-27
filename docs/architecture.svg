@@ -178,85 +178,64 @@
   <path d="M 470 540 C 560 540, 650 430, 698 380" stroke="#2b6c7f" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowTeal)"/>
   <text x="570" y="475" font-size="10" fill="#2b6c7f" font-style="italic">crystallize</text>
 
-  <!-- ==================== BOTTOM: Split / Merge lifecycle ==================== -->
+  <!-- ==================== BOTTOM: 7 Minimal Primitives ==================== -->
   <rect x="30" y="620" width="900" height="100" rx="10" fill="#f8f4ff" stroke="#7b5ea7" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="480" y="645" text-anchor="middle" font-size="15" font-weight="bold" fill="#4a3570">Life Cycle: Split → Grow → Merge → Rebirth</text>
+  <text x="480" y="645" text-anchor="middle" font-size="15" font-weight="bold" fill="#4a3570">7 Primitives — provide capabilities, let behavior emerge</text>
 
-  <!-- Split -->
-  <rect x="55" y="660" width="100" height="40" rx="8" fill="#7b5ea7"/>
-  <text x="105" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">Split</text>
-  <text x="105" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">origin dies</text>
+  <!-- genome/ -->
+  <rect x="50" y="660" width="108" height="40" rx="8" fill="#2b6c7f"/>
+  <text x="104" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">genome/</text>
+  <text x="104" y="693" text-anchor="middle" font-size="9" fill="#b8dce6">knowledge pack</text>
 
-  <!-- Arrow -->
-  <line x1="157" y1="680" x2="185" y2="680" stroke="#7b5ea7" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <!-- self.split -->
+  <rect x="170" y="660" width="108" height="40" rx="8" fill="#7b5ea7"/>
+  <text x="224" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">self.split(n)</text>
+  <text x="224" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">origin dies</text>
 
-  <!-- Avatars -->
-  <rect x="188" y="658" width="30" height="30" rx="6" fill="#9b7ec8"/>
-  <text x="203" y="678" text-anchor="middle" font-size="10" fill="white">&#945;</text>
-  <rect x="222" y="658" width="30" height="30" rx="6" fill="#9b7ec8"/>
-  <text x="237" y="678" text-anchor="middle" font-size="10" fill="white">&#946;</text>
-  <rect x="256" y="658" width="30" height="30" rx="6" fill="#9b7ec8"/>
-  <text x="271" y="678" text-anchor="middle" font-size="10" fill="white">&#947;</text>
-  <text x="237" y="704" text-anchor="middle" font-size="9" fill="#888">equal peers</text>
+  <!-- self.merge -->
+  <rect x="290" y="660" width="108" height="40" rx="8" fill="#7b5ea7"/>
+  <text x="344" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">self.merge</text>
+  <text x="344" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">LLM fuse</text>
 
-  <!-- Arrow -->
-  <line x1="290" y1="680" x2="320" y2="680" stroke="#888" stroke-width="2" marker-end="url(#arrowGray)"/>
+  <!-- self.migrate -->
+  <rect x="410" y="660" width="108" height="40" rx="8" fill="#48a56a"/>
+  <text x="464" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">self.migrate</text>
+  <text x="464" y="693" text-anchor="middle" font-size="9" fill="#b8e6c8">cp genome/</text>
 
-  <!-- Grow -->
-  <rect x="323" y="660" width="120" height="40" rx="8" fill="#48a56a"/>
-  <text x="383" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">Grow + Mutate</text>
-  <text x="383" y="693" text-anchor="middle" font-size="9" fill="#b8e6c8">P2P connected</text>
+  <!-- P2P transport -->
+  <rect x="530" y="660" width="108" height="40" rx="8" fill="#4a90d9"/>
+  <text x="584" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">P2P transport</text>
+  <text x="584" y="693" text-anchor="middle" font-size="9" fill="#c4d9f0">WS / WebRTC</text>
 
-  <!-- Arrow -->
-  <line x1="445" y1="680" x2="475" y2="680" stroke="#888" stroke-width="2" marker-end="url(#arrowGray)"/>
+  <!-- cost.balance -->
+  <rect x="650" y="660" width="108" height="40" rx="8" fill="#e07c3e"/>
+  <text x="704" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">cost.balance</text>
+  <text x="704" y="693" text-anchor="middle" font-size="9" fill="#fad4b8">track usage</text>
 
-  <!-- Negotiate -->
-  <rect x="478" y="660" width="110" height="40" rx="8" fill="#e07c3e"/>
-  <text x="533" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">Negotiate</text>
-  <text x="533" y="693" text-anchor="middle" font-size="9" fill="#fad4b8">online = merge</text>
-
-  <!-- Arrow -->
-  <line x1="590" y1="680" x2="620" y2="680" stroke="#888" stroke-width="2" marker-end="url(#arrowGray)"/>
-
-  <!-- LLM Merge -->
-  <rect x="623" y="660" width="110" height="40" rx="8" fill="#2b6c7f"/>
-  <text x="678" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">LLM Merge</text>
-  <text x="678" y="693" text-anchor="middle" font-size="9" fill="#b8dce6">fuse genome</text>
-
-  <!-- Arrow -->
-  <line x1="735" y1="680" x2="765" y2="680" stroke="#888" stroke-width="2" marker-end="url(#arrowGray)"/>
-
-  <!-- New cub -->
-  <rect x="768" y="660" width="100" height="40" rx="8" fill="#7b5ea7"/>
-  <text x="818" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">New Cub</text>
-  <text x="818" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">gen + 1</text>
-
-  <!-- Loop arrow: New Cub → Split -->
-  <path d="M 818 702 C 818 735, 105 735, 105 702" stroke="#7b5ea7" stroke-width="1.5" stroke-dasharray="6,4" fill="none" marker-end="url(#arrowPurple)"/>
-  <text x="460" y="748" text-anchor="middle" font-size="11" fill="#7b5ea7" font-style="italic">continuous evolution</text>
+  <!-- peer.list -->
+  <rect x="770" y="660" width="108" height="40" rx="8" fill="#e07c3e"/>
+  <text x="824" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">peer.list</text>
+  <text x="824" y="693" text-anchor="middle" font-size="9" fill="#fad4b8">discover cubs</text>
 
   <!-- ==================== BOTTOM: Legend ==================== -->
   <rect x="30" y="765" width="900" height="45" rx="8" fill="white" stroke="#ddd" stroke-width="1"/>
 
-  <text x="80" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Handoff</text>
-  <text x="80" y="803" text-anchor="middle" font-size="9" fill="#888">分支 Tape 交接</text>
+  <text x="95" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Handoff</text>
+  <text x="95" y="803" text-anchor="middle" font-size="9" fill="#888">分支 Tape 交接</text>
 
-  <text x="210" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Anchor</text>
-  <text x="210" y="803" text-anchor="middle" font-size="9" fill="#888">上下文锚点</text>
+  <text x="235" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Anchor</text>
+  <text x="235" y="803" text-anchor="middle" font-size="9" fill="#888">上下文锚点</text>
 
-  <text x="340" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Genome</text>
-  <text x="340" y="803" text-anchor="middle" font-size="9" fill="#888">统一知识表示</text>
+  <text x="375" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Genome</text>
+  <text x="375" y="803" text-anchor="middle" font-size="9" fill="#888">统一知识表示</text>
 
-  <text x="470" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Context</text>
-  <text x="470" y="803" text-anchor="middle" font-size="9" fill="#888">128K, 90% handoff</text>
+  <text x="515" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Context</text>
+  <text x="515" y="803" text-anchor="middle" font-size="9" fill="#888">128K, 90% handoff</text>
 
-  <text x="600" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Progressive</text>
-  <text x="600" y="803" text-anchor="middle" font-size="9" fill="#888">工具按需展示</text>
+  <text x="655" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Progressive</text>
+  <text x="655" y="803" text-anchor="middle" font-size="9" fill="#888">工具按需展示</text>
 
-  <text x="730" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Multi-Model</text>
-  <text x="730" y="803" text-anchor="middle" font-size="9" fill="#888">default / vision / fast</text>
-
-  <text x="860" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Absorption</text>
-  <text x="860" y="803" text-anchor="middle" font-size="9" fill="#888">吸收合体模式</text>
+  <text x="795" y="790" text-anchor="middle" font-size="12" font-weight="bold" fill="#334e68">Multi-Model</text>
+  <text x="795" y="803" text-anchor="middle" font-size="9" fill="#888">default / vision / fast</text>
 
 </svg>
