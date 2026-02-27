@@ -947,8 +947,25 @@ pub async fn LLMClient::run_tools(
       "llm",
       "context at ~\{estimated} tokens (>\{critical_threshold}), auto-handoff",
     )
+    // Save the current user message before handoff
+    let mut last_user_content = ""
+    let mut i = messages.length() - 1
+    while i >= 0 {
+      match messages[i] {
+        { "role": String("user"), "content": String(c), .. } => {
+          last_user_content = c
+          break
+        }
+        _ => ()
+      }
+      i -= 1
+    }
     let state = self.summarize_for_handoff(messages)
     ignore(tape.handoff("auto/context_overflow", state=Some(state)))
+    // Re-append user message after the anchor so it's visible in new context
+    if not(last_user_content.is_empty()) {
+      tape.append(@tape.TapeEntry::message("user", last_user_content))
+    }
     messages = tape.read_messages()
     estimated = estimate_tokens(messages, system_prompt)
   }

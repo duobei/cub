@@ -10,10 +10,15 @@ pub fn select_messages(entries : Array[TapeEntry]) -> Array[Json] {
   // Find the last anchor position
   let mut last_anchor_idx = -1
   let mut last_anchor_state : Json = Json::null()
+  let mut last_anchor_name = ""
   for i, entry in entries {
     if entry.kind == "anchor" {
       last_anchor_idx = i
       last_anchor_state = entry.payload
+      last_anchor_name = match entry.payload {
+        { "name": String(n), .. } => n
+        _ => ""
+      }
     }
   }
   let messages : Array[Json] = []
@@ -69,6 +74,43 @@ pub fn select_messages(entries : Array[TapeEntry]) -> Array[Json] {
     // event, anchor → skip
   }
   // If there's a trailing orphan tool_call, drop it
+  // Inject thin-context hint when session has very little history
+  // This helps the LLM handle gracefully when context is lost (new session, restart, etc.)
+  let user_msg_count = messages
+    .iter()
+    .filter(fn(m) {
+      match m {
+        { "role": String("user"), .. } => true
+        _ => false
+      }
+    })
+    .count()
+  let is_thin_session = (
+      last_anchor_name == "session/start" ||
+      last_anchor_name.has_prefix("auto/")
+    ) &&
+    user_msg_count <= 2 &&
+    user_msg_count > 0
+  if is_thin_session {
+    // Insert hint at the beginning (after any handoff_context)
+    let hint_msg : Map[String, Json] = {}
+    hint_msg["role"] = "system".to_json()
+    hint_msg["content"] = "<session_hint>This is a new or resumed session with limited history. If the user references previous context (e.g. \"continue\", \"go on\"), check tape history with tape.search or tape.read_range before saying you have no context. Search across all tapes with all_tapes=true.</session_hint>".to_json()
+    let insert_pos = if messages.length() > 0 {
+      match messages[0] {
+        { "content": String(c), .. } =>
+          if c.contains("handoff_context") {
+            1
+          } else {
+            0
+          }
+        _ => 0
+      }
+    } else {
+      0
+    }
+    messages.insert(insert_pos, Json::object(hint_msg))
+  }
   messages
 }
 

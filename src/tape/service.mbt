@@ -116,10 +116,13 @@ pub async fn TapeService::info(self : TapeService) -> TapeInfo {
 
 ///|
 /// Reset the tape, optionally archiving first.
+/// Preserves a summary of the last few messages so the next session has context.
 pub async fn TapeService::reset(
   self : TapeService,
   archive? : Bool = false,
 ) -> String {
+  // Extract recent context before reset
+  let recent_summary = extract_recent_summary(self.read_entries())
   let archive_path : String? = if archive {
     self.store.archive(self.base_tape_name)
   } else {
@@ -128,6 +131,9 @@ pub async fn TapeService::reset(
   self.tape().reset()
   let state : Map[String, Json] = {}
   state["owner"] = "human".to_json()
+  if not(recent_summary.is_empty()) {
+    state["context"] = recent_summary.to_json()
+  }
   match archive_path {
     Some(p) => state["archived"] = p.to_json()
     None => ()
@@ -318,4 +324,38 @@ pub async fn TapeService::search_all(
   limit? : Int = 20,
 ) -> Array[(String, TapeEntry)] {
   self.store.search_all(query, limit~)
+}
+
+///|
+/// Extract a brief summary of recent user/assistant messages from tape entries.
+/// Used to carry forward context across tape resets.
+fn extract_recent_summary(entries : Array[TapeEntry]) -> String {
+  let recent : Array[String] = []
+  let max_msgs = 10
+  // Walk backwards to find last N user/assistant messages
+  let mut i = entries.length() - 1
+  while i >= 0 && recent.length() < max_msgs {
+    let entry = entries[i]
+    if entry.kind == "message" {
+      match entry.payload {
+        { "role": String(role), "content": String(content), .. } =>
+          if role == "user" || role == "assistant" {
+            let truncated = if content.length() > 300 {
+              content[:300].to_string() catch {
+                _ => content
+              }
+            } else {
+              content
+            }
+            recent.push("\{role}: \{truncated}")
+          }
+        _ => ()
+      }
+    }
+    i -= 1
+  }
+  if recent.is_empty() {
+    return ""
+  }
+  recent.rev().join("\n")
 }
