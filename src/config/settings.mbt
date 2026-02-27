@@ -60,7 +60,8 @@ pub fn collect_env_vars() -> Map[String, String] {
     "CUB_TELEGRAM_ALLOW_CHATS", "CUB_TELEGRAM_PROXY", "CUB_DISCORD_ENABLED", "CUB_DISCORD_TOKEN",
     "CUB_DISCORD_ALLOW_FROM", "CUB_DISCORD_ALLOW_CHANNELS", "CUB_DISCORD_COMMAND_PREFIX",
     "CUB_DISCORD_PROXY", "CUB_HEALTH_PORT", "CUB_CONTEXT_BUDGET", "CUB_HANDOFF_THRESHOLD",
-    "HOME", "PWD",
+    "CUB_P2P_ENABLED", "CUB_P2P_PORT", "CUB_P2P_PEERS", "CUB_P2P_SECRET", "HOME",
+    "PWD",
   ]
   for key in keys {
     match getenv(key) {
@@ -108,6 +109,10 @@ pub struct Settings {
   handoff_threshold : Int
   allowed_tools : Array[String]
   allowed_skills : Array[String]
+  p2p_enabled : Bool
+  p2p_port : Int
+  p2p_peers : Array[String]
+  p2p_secret : String?
 } derive(Show)
 
 ///|
@@ -148,6 +153,10 @@ pub fn Settings::default() -> Settings {
     handoff_threshold: 90,
     allowed_tools: [],
     allowed_skills: [],
+    p2p_enabled: false,
+    p2p_port: 9999,
+    p2p_peers: [],
+    p2p_secret: None,
   }
 }
 
@@ -458,5 +467,18 @@ pub async fn load_settings(workspace_path? : String? = None) -> Settings {
     ),
     allowed_tools: [],
     allowed_skills: [],
+    p2p_enabled: get_env_bool(combined, "CUB_P2P_ENABLED").unwrap_or(
+      defaults.p2p_enabled,
+    ),
+    p2p_port: get_env_int(combined, "CUB_P2P_PORT").unwrap_or(defaults.p2p_port),
+    p2p_peers: {
+      let l = get_env_list(combined, "CUB_P2P_PEERS")
+      if l.length() > 0 {
+        l
+      } else {
+        defaults.p2p_peers
+      }
+    },
+    p2p_secret: get_env(combined, "CUB_P2P_SECRET"),
   }
 }

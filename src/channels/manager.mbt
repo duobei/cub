@@ -5,12 +5,13 @@
 pub struct ChannelManager {
   discord_channels : Array[DiscordChannel]
   telegram_channels : Array[TelegramChannel]
+  p2p_channels : Array[P2PChannel]
 }
 
 ///|
 /// Create a new ChannelManager.
 pub fn ChannelManager::new() -> ChannelManager {
-  { discord_channels: [], telegram_channels: [] }
+  { discord_channels: [], telegram_channels: [], p2p_channels: [] }
 }
 
 ///|
@@ -32,12 +33,23 @@ pub fn ChannelManager::add_telegram(
 }
 
 ///|
+/// Add a P2P channel.
+pub fn ChannelManager::add_p2p(
+  self : ChannelManager,
+  channel : P2PChannel,
+) -> Unit {
+  self.p2p_channels.push(channel)
+}
+
+///|
 /// Run all channels concurrently.
 pub async fn ChannelManager::run(
   self : ChannelManager,
   handler : async (ChannelMessage) -> Unit,
 ) -> Unit {
-  let total = self.discord_channels.length() + self.telegram_channels.length()
+  let total = self.discord_channels.length() +
+    self.telegram_channels.length() +
+    self.p2p_channels.length()
   if total == 0 {
     @log.warn("channels", "no channels configured")
     return
@@ -49,6 +61,9 @@ pub async fn ChannelManager::run(
   for ch in self.telegram_channels {
     names.push(ch.name())
   }
+  for ch in self.p2p_channels {
+    names.push(ch.name())
+  }
   let joined = names.join(", ")
   @log.info("channels", "starting: \{joined}")
   // Start all channels concurrently using task group
@@ -57,6 +72,9 @@ pub async fn ChannelManager::run(
       group.spawn_bg(async fn() { ch.start(handler) }, allow_failure=true)
     }
     for ch in self.telegram_channels {
+      group.spawn_bg(async fn() { ch.start(handler) }, allow_failure=true)
+    }
+    for ch in self.p2p_channels {
       group.spawn_bg(async fn() { ch.start(handler) }, allow_failure=true)
     }
   })

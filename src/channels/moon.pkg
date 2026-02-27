@@ -2,6 +2,8 @@ import {
   "moonbitlang/async" @async,
   "duobei/cub/platform" @platform,
   "moonbitlang/async/websocket" @websocket,
+  "moonbitlang/async/http" @http,
+  "moonbitlang/async/socket" @socket,
   "moonbitlang/core/json",
   "moonbitlang/core/encoding/utf8" @utf8,
   "moonbitlang/core/buffer",

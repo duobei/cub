@@ -78,9 +78,35 @@ fn main {
         } else {
           None
         }
-        if discord is None && telegram is None {
+        // P2P
+        let p2p : @channels.P2PChannel? = if settings.p2p_enabled {
+          let cub_home = "\{workspace}/.cub"
+          let manifest = @genome.read_manifest(cub_home)
+          match manifest {
+            Some(m) => {
+              let ch = @channels.P2PChannel::new(
+                m.id,
+                m.generation,
+                settings.p2p_port,
+                settings.p2p_peers,
+                secret=settings.p2p_secret,
+              )
+              manager.add_p2p(ch)
+              Some(ch)
+            }
+            None => {
+              @log.warn(
+                "cub", "p2p enabled but no genome manifest found (run cub once first)",
+              )
+              None
+            }
+          }
+        } else {
+          None
+        }
+        if discord is None && telegram is None && not(settings.p2p_enabled) {
           println(
-            "error: no channels enabled. Set CUB_DISCORD_ENABLED=true or CUB_TELEGRAM_ENABLED=true",
+            "error: no channels enabled. Set CUB_DISCORD_ENABLED=true, CUB_TELEGRAM_ENABLED=true, or CUB_P2P_ENABLED=true",
           )
           return
         }
@@ -130,7 +156,10 @@ fn main {
                 )
                 let channel_id = extract_channel_id(msg.session_id)
                 if channel_id.length() > 0 {
-                  if msg.session_id.has_prefix("telegram:") {
+                  if msg.session_id.has_prefix("p2p:") {
+                    // P2P: no rate limit response (peer handles it)
+                    ()
+                  } else if msg.session_id.has_prefix("telegram:") {
                     match telegram {
                       Some(tg) =>
                         tg.send_message(
@@ -183,7 +212,18 @@ fn main {
                 if text.is_empty() || channel_id.is_empty() {
                   return
                 }
-                if msg.session_id.has_prefix("telegram:") {
+                if msg.session_id.has_prefix("p2p:") {
+                  match p2p {
+                    Some(ch) => {
+                      let payload : Map[String, Json] = {}
+                      payload["text"] = text.to_json()
+                      ignore(
+                        ch.send_to(channel_id, "message", Json::object(payload)),
+                      )
+                    }
+                    None => ()
+                  }
+                } else if msg.session_id.has_prefix("telegram:") {
                   match telegram {
                     Some(tg) => tg.send_message(channel_id, text)
                     None => ()
