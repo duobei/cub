@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" font-family="'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="1" dy="2" stdDeviation="2" flood-opacity="0.15"/>
+    </filter>
+    <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f0f4f8"/>
+      <stop offset="100%" style="stop-color:#d9e2ec"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="720" fill="#fafafa" rx="12"/>
+
+  <!-- Title -->
+  <text x="480" y="38" text-anchor="middle" font-size="26" font-weight="bold" fill="#1a1a2e">cub + Tape 架构</text>
+  <line x1="340" y1="48" x2="620" y2="48" stroke="#ccc" stroke-width="1"/>
+  <text x="480" y="68" text-anchor="middle" font-size="13" fill="#666" font-style="italic">Self-Evolving Agent with Tape System</text>
+
+  <!-- ==================== LEFT: cub tool box ==================== -->
+  <rect x="30" y="130" width="170" height="260" rx="10" fill="#e8f0fe" stroke="#4a90d9" stroke-width="2" filter="url(#shadow)"/>
+  <text x="115" y="158" text-anchor="middle" font-size="16" font-weight="bold" fill="#2c5282">cub</text>
+
+  <rect x="46" y="172" width="138" height="30" rx="6" fill="#4a90d9"/>
+  <text x="115" y="192" text-anchor="middle" font-size="12" fill="white" font-weight="500">Bash Tool</text>
+
+  <rect x="46" y="210" width="138" height="30" rx="6" fill="#4a90d9"/>
+  <text x="115" y="230" text-anchor="middle" font-size="12" fill="white" font-weight="500">File / Grep / HTTP</text>
+
+  <rect x="46" y="248" width="138" height="30" rx="6" fill="#4a90d9"/>
+  <text x="115" y="268" text-anchor="middle" font-size="12" fill="white" font-weight="500">MCP / WASM</text>
+
+  <rect x="46" y="286" width="138" height="30" rx="6" fill="#4a90d9"/>
+  <text x="115" y="306" text-anchor="middle" font-size="12" fill="white" font-weight="500">Dynamic Skills</text>
+
+  <rect x="46" y="324" width="138" height="30" rx="6" fill="#4a90d9"/>
+  <text x="115" y="344" text-anchor="middle" font-size="12" fill="white" font-weight="500">Schedule / Agent</text>
+
+  <!-- ==================== CENTER: LLM Cloud ==================== -->
+  <ellipse cx="420" cy="160" rx="130" ry="55" fill="url(#cloudGrad)" stroke="#9fb3c8" stroke-width="1.5" filter="url(#shadow)"/>
+  <circle cx="310" cy="170" r="30" fill="url(#cloudGrad)" stroke="#9fb3c8" stroke-width="1.5"/>
+  <circle cx="340" cy="135" r="25" fill="url(#cloudGrad)" stroke="#9fb3c8" stroke-width="1.5"/>
+  <circle cx="500" cy="135" r="28" fill="url(#cloudGrad)" stroke="#9fb3c8" stroke-width="1.5"/>
+  <circle cx="530" cy="165" r="25" fill="url(#cloudGrad)" stroke="#9fb3c8" stroke-width="1.5"/>
+  <ellipse cx="420" cy="145" rx="110" ry="40" fill="url(#cloudGrad)"/>
+  <text x="420" y="150" text-anchor="middle" font-size="16" font-weight="bold" fill="#334e68">LLM</text>
+  <text x="420" y="170" text-anchor="middle" font-size="11" fill="#627d98">Multi-Provider Engine</text>
+
+  <!-- Arrow: cub tools → LLM -->
+  <line x1="200" y1="230" x2="300" y2="170" stroke="#4a90d9" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <defs>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#4a90d9"/>
+    </marker>
+    <marker id="arrowGray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#888"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#e07c3e"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#7b5ea7"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#48a56a"/>
+    </marker>
+  </defs>
+
+  <!-- ==================== CENTER: Next Step (green) ==================== -->
+  <rect x="365" y="240" width="110" height="36" rx="8" fill="#48a56a" filter="url(#shadow)"/>
+  <text x="420" y="263" text-anchor="middle" font-size="13" fill="white" font-weight="600">Next Step</text>
+
+  <!-- Arrow: LLM → Next Step -->
+  <line x1="420" y1="195" x2="420" y2="240" stroke="#555" stroke-width="2" marker-end="url(#arrowGray)"/>
+
+  <!-- ==================== CENTER: Append to Tape (purple) ==================== -->
+  <rect x="345" y="310" width="150" height="36" rx="8" fill="#7b5ea7" filter="url(#shadow)"/>
+  <text x="420" y="333" text-anchor="middle" font-size="13" fill="white" font-weight="600">Append to Tape</text>
+
+  <!-- Arrow: Next Step → Append -->
+  <line x1="420" y1="276" x2="420" y2="310" stroke="#555" stroke-width="2" marker-end="url(#arrowGray)"/>
+
+  <!-- ==================== CENTER: Context Snapshot (purple) ==================== -->
+  <rect x="340" y="385" width="160" height="36" rx="8" fill="#7b5ea7" filter="url(#shadow)"/>
+  <text x="420" y="408" text-anchor="middle" font-size="13" fill="white" font-weight="600">Context Snapshot</text>
+
+  <!-- Arrow: Append → Context -->
+  <line x1="420" y1="346" x2="420" y2="385" stroke="#7b5ea7" stroke-width="2" marker-end="url(#arrowPurple)"/>
+
+  <!-- Dashed Arrow: Context → LLM (loop back) -->
+  <path d="M 340 403 C 260 403, 260 200, 310 170" stroke="#888" stroke-width="1.5" stroke-dasharray="6,4" fill="none" marker-end="url(#arrowGray)"/>
+  <text x="255" y="300" font-size="11" fill="#888" font-style="italic" transform="rotate(-90 255 300)">replay context</text>
+
+  <!-- ==================== RIGHT TOP: Tape types (orange) ==================== -->
+
+  <!-- Main Agent Tape -->
+  <rect x="660" y="100" width="200" height="40" rx="8" fill="#e07c3e" filter="url(#shadow)"/>
+  <text x="760" y="120" text-anchor="middle" font-size="12" fill="white" font-weight="600">Main Agent Tape</text>
+  <text x="760" y="133" text-anchor="middle" font-size="10" fill="#fff8">cub:{session_id}.jsonl</text>
+
+  <!-- Arrow: LLM → Main Tape -->
+  <line x1="540" y1="150" x2="658" y2="120" stroke="#e07c3e" stroke-width="2" marker-end="url(#arrowOrange)"/>
+
+  <!-- Task Tape -->
+  <rect x="700" y="170" width="200" height="40" rx="8" fill="#e07c3e" filter="url(#shadow)"/>
+  <text x="800" y="190" text-anchor="middle" font-size="12" fill="white" font-weight="600">Task Tape: Code Update</text>
+  <text x="800" y="203" text-anchor="middle" font-size="10" fill="#fff8">handoff → new tape file</text>
+
+  <!-- Dashed: Handoff arrow -->
+  <path d="M 550 160 C 620 160, 650 180, 698 185" stroke="#888" stroke-width="1.5" stroke-dasharray="6,4" fill="none" marker-end="url(#arrowGray)"/>
+  <text x="620" y="155" font-size="11" fill="#888" font-style="italic">Handoff</text>
+
+  <!-- Memory Tape -->
+  <rect x="720" y="240" width="200" height="40" rx="8" fill="#e07c3e" filter="url(#shadow)"/>
+  <text x="820" y="260" text-anchor="middle" font-size="12" fill="white" font-weight="600">Learnings + Skills</text>
+  <text x="820" y="273" text-anchor="middle" font-size="10" fill="#fff8">Long-term Knowledge</text>
+
+  <!-- Dashed: Anchor arrow to Memory -->
+  <path d="M 500 328 C 600 328, 680 280, 718 260" stroke="#888" stroke-width="1.5" stroke-dasharray="6,4" fill="none" marker-end="url(#arrowGray)"/>
+  <text x="620" y="310" font-size="11" fill="#888" font-style="italic">Anchor</text>
+
+  <!-- ==================== RIGHT BOTTOM: Replay History ==================== -->
+  <rect x="580" y="375" width="200" height="120" rx="8" fill="white" stroke="#ccc" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="680" y="397" text-anchor="middle" font-size="12" font-weight="600" fill="#334e68">Replay Tape History</text>
+  <line x1="590" y1="405" x2="770" y2="405" stroke="#eee" stroke-width="1"/>
+  <text x="610" y="425" font-size="12" fill="#555">&#9654; user message</text>
+  <text x="610" y="447" font-size="12" fill="#555">&#9654; tool_call (bash)</text>
+  <text x="610" y="469" font-size="12" fill="#555">&#9654; tool_result</text>
+  <text x="610" y="491" font-size="12" fill="#555">&#9654; assistant response</text>
+
+  <!-- Arrow: Context → Replay -->
+  <line x1="500" y1="403" x2="578" y2="403" stroke="#7b5ea7" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowPurple)"/>
+
+  <!-- ==================== BOTTOM LEFT: Channels ==================== -->
+  <rect x="30" y="440" width="170" height="160" rx="10" fill="#fff3e0" stroke="#e07c3e" stroke-width="2" filter="url(#shadow)"/>
+  <text x="115" y="468" text-anchor="middle" font-size="14" font-weight="bold" fill="#c05621">Channels</text>
+
+  <rect x="46" y="480" width="138" height="26" rx="6" fill="#e07c3e"/>
+  <text x="115" y="498" text-anchor="middle" font-size="11" fill="white" font-weight="500">Discord (WebSocket)</text>
+
+  <rect x="46" y="514" width="138" height="26" rx="6" fill="#e07c3e"/>
+  <text x="115" y="532" text-anchor="middle" font-size="11" fill="white" font-weight="500">Telegram (HTTP Poll)</text>
+
+  <rect x="46" y="548" width="138" height="26" rx="6" fill="#e07c3e"/>
+  <text x="115" y="566" text-anchor="middle" font-size="11" fill="white" font-weight="500">CLI (Interactive)</text>
+
+  <!-- Arrow: Channels → cub -->
+  <line x1="115" y1="440" x2="115" y2="392" stroke="#e07c3e" stroke-width="2" marker-end="url(#arrowOrange)"/>
+
+  <!-- Arrow label -->
+  <text x="130" y="420" font-size="10" fill="#888">ChannelMessage</text>
+
+  <!-- ==================== BOTTOM CENTER: Self-Evolution ==================== -->
+  <rect x="250" y="480" width="220" height="130" rx="10" fill="#f0fff4" stroke="#48a56a" stroke-width="2" filter="url(#shadow)"/>
+  <text x="360" y="508" text-anchor="middle" font-size="14" font-weight="bold" fill="#276749">Self-Evolution</text>
+
+  <rect x="266" y="518" width="188" height="24" rx="5" fill="#48a56a"/>
+  <text x="360" y="535" text-anchor="middle" font-size="11" fill="white">extract_learnings (LLM)</text>
+
+  <rect x="266" y="550" width="188" height="24" rx="5" fill="#48a56a"/>
+  <text x="360" y="567" text-anchor="middle" font-size="11" fill="white">crystallize_skill (LLM)</text>
+
+  <rect x="266" y="582" width="188" height="24" rx="5" fill="#48a56a"/>
+  <text x="360" y="599" text-anchor="middle" font-size="11" fill="white">.agent/skills/auto-*/SKILL.md</text>
+
+  <!-- Arrow: Append → Self-Evolution -->
+  <path d="M 400 346 C 380 420, 360 450, 360 478" stroke="#48a56a" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#arrowGreen)"/>
+  <text x="355" y="455" font-size="10" fill="#888" font-style="italic">post-task</text>
+
+  <!-- ==================== BOTTOM: Legend ==================== -->
+  <rect x="30" y="645" width="900" height="60" rx="8" fill="white" stroke="#ddd" stroke-width="1"/>
+
+  <!-- Handoff -->
+  <text x="80" y="672" text-anchor="middle" font-size="14" font-weight="bold" fill="#334e68">Handoff</text>
+  <text x="80" y="692" text-anchor="middle" font-size="11" fill="#888">分支 Tape 交接</text>
+
+  <!-- Anchor -->
+  <text x="240" y="672" text-anchor="middle" font-size="14" font-weight="bold" fill="#334e68">Anchor</text>
+  <text x="240" y="692" text-anchor="middle" font-size="11" fill="#888">上下文锚点 + 压缩</text>
+
+  <!-- Context Budget -->
+  <text x="430" y="672" text-anchor="middle" font-size="14" font-weight="bold" fill="#334e68">Context Budget</text>
+  <text x="430" y="692" text-anchor="middle" font-size="11" fill="#888">128K tokens, 90% auto-handoff</text>
+
+  <!-- Progressive -->
+  <text x="650" y="672" text-anchor="middle" font-size="14" font-weight="bold" fill="#334e68">Progressive</text>
+  <text x="650" y="692" text-anchor="middle" font-size="11" fill="#888">工具按需渐进展示</text>
+
+  <!-- Multi-Model -->
+  <text x="850" y="672" text-anchor="middle" font-size="14" font-weight="bold" fill="#334e68">Multi-Model</text>
+  <text x="850" y="692" text-anchor="middle" font-size="11" fill="#888">default / vision / fast</text>
+
+</svg>
