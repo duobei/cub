@@ -50,6 +50,8 @@ pub async fn AppRuntime::new(
 ) -> AppRuntime {
   let home = settings.home.unwrap_or("\{workspace}/.cub")
   let store = @tape.FileTapeStore::new(home, workspace)
+  // Migrate legacy data to genome/ (idempotent, runs once)
+  ignore(@genome.migrate_to_genome(home, workspace))
   // Decay old learnings on startup
   decay_learnings(home, @async.now())
   // Load MCP servers
@@ -154,6 +156,11 @@ async fn AppRuntime::create_session(
   } else {
     (self.settings.model, self.settings.api_base)
   }
+  let cost_home = home
+  let cost_sid = session_id
+  let on_usage : (async (Int, Int) -> Unit)? = Some(async fn(pt, ct) {
+    @genome.record_usage(cost_home, cost_sid, pt, ct)
+  })
   let llm = @llm.LLMClient::new(
     model,
     api_key,
@@ -163,6 +170,7 @@ async fn AppRuntime::create_session(
     handoff_threshold=self.settings.handoff_threshold,
     confirm_fn=self.confirm_fn,
     on_chunk=self.on_chunk,
+    on_usage~,
   )
   // Register tape tools (with LLM for auto-summarization)
   register_tape_tools(
@@ -191,6 +199,7 @@ async fn AppRuntime::create_session(
           handoff_threshold=self.settings.handoff_threshold,
           confirm_fn=self.confirm_fn,
           on_chunk=self.on_chunk,
+          on_usage~,
         ),
       )
     None => None
@@ -206,6 +215,7 @@ async fn AppRuntime::create_session(
           handoff_threshold=self.settings.handoff_threshold,
           confirm_fn=self.confirm_fn,
           on_chunk=self.on_chunk,
+          on_usage~,
         ),
       )
     None => None
@@ -220,17 +230,17 @@ async fn AppRuntime::create_session(
     router,
     tool_view,
     async fn() {
-      let skills = @skills.discover_skills(ws)
+      let skills = @skills.discover_skills(ws, cub_home=home)
       filter_skills(skills, self.settings.allowed_skills)
     },
-    async fn(name) { @skills.load_skill_body(name, ws) },
+    async fn(name) { @skills.load_skill_body(name, ws, cub_home=home) },
     model,
     self.settings.max_steps,
     self.settings.max_tokens,
     timeout,
     self.settings.system_prompt,
     async fn() {
-      let agents = read_agents_md(ws)
+      let agents = read_agents_md(ws, home~)
       let startup = read_startup_md(ws)
       let learnings = render_learnings(home)
       let parts : Array[String] = []
@@ -315,7 +325,8 @@ pub fn AppRuntime::reset_session_context(
 pub async fn AppRuntime::discover_skills(
   self : AppRuntime,
 ) -> Array[@skills.SkillMetadata] {
-  @skills.discover_skills(self.workspace)
+  let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
+  @skills.discover_skills(self.workspace, cub_home=home)
 }
 
 ///|
@@ -324,7 +335,8 @@ pub async fn AppRuntime::load_skill_body(
   self : AppRuntime,
   name : String,
 ) -> String? {
-  @skills.load_skill_body(name, self.workspace)
+  let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
+  @skills.load_skill_body(name, self.workspace, cub_home=home)
 }
 
 ///|

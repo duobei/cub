@@ -1,10 +1,19 @@
 /// Self-evolution system: learning extraction, persistence, decay, and skill crystallization.
 
 ///|
-/// Read learnings from ~/.cub/learnings.json.
+/// Read learnings from genome/pending.json (fallback: learnings.json).
 pub async fn read_learnings(home : String) -> Array[Json] {
-  let path = "\{home}/learnings.json"
-  let content = read_file_sync(path)
+  let genome_path = "\{home}/genome/pending.json"
+  let content = read_file_sync(genome_path)
+  if not(content.is_empty()) {
+    let parsed : Json = @json.parse(content) catch { _ => return [] }
+    match parsed {
+      Json::Array(arr) => return arr
+      _ => return []
+    }
+  }
+  // Fallback to legacy path
+  let content = read_file_sync("\{home}/learnings.json")
   if content.is_empty() {
     return []
   }
@@ -63,9 +72,9 @@ pub async fn render_learnings(home : String) -> String {
 }
 
 ///|
-/// Write learnings to ~/.cub/learnings.json.
+/// Write learnings to genome/pending.json.
 pub async fn write_learnings(home : String, learnings : Array[Json]) -> Bool {
-  let path = "\{home}/learnings.json"
+  let path = "\{home}/genome/pending.json"
   let json_str = Json::array(learnings).stringify()
   write_file_sync(path, json_str)
 }
@@ -361,7 +370,9 @@ pub async fn extract_learnings_from_tape(
       match add_learning(home, "anti_pattern", content, now_ms) {
         Some(c) =>
           if not(workspace.is_empty()) {
-            ignore(crystallize_skill(workspace, "anti_pattern", c, refine_fn~))
+            ignore(
+              crystallize_skill(workspace, "anti_pattern", c, refine_fn~, home~),
+            )
           }
         None => ()
       }
@@ -386,7 +397,9 @@ pub async fn extract_learnings_from_tape(
         match add_learning(home, "heuristic", content, now_ms) {
           Some(c) =>
             if not(workspace.is_empty()) {
-              ignore(crystallize_skill(workspace, "heuristic", c, refine_fn~))
+              ignore(
+                crystallize_skill(workspace, "heuristic", c, refine_fn~, home~),
+              )
             }
           None => ()
         }
@@ -405,7 +418,13 @@ pub async fn extract_learnings_from_tape(
               Some(c) =>
                 if not(workspace.is_empty()) {
                   ignore(
-                    crystallize_skill(workspace, "preference", c, refine_fn~),
+                    crystallize_skill(
+                      workspace,
+                      "preference",
+                      c,
+                      refine_fn~,
+                      home~,
+                    ),
                   )
                 }
               None => ()
@@ -419,10 +438,19 @@ pub async fn extract_learnings_from_tape(
 }
 
 ///|
-/// Read skill stats from ~/.cub/skill_stats.json.
+/// Read skill stats from genome/skill_stats.json (fallback: skill_stats.json).
 pub async fn read_skill_stats(home : String) -> Map[String, Json] {
-  let path = "\{home}/skill_stats.json"
-  let content = read_file_sync(path)
+  let genome_path = "\{home}/genome/skill_stats.json"
+  let content = read_file_sync(genome_path)
+  if not(content.is_empty()) {
+    let parsed : Json = @json.parse(content) catch { _ => return {} }
+    match parsed {
+      Json::Object(obj) => return obj
+      _ => return {}
+    }
+  }
+  // Fallback to legacy path
+  let content = read_file_sync("\{home}/skill_stats.json")
   if content.is_empty() {
     return {}
   }
@@ -434,12 +462,12 @@ pub async fn read_skill_stats(home : String) -> Map[String, Json] {
 }
 
 ///|
-/// Write skill stats to ~/.cub/skill_stats.json.
+/// Write skill stats to genome/skill_stats.json.
 pub async fn write_skill_stats(
   home : String,
   stats : Map[String, Json],
 ) -> Bool {
-  let path = "\{home}/skill_stats.json"
+  let path = "\{home}/genome/skill_stats.json"
   let json_str = Json::object(stats).stringify()
   write_file_sync(path, json_str)
 }
@@ -534,13 +562,19 @@ pub async fn crystallize_skill(
   type_ : String,
   content : String,
   refine_fn? : (async (String, String) -> String)? = None,
+  home? : String = "",
 ) -> String? {
   let name = skill_name_from_content(content)
   match @tools.sanitize_name(name) {
     None => return None
     Some(_) => ()
   }
-  let skill_dir = "\{workspace}/.agent/skills/\{name}"
+  // Prefer genome/skills/ if home is provided, fallback to workspace/.agent/skills/
+  let skill_dir = if home.is_empty() {
+    "\{workspace}/.agent/skills/\{name}"
+  } else {
+    "\{home}/genome/skills/\{name}"
+  }
   let skill_path = "\{skill_dir}/SKILL.md"
   // Don't overwrite existing skills
   let existing = read_file_sync(skill_path)

@@ -127,6 +127,7 @@ pub struct LLMClient {
   handoff_threshold : Int
   confirm_fn : (async (String, String) -> Bool)?
   on_chunk : ((String) -> Unit)?
+  on_usage : (async (Int, Int) -> Unit)?
 }
 
 ///|
@@ -141,6 +142,7 @@ pub fn LLMClient::new(
   handoff_threshold? : Int = 90,
   confirm_fn? : (async (String, String) -> Bool)? = None,
   on_chunk? : ((String) -> Unit)? = None,
+  on_usage? : (async (Int, Int) -> Unit)? = None,
 ) -> LLMClient {
   let (provider, model_id) = parse_model_spec(model)
   let base = api_base.unwrap_or(provider_base_url(provider))
@@ -155,6 +157,7 @@ pub fn LLMClient::new(
     handoff_threshold,
     confirm_fn,
     on_chunk,
+    on_usage,
   }
 }
 
@@ -215,6 +218,9 @@ fn LLMClient::build_stream_request_body(
   match body {
     Object(map) => {
       map["stream"] = true.to_json()
+      let opts : Map[String, Json] = {}
+      opts["include_usage"] = true.to_json()
+      map["stream_options"] = Json::object(opts)
       Json::object(map)
     }
     _ => body
@@ -259,6 +265,7 @@ pub async fn LLMClient::chat_streaming(
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some("HTTP stream error: \{e}"),
       }
   }
@@ -270,6 +277,7 @@ pub async fn LLMClient::chat_streaming(
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some("HTTP write error: \{e}"),
       }
     }
@@ -284,6 +292,7 @@ pub async fn LLMClient::chat_streaming(
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some("HTTP request error: \{e}"),
       }
     }
@@ -296,6 +305,7 @@ pub async fn LLMClient::chat_streaming(
       text: "",
       tool_calls: [],
       finish_reason: "error",
+      usage: None,
       error: Some("API error (\{response.code}): \{err_str}"),
     }
   }
@@ -309,6 +319,7 @@ pub async fn LLMClient::chat_streaming(
   let tc_names : Map[Int, String] = {} // index → function name
   let tc_args : Map[Int, StringBuilder] = {} // index → accumulated arguments
   let mut finish_reason = "stop"
+  let mut stream_usage : TokenUsage? = None
   for {
     let line = client.read_until("\n") catch { _ => break }
     match line {
@@ -443,6 +454,24 @@ pub async fn LLMClient::chat_streaming(
               }
             _ => ()
           }
+          // Extract usage from final chunk
+          match json {
+            {
+              "usage": {
+                "prompt_tokens": Number(pt, ..),
+                "completion_tokens": Number(ct, ..),
+                "total_tokens": Number(tt, ..),
+                ..
+              },
+              ..
+            } =>
+              stream_usage = Some({
+                prompt_tokens: pt.to_int(),
+                completion_tokens: ct.to_int(),
+                total_tokens: tt.to_int(),
+              })
+            _ => ()
+          }
         }
       }
     }
@@ -463,7 +492,7 @@ pub async fn LLMClient::chat_streaming(
     })
   }
   let text = strip_think_tags(content_buf.to_string())
-  { text, tool_calls, finish_reason, error: None }
+  { text, tool_calls, finish_reason, error: None, usage: stream_usage }
 }
 
 ///|
@@ -480,6 +509,7 @@ fn parse_chat_response(response_json : Json) -> ChatResponse {
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some(err_msg),
       }
     }
@@ -495,6 +525,7 @@ fn parse_chat_response(response_json : Json) -> ChatResponse {
           text: "",
           tool_calls: [],
           finish_reason: "error",
+          usage: None,
           error: Some("no choices in response"),
         }
       }
@@ -503,6 +534,7 @@ fn parse_chat_response(response_json : Json) -> ChatResponse {
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some("invalid response format"),
       }
   }
@@ -535,7 +567,25 @@ fn parse_chat_response(response_json : Json) -> ChatResponse {
       }
     _ => ()
   }
-  { text, tool_calls, finish_reason, error: None }
+  // Extract usage
+  let usage : TokenUsage? = match response_json {
+    {
+      "usage": {
+        "prompt_tokens": Number(pt, ..),
+        "completion_tokens": Number(ct, ..),
+        "total_tokens": Number(tt, ..),
+        ..
+      },
+      ..
+    } =>
+      Some({
+        prompt_tokens: pt.to_int(),
+        completion_tokens: ct.to_int(),
+        total_tokens: tt.to_int(),
+      })
+    _ => None
+  }
+  { text, tool_calls, finish_reason, error: None, usage }
 }
 
 ///|
@@ -577,6 +627,7 @@ pub async fn LLMClient::chat(
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some("HTTP error: \{e}"),
       }
   }
@@ -586,6 +637,7 @@ pub async fn LLMClient::chat(
       text: "",
       tool_calls: [],
       finish_reason: "error",
+      usage: None,
       error: Some("API error (\{response.code}): \{error_text}"),
     }
   }
@@ -595,6 +647,7 @@ pub async fn LLMClient::chat(
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some("Failed to read response: \{e}"),
       }
   }
@@ -604,6 +657,7 @@ pub async fn LLMClient::chat(
         text: "",
         tool_calls: [],
         finish_reason: "error",
+        usage: None,
         error: Some("Failed to parse JSON: \{e}"),
       }
   }
@@ -650,6 +704,7 @@ pub async fn LLMClient::retry_chat(
     text: "",
     tool_calls: [],
     finish_reason: "error",
+    usage: None,
     error: Some("no attempts made"),
   }
   for attempt = 0; attempt <= max_retries; attempt = attempt + 1 {
@@ -657,6 +712,11 @@ pub async fn LLMClient::retry_chat(
       self.chat_streaming(messages, tools~, max_tokens~, system_prompt~)
     } else {
       self.chat(messages, tools~, max_tokens~, system_prompt~)
+    }
+    // Report usage if available
+    match (self.on_usage, response.usage) {
+      (Some(cb), Some(u)) => cb(u.prompt_tokens, u.completion_tokens)
+      _ => ()
     }
     // Success or non-retryable error: return immediately
     match response.error {

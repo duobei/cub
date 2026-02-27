@@ -28,12 +28,20 @@ async fn list_dir_async(path : String) -> Array[String] {
 }
 
 ///|
-/// Discover skills from workspace and global paths.
-/// Three-level discovery: workspace/.agent/skills/, ~/.agent/skills/, builtin.
+/// Discover skills from genome, workspace, and global paths.
+/// Four-level discovery: genome/skills/, workspace/.agent/skills/, ~/.agent/skills/, builtin.
 /// First-match-wins deduplication by name.
-pub async fn discover_skills(workspace : String) -> Array[SkillMetadata] {
+pub async fn discover_skills(
+  workspace : String,
+  cub_home? : String = "",
+) -> Array[SkillMetadata] {
   let seen : Map[String, Bool] = {}
   let skills : Array[SkillMetadata] = []
+  // Level 0: genome skills (highest priority)
+  if not(cub_home.is_empty()) {
+    let genome_skills_dir = "\{cub_home}/genome/skills"
+    scan_skills_dir(genome_skills_dir, "genome", seen, skills)
+  }
   // Level 1: workspace skills
   let ws_skills_dir = "\{workspace}/.agent/skills"
   scan_skills_dir(ws_skills_dir, "workspace", seen, skills)
@@ -276,11 +284,18 @@ fn find_char(s : String, ch : Char) -> Int {
 
 ///|
 /// Load the full SKILL.md body for a skill name.
-/// Searches workspace, global, and builtin skill locations.
-pub async fn load_skill_body(name : String, workspace : String) -> String? {
+/// Searches genome, workspace, global, and builtin skill locations.
+pub async fn load_skill_body(
+  name : String,
+  workspace : String,
+  cub_home? : String = "",
+) -> String? {
   let lower_name = name.to_lower()
-  // Search in order: workspace, global, builtin
+  // Search in order: genome, workspace, global, builtin
   let dirs : Array[(String, String)] = []
+  if not(cub_home.is_empty()) {
+    dirs.push((cub_home + "/genome/skills", "genome"))
+  }
   dirs.push((workspace + "/.agent/skills", "workspace"))
   let home = get_home_dir()
   if home.length() > 0 {

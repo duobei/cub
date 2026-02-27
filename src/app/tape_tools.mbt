@@ -590,39 +590,47 @@ fn register_tape_tools(
       }
     },
   )
-  // ,agents.update
+  // ,agents.update — writes to genome/identity.md + AGENTS.md (compat)
   let agents_ws = workspace
+  let agents_home = home
   let au_props : Map[String, Json] = Map::new()
   au_props["content"] = @tools.string_prop(
-    "Full new content for AGENTS.md (replaces existing)",
+    "Full new content for identity (replaces existing)",
   )
   au_props["append"] = @tools.string_prop(
-    "Content to append to AGENTS.md (alternative to full replace)",
+    "Content to append to identity (alternative to full replace)",
   )
   let au_params = @tools.make_params(au_props, [])
   registry.register(
     "agents.update",
-    "Update workspace AGENTS.md to evolve agent behavior",
+    "Update agent identity to evolve behavior",
     parameters=au_params,
     handler=async fn(args) {
-      let path = "\{agents_ws}/AGENTS.md"
+      let legacy_path = "\{agents_ws}/AGENTS.md"
+      let genome_path = "\{agents_home}/genome/identity.md"
       match args {
         { "content": String(c), .. } => {
           // Safety: max 10KB
           if c.length() > 10240 {
             return "agents.update: content too large (max 10KB)"
           }
-          if write_file_sync(path, c) {
-            "updated AGENTS.md (full replace)"
-          } else {
-            "agents.update: write failed"
-          }
+          ignore(write_file_sync(genome_path, c))
+          ignore(write_file_sync(legacy_path, c))
+          "updated identity (genome/identity.md + AGENTS.md)"
         }
         { "append": String(a), .. } => {
           if a.length() > 10240 {
             return "agents.update: content too large (max 10KB)"
           }
-          let existing = read_file_sync(path)
+          // Read from genome path first, fallback to legacy
+          let existing = {
+            let g = read_file_sync(genome_path)
+            if g.is_empty() {
+              read_file_sync(legacy_path)
+            } else {
+              g
+            }
+          }
           let new_content = if existing.is_empty() {
             a
           } else {
@@ -631,15 +639,20 @@ fn register_tape_tools(
           if new_content.length() > 10240 {
             return "agents.update: total content would exceed 10KB"
           }
-          if write_file_sync(path, new_content) {
-            "appended to AGENTS.md"
-          } else {
-            "agents.update: write failed"
-          }
+          ignore(write_file_sync(genome_path, new_content))
+          ignore(write_file_sync(legacy_path, new_content))
+          "appended to identity (genome/identity.md + AGENTS.md)"
         }
         _ => "agents.update: provide 'content' (full replace) or 'append'"
       }
     },
+  )
+  // ,cost.balance — show token usage
+  let cost_home = home
+  registry.register(
+    "cost.balance",
+    "Show cumulative token usage and cost tracking",
+    handler=async fn(_args) { @genome.format_balance(cost_home) },
   )
   // ,schedules — alias for schedule.list
   let sched_ws = workspace

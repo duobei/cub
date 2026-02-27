@@ -69,10 +69,17 @@ async fn list_dir_sync(path : String) -> Array[String] {
 }
 
 ///|
-/// Read AGENTS.md from workspace root, returns empty string if not found.
-async fn read_agents_md(workspace : String) -> String {
-  let path = "\{workspace}/AGENTS.md"
-  let text = read_file_sync(path)
+/// Read identity from genome/identity.md (fallback: AGENTS.md).
+async fn read_agents_md(workspace : String, home? : String = "") -> String {
+  // Prefer genome/identity.md if home is provided
+  if not(home.is_empty()) {
+    let genome_text = read_file_sync("\{home}/genome/identity.md")
+    if not(genome_text.is_empty()) {
+      return "<workspace_instructions>\n\{genome_text}\n</workspace_instructions>"
+    }
+  }
+  // Fallback to workspace/AGENTS.md
+  let text = read_file_sync("\{workspace}/AGENTS.md")
   if text.is_empty() {
     return ""
   }

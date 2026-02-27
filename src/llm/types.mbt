@@ -43,12 +43,21 @@ pub fn ToolCallInfo::to_json(self : ToolCallInfo) -> Json {
 }
 
 ///|
+/// Token usage from an API call.
+pub struct TokenUsage {
+  prompt_tokens : Int
+  completion_tokens : Int
+  total_tokens : Int
+} derive(Show)
+
+///|
 /// Response from a chat API call.
 pub struct ChatResponse {
   text : String
   tool_calls : Array[ToolCallInfo]
   finish_reason : String
   error : String?
+  usage : TokenUsage?
 } derive(Show)
 
 ///|

@@ -10,6 +10,7 @@ import {
   "duobei/cub/skills" @skills,
   "duobei/cub/mcp" @mcp,
   "duobei/cub/ext" @ext,
+  "duobei/cub/genome" @genome,
   "moonbitlang/async/process" @process,
   "duobei/cub/log" @log,
   "moonbitlang/core/json",
