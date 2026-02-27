@@ -82,6 +82,8 @@ cub version                show version
 
 ## Architecture
 
+![cub + Tape Architecture](docs/architecture.svg)
+
 ```
 src/
 ├── main/       CLI entry, arg parsing, multi-channel dispatch
