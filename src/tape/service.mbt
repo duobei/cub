@@ -174,11 +174,113 @@ pub async fn TapeService::anchors(
 }
 
 ///|
+/// Read entries by ID range (inclusive).
+pub async fn TapeService::read_range(
+  self : TapeService,
+  start_id : Int,
+  end_id : Int,
+) -> Array[TapeEntry] {
+  let entries = self.tape().read_entries()
+  entries.filter(fn(e) { e.id >= start_id && e.id <= end_id })
+}
+
+///|
+/// Read entries after a named anchor (most recent match).
+pub async fn TapeService::entries_since_anchor(
+  self : TapeService,
+  anchor_name : String,
+) -> Array[TapeEntry] {
+  let entries = self.tape().read_entries()
+  let mut anchor_idx = -1
+  for i in 0..<entries.length() {
+    if entries[i].kind == "anchor" {
+      match entries[i].payload {
+        { "name": String(n), .. } => if n == anchor_name { anchor_idx = i }
+        _ => ()
+      }
+    }
+  }
+  if anchor_idx < 0 {
+    return []
+  }
+  let result : Array[TapeEntry] = []
+  for i in (anchor_idx + 1)..<entries.length() {
+    result.push(entries[i])
+  }
+  result
+}
+
+///|
+/// Get detailed anchor info including summary, timestamp, and entry counts.
+pub async fn TapeService::anchors_detailed(
+  self : TapeService,
+  limit? : Int = 20,
+) -> Array[Json] {
+  let entries = self.tape().read_entries()
+  // Collect anchor indices
+  let anchor_indices : Array[Int] = []
+  for i in 0..<entries.length() {
+    if entries[i].kind == "anchor" {
+      anchor_indices.push(i)
+    }
+  }
+  let start = if anchor_indices.length() > limit {
+    anchor_indices.length() - limit
+  } else {
+    0
+  }
+  let results : Array[Json] = []
+  for i in start..<anchor_indices.length() {
+    let idx = anchor_indices[i]
+    let e = entries[idx]
+    let name = match e.payload {
+      { "name": String(n), .. } => n
+      _ => "-"
+    }
+    let summary = match e.payload {
+      { "state": { "summary": String(s), .. }, .. } => s
+      _ => ""
+    }
+    let task = match e.payload {
+      { "state": { "task": String(t), .. }, .. } => t
+      _ => ""
+    }
+    let ts = match e.meta {
+      { "ts": Number(t, ..), .. } => t.to_int64()
+      _ => 0L
+    }
+    // Count entries until next anchor or end
+    let next_anchor_idx = if i + 1 < anchor_indices.length() {
+      anchor_indices[i + 1]
+    } else {
+      entries.length()
+    }
+    let entry_count = next_anchor_idx - idx - 1
+    let obj : Map[String, Json] = {}
+    obj["id"] = e.id.to_json()
+    obj["name"] = name.to_json()
+    obj["ts"] = ts.to_json()
+    obj["entries_after"] = entry_count.to_json()
+    if summary.length() > 0 {
+      obj["summary"] = summary.to_json()
+    }
+    if task.length() > 0 {
+      obj["task"] = task.to_json()
+    }
+    results.push(Json::object(obj))
+  }
+  results
+}
+
+///|
 /// Search tape entries by substring match (current tape only).
+/// Optional kind filter and offset for pagination.
 pub async fn TapeService::search(
   self : TapeService,
   query : String,
   limit? : Int = 20,
+  kind? : String = "",
+  offset? : Int = 0,
 ) -> Array[TapeEntry] {
   let normalized = query.to_lower()
   if normalized.is_empty() {
@@ -186,12 +288,22 @@ pub async fn TapeService::search(
   }
   let entries = self.tape().read_entries()
   let results : Array[TapeEntry] = []
+  let mut skipped = 0
   let mut i = entries.length() - 1
   while i >= 0 && results.length() < limit {
     let entry = entries[i]
+    // Kind filter
+    if kind.length() > 0 && entry.kind != kind {
+      i -= 1
+      continue
+    }
     let payload_text = entry.payload.stringify().to_lower()
     if payload_text.contains(normalized) {
-      results.push(entry)
+      if skipped < offset {
+        skipped += 1
+      } else {
+        results.push(entry)
+      }
     }
     i -= 1
   }

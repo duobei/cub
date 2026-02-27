@@ -21,7 +21,7 @@ fn fnv1a_hash(input : String) -> String {
 
 ///|
 /// Format milliseconds since epoch as ISO 8601 string (simplified UTC).
-fn format_iso8601(ms : Int64) -> String {
+pub fn format_iso8601(ms : Int64) -> String {
   let secs = ms / 1000L
   let mut days = secs / 86400L
   let day_secs = secs % 86400L

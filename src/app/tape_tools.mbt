@@ -142,35 +142,200 @@ fn register_tape_tools(
       "handoff: \{name}"
     },
   )
-  // ,anchors
-  registry.register("anchors", "List anchor points", handler=async fn(_args) {
-    let anchors = tape.anchors()
-    if anchors.is_empty() {
-      return "no anchors"
-    }
-    anchors.map(fn(a) { a.name }).join("\n")
-  })
-  // ,tape.search (searches across all tapes in workspace)
+  // ,anchors — detailed anchor info with summary, timestamp, entry count
+  registry.register(
+    "anchors",
+    "List anchor points with summary, timestamp, and entry counts",
+    handler=async fn(_args) {
+      let details = tape.anchors_detailed()
+      if details.is_empty() {
+        return "no anchors"
+      }
+      let lines : Array[String] = []
+      for d in details {
+        let id = match d {
+          { "id": Number(n, ..), .. } => n.to_int()
+          _ => 0
+        }
+        let name = match d {
+          { "name": String(n), .. } => n
+          _ => "-"
+        }
+        let ts = match d {
+          { "ts": Number(n, ..), .. } => n.to_int64()
+          _ => 0L
+        }
+        let entries_after = match d {
+          { "entries_after": Number(n, ..), .. } => n.to_int()
+          _ => 0
+        }
+        let summary = match d {
+          { "summary": String(s), .. } => s
+          _ => ""
+        }
+        let task = match d {
+          { "task": String(t), .. } => t
+          _ => ""
+        }
+        let ts_str = if ts > 0L { @genome.format_iso8601(ts) } else { "-" }
+        let buf = StringBuilder::new()
+        buf
+        ..write_string("#\{id} ")
+        ..write_string(name)
+        ..write_string(" (\{ts_str}, \{entries_after} entries after)")
+        .write_string("")
+        if summary.length() > 0 {
+          buf..write_string("\n  summary: ").write_string(summary)
+        }
+        if task.length() > 0 {
+          buf..write_string("\n  task: ").write_string(task)
+        }
+        lines.push(buf.to_string())
+      }
+      lines.join("\n")
+    },
+  )
+  // ,tape.search (searches current tape with optional kind filter and pagination)
   let search_props : Map[String, Json] = Map::new()
-  search_props["query"] = @tools.string_prop("Search query")
+  search_props["query"] = @tools.string_prop("Search query (substring match)")
+  search_props["kind"] = @tools.string_prop(
+    "Filter by entry kind: message, tool_call, tool_result, event, anchor (optional)",
+  )
+  search_props["offset"] = @tools.string_prop(
+    "Skip first N matches for pagination (optional, default 0)",
+  )
+  search_props["limit"] = @tools.string_prop(
+    "Max results to return (optional, default 20)",
+  )
+  search_props["all_tapes"] = @tools.string_prop(
+    "Search all tapes in workspace: true/false (optional, default false)",
+  )
   let search_params = @tools.make_params(search_props, ["query"])
   registry.register(
     "tape.search",
-    "Search across all tape sessions in this workspace",
+    "Search tape entries by substring — supports kind filter and pagination",
     parameters=search_params,
     handler=async fn(args) {
       let query = match args {
         { "query": String(q), .. } => q
         _ => return "tape.search: missing query"
       }
-      let results = tape.search_all(query)
+      let kind = match args {
+        { "kind": String(k), .. } => k
+        _ => ""
+      }
+      let offset = match args {
+        { "offset": String(s), .. } => {
+          let parsed : Json = @json.parse(s) catch { _ => Json::null() }
+          match parsed {
+            Number(n, ..) => n.to_int()
+            _ => 0
+          }
+        }
+        { "offset": Number(n, ..), .. } => n.to_int()
+        _ => 0
+      }
+      let limit = match args {
+        { "limit": String(s), .. } => {
+          let parsed : Json = @json.parse(s) catch { _ => Json::null() }
+          match parsed {
+            Number(n, ..) => n.to_int()
+            _ => 20
+          }
+        }
+        { "limit": Number(n, ..), .. } => n.to_int()
+        _ => 20
+      }
+      let all_tapes = match args {
+        { "all_tapes": String(s), .. } => s == "true"
+        _ => false
+      }
+      if all_tapes {
+        let results = tape.search_all(query, limit~)
+        if results.is_empty() {
+          return "no results"
+        }
+        return results
+          .map(fn(pair) {
+            "[\{pair.0}] #\{pair.1.id} [\{pair.1.kind}] \{pair.1.payload.stringify()}"
+          })
+          .join("\n")
+      }
+      let results = tape.search(query, limit~, kind~, offset~)
       if results.is_empty() {
         return "no results"
       }
       results
-      .map(fn(pair) {
-        "[\{pair.0}] \{pair.1.kind}: \{pair.1.payload.stringify()}"
-      })
+      .map(fn(e) { "#\{e.id} [\{e.kind}] \{e.payload.stringify()}" })
+      .join("\n")
+    },
+  )
+  // ,tape.read_range — batch read entries by ID range
+  let rr_props : Map[String, Json] = Map::new()
+  rr_props["start_id"] = @tools.string_prop("Start entry ID (inclusive)")
+  rr_props["end_id"] = @tools.string_prop("End entry ID (inclusive)")
+  let rr_params = @tools.make_params(rr_props, ["start_id", "end_id"])
+  registry.register(
+    "tape.read_range",
+    "Read tape entries by ID range — use for small-batch programmatic queries",
+    parameters=rr_params,
+    handler=async fn(args) {
+      let start_id = match args {
+        { "start_id": String(s), .. } => {
+          let parsed : Json = @json.parse(s) catch {
+            _ => return "invalid start_id"
+          }
+          match parsed {
+            Number(n, ..) => n.to_int()
+            _ => return "invalid start_id"
+          }
+        }
+        { "start_id": Number(n, ..), .. } => n.to_int()
+        _ => return "tape.read_range: missing start_id"
+      }
+      let end_id = match args {
+        { "end_id": String(s), .. } => {
+          let parsed : Json = @json.parse(s) catch {
+            _ => return "invalid end_id"
+          }
+          match parsed {
+            Number(n, ..) => n.to_int()
+            _ => return "invalid end_id"
+          }
+        }
+        { "end_id": Number(n, ..), .. } => n.to_int()
+        _ => return "tape.read_range: missing end_id"
+      }
+      let entries = tape.read_range(start_id, end_id)
+      if entries.is_empty() {
+        return "no entries in range \{start_id}-\{end_id}"
+      }
+      entries
+      .map(fn(e) { "#\{e.id} [\{e.kind}] \{e.payload.stringify()}" })
+      .join("\n")
+    },
+  )
+  // ,tape.since_anchor — read entries after a named anchor
+  let sa_props : Map[String, Json] = Map::new()
+  sa_props["name"] = @tools.string_prop("Anchor name to read entries after")
+  let sa_params = @tools.make_params(sa_props, ["name"])
+  registry.register(
+    "tape.since_anchor",
+    "Read entries after a specific anchor — for examining a tape section",
+    parameters=sa_params,
+    handler=async fn(args) {
+      let name = match args {
+        { "name": String(n), .. } => n
+        _ => return "tape.since_anchor: missing name"
+      }
+      let entries = tape.entries_since_anchor(name)
+      if entries.is_empty() {
+        return "no entries after anchor '\{name}' (anchor not found or no entries after it)"
+      }
+      let header = "entries after anchor '\{name}': \{entries.length()}\n"
+      header +
+      entries
+      .map(fn(e) { "#\{e.id} [\{e.kind}] \{e.payload.stringify()}" })
       .join("\n")
     },
   )
