@@ -1,0 +1,7 @@
+import {
+  "moonbitlang/async/fs" @fs,
+  "moonbitlang/async/http" @http,
+  "moonbitlang/async/process" @process,
+  "moonbitlang/async/websocket" @websocket,
+  "moonbitlang/async/io" @io,
+}

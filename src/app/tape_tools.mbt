@@ -472,7 +472,7 @@ fn register_tape_tools(
               // Use absolute path — systemd env lacks ~/.moon/bin in PATH
               let user_home = @config.getenv("HOME").unwrap_or("/home/ubuntu")
               let moon_bin = "\{user_home}/.moon/bin/moon"
-              @process.collect_output(
+              @platform.collect_output(
                 moon_bin,
                 ["build", "--target", "wasm"],
                 cwd=plugin_dir,

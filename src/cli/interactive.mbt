@@ -68,8 +68,7 @@ fn add_history(line : String) -> Unit {
 ///|
 /// Load history from file into memory.
 async fn load_history(path : String) -> Unit {
-  let data = @fs.read_file(path) catch { _ => return }
-  let text = data.text() catch { _ => return }
+  let text = @platform.read_file_text(path) catch { _ => return }
   for line in text.split("\n") {
     let s = line.to_string()
     if s.length() > 0 {
@@ -82,7 +81,7 @@ async fn load_history(path : String) -> Unit {
 /// Save in-memory history to file.
 async fn save_history(path : String) -> Unit {
   let content = cli_history.join("\n")
-  @fs.write_file(path, content, create=0o644) catch {
+  @platform.write_file(path, content, create=0o644) catch {
     _ => ()
   }
 }

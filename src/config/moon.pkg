@@ -1,5 +1,5 @@
 import {
-  "moonbitlang/async/fs" @fs,
+  "duobei/cub/platform" @platform,
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/json",
   "moonbitlang/core/strconv",

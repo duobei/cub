@@ -117,7 +117,7 @@ async fn DiscordChannel::connect_and_run(
   handler : async (ChannelMessage) -> Unit,
 ) -> Bool {
   @log.info("discord", "connecting to gateway...")
-  let conn = @websocket.connect(discord_gateway_url) catch {
+  let conn = @platform.ws_connect(discord_gateway_url) catch {
     e => {
       @log.error("discord", "gateway connection failed: \{e}")
       return false
@@ -524,7 +524,7 @@ pub async fn DiscordChannel::send_message(
     headers["Authorization"] = "Bot \{self.token}"
     headers["User-Agent"] = "DiscordBot (cub, 0.1.0)"
     try {
-      let (response, _data) = @http.post(url, body_str, headers~)
+      let (response, _data) = @platform.http_post(url, body_str, headers~)
       if response.code != 200 && response.code != 204 {
         @log.warn("discord", "send_message failed: HTTP \{response.code}")
       }
@@ -546,7 +546,7 @@ pub async fn DiscordChannel::send_typing(
   headers["Authorization"] = "Bot \{self.token}"
   headers["User-Agent"] = "DiscordBot (cub, 0.1.0)"
   try {
-    let _ = @http.post(url, "", headers~)
+    let _ = @platform.http_post(url, "", headers~)
   } catch {
     e => @log.debug("discord", "typing indicator error: \{e}")
   }

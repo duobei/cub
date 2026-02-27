@@ -8,8 +8,9 @@ let env_snapshot : Ref[Map[String, String]] = { val: {} }
 /// Initialize environment snapshot by reading /proc/self/environ.
 /// Must be called once at startup before any getenv() calls.
 pub async fn init_env() -> Unit {
-  let data = @fs.read_file("/proc/self/environ") catch { _ => return }
-  let bytes = data.binary()
+  let bytes = @platform.read_file_binary("/proc/self/environ") catch {
+    _ => return
+  }
   let env : Map[String, String] = {}
   // /proc/self/environ is null-separated KEY=VALUE pairs
   let mut start = 0
@@ -353,8 +354,8 @@ pub async fn load_settings(workspace_path? : String? = None) -> Settings {
   let env = collect_env_vars()
   // Try loading .env file
   let dotenv = try {
-    let content = @fs.read_file(".env")
-    parse_dotenv(content.text())
+    let content = @platform.read_file_text(".env")
+    parse_dotenv(content)
   } catch {
     _ => Map::new()
   }

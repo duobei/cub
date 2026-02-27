@@ -122,7 +122,7 @@ async fn find_wasm_file(plugin_dir : String) -> String {
     "\{plugin_dir}/main.wasm",
   ]
   for path in candidates {
-    if @fs.exists(path) {
+    if @platform.exists(path) {
       return path
     }
   }
@@ -188,7 +188,7 @@ fn strip_extension(filename : String) -> String {
 ///|
 /// List directory entries via async fs.
 async fn list_ext_dir(path : String) -> Array[String] {
-  @fs.readdir(path) catch {
+  @platform.readdir(path) catch {
     _ => []
   }
 }
@@ -196,8 +196,7 @@ async fn list_ext_dir(path : String) -> Array[String] {
 ///|
 /// Read file content via async fs.
 async fn read_ext_file(path : String) -> String {
-  let data = @fs.read_file(path) catch { _ => return "" }
-  data.text() catch {
+  @platform.read_file_text(path) catch {
     _ => ""
   }
 }

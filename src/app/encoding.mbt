@@ -235,11 +235,11 @@ async fn run_extension(
   let timeout = 30_000
   let (exit_code, stdout_data, stderr_data) = @async.with_timeout(timeout, async fn() {
     match ext_type {
-      @ext.ExtType::Script => @process.collect_output(path, [args_str])
+      @ext.ExtType::Script => @platform.collect_output(path, [args_str])
       @ext.ExtType::Wasm => {
         let user_home = @config.getenv("HOME").unwrap_or("/home/ubuntu")
         let moonrun_bin = "\{user_home}/.moon/bin/moonrun"
-        @process.collect_output(moonrun_bin, [path, "--", args_str])
+        @platform.collect_output(moonrun_bin, [path, "--", args_str])
       }
     }
   }) catch {

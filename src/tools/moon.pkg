@@ -1,8 +1,6 @@
 import {
   "moonbitlang/async" @async,
-  "moonbitlang/async/fs" @fs,
-  "moonbitlang/async/http" @http,
-  "moonbitlang/async/process" @process,
+  "duobei/cub/platform" @platform,
   "duobei/cub/tape" @tape,
   "duobei/cub/config" @config,
   "moonbitlang/core/encoding/utf8",

@@ -3,8 +3,7 @@
 ///|
 /// Read file content via async fs.
 async fn read_file_sync(path : String) -> String {
-  let data = @fs.read_file(path) catch { _ => return "" }
-  data.text() catch {
+  @platform.read_file_text(path) catch {
     _ => ""
   }
 }
@@ -12,7 +11,7 @@ async fn read_file_sync(path : String) -> String {
 ///|
 /// Create directory recursively via async fs.
 async fn mkdir_p_sync(path : String) -> Bool {
-  @fs.mkdir(path, permission=0o755, recursive=true) catch {
+  @platform.mkdir(path, permission=0o755, recursive=true) catch {
     _ => return false
   }
   true
@@ -34,7 +33,7 @@ async fn write_file_sync(path : String, content : String) -> Bool {
       ignore(mkdir_p_sync(parent))
     }
   }
-  @fs.write_file(path, content, create=0o644) catch {
+  @platform.write_file(path, content, create=0o644) catch {
     _ => return false
   }
   true
@@ -43,7 +42,7 @@ async fn write_file_sync(path : String, content : String) -> Bool {
 ///|
 /// Make file executable via async fs.
 async fn chmod_x(path : String) -> Bool {
-  @fs.chmod(path, 0o755) catch {
+  @platform.chmod(path, 0o755) catch {
     _ => return false
   }
   true
@@ -52,10 +51,13 @@ async fn chmod_x(path : String) -> Bool {
 ///|
 /// Remove a file or directory recursively via async fs.
 async fn remove_path_sync(path : String) -> Bool {
-  let file_kind = @fs.kind(path) catch { _ => return false }
+  let file_kind = @platform.file_kind(path) catch { _ => return false }
   match file_kind {
-    Directory => @fs.rmdir(path, recursive=true) catch { _ => return false }
-    _ => @fs.remove(path) catch { _ => return false }
+    Directory =>
+      @platform.rmdir(path, recursive=true) catch {
+        _ => return false
+      }
+    _ => @platform.remove(path) catch { _ => return false }
   }
   true
 }
@@ -63,7 +65,7 @@ async fn remove_path_sync(path : String) -> Bool {
 ///|
 /// List files in a directory via async fs.
 async fn list_dir_sync(path : String) -> Array[String] {
-  @fs.readdir(path) catch {
+  @platform.readdir(path) catch {
     _ => []
   }
 }

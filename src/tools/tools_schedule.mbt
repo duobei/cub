@@ -112,7 +112,7 @@ fn resolve_schedules_path(_workspace : String) -> String {
 ///|
 /// Read schedules from JSON file via async fs.
 async fn read_schedules_file(path : String) -> Array[Json] {
-  let content = @fs.read_file(path).text() catch { _ => return [] }
+  let content = @platform.read_file_text(path) catch { _ => return [] }
   if content.trim().to_string().is_empty() {
     return []
   }
@@ -131,11 +131,11 @@ async fn write_schedules_file(path : String, schedules : Array[Json]) -> Unit {
   // Create parent directory
   let parent = get_parent_dir(path)
   if parent.length() > 0 {
-    @fs.mkdir(parent, permission=0o755, recursive=true) catch {
+    @platform.mkdir(parent, permission=0o755, recursive=true) catch {
       _ => ()
     }
   }
-  @fs.write_file(path, content, create=0o644) catch {
+  @platform.write_file(path, content, create=0o644) catch {
     e => fail("schedule: failed to write \{path}: \{e}")
   }
 }

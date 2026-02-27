@@ -64,8 +64,7 @@ fn format_iso8601(ms : Int64) -> String {
 ///|
 /// Read file content, returns empty string on failure.
 async fn read_file(path : String) -> String {
-  let data = @fs.read_file(path) catch { _ => return "" }
-  data.text() catch {
+  @platform.read_file_text(path) catch {
     _ => ""
   }
 }
@@ -83,12 +82,12 @@ async fn write_file(path : String, content : String) -> Bool {
   if last_slash > 0 {
     let parent = path[:last_slash].to_string() catch { _ => "" }
     if not(parent.is_empty()) {
-      @fs.mkdir(parent, permission=0o755, recursive=true) catch {
+      @platform.mkdir(parent, permission=0o755, recursive=true) catch {
         _ => ()
       }
     }
   }
-  @fs.write_file(path, content, create=0o644) catch {
+  @platform.write_file(path, content, create=0o644) catch {
     _ => return false
   }
   true
@@ -97,7 +96,7 @@ async fn write_file(path : String, content : String) -> Bool {
 ///|
 /// List directory entries, returns empty on failure.
 async fn list_dir(path : String) -> Array[String] {
-  @fs.readdir(path) catch {
+  @platform.readdir(path) catch {
     _ => []
   }
 }
@@ -112,11 +111,11 @@ pub fn generate_id(workspace : String, now_ms : Int64) -> String {
 /// Ensure genome directory structure exists under home.
 pub async fn ensure_genome_dir(home : String) -> Unit {
   let genome = "\{home}/genome"
-  @fs.mkdir(genome, permission=0o755, recursive=true) catch {
+  @platform.mkdir(genome, permission=0o755, recursive=true) catch {
     _ => ()
   }
   let skills = "\{genome}/skills"
-  @fs.mkdir(skills, permission=0o755, recursive=true) catch {
+  @platform.mkdir(skills, permission=0o755, recursive=true) catch {
     _ => ()
   }
 }

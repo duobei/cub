@@ -52,12 +52,7 @@ async fn run_bash_command(
   // Load workspace .env into extra environment
   let extra_env : Map[String, String] = {}
   let env_path = "\{workspace}/.env"
-  let env_content = try {
-    let data = @fs.read_file(env_path)
-    data.text()
-  } catch {
-    _ => ""
-  }
+  let env_content = @platform.read_file_text(env_path) catch { _ => "" }
   if env_content.length() > 0 {
     let dotenv = @config.parse_dotenv(env_content)
     for k, v in dotenv {
@@ -68,7 +63,7 @@ async fn run_bash_command(
   let (exit_code, stdout_data, stderr_data) = @async.with_timeout(
     timeout * 1000,
     async fn() {
-      @process.collect_output("bash", ["-lc", cmd], cwd~, extra_env~)
+      @platform.collect_output("bash", ["-lc", cmd], cwd~, extra_env~)
     },
   ) catch {
     e => fail("bash error: \{e}")

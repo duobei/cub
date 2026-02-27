@@ -57,8 +57,8 @@ async fn spawn_sub_agent(
       ]
       let mut found = ""
       for c in candidates {
-        let data = @fs.read_file(c) catch { _ => continue }
-        if data.binary().length() > 0 {
+        let data = @platform.read_file_binary(c) catch { _ => continue }
+        if data.length() > 0 {
           found = c
           break
         }
@@ -72,7 +72,7 @@ async fn spawn_sub_agent(
   let (exit_code, stdout_data, stderr_data) = @async.with_timeout(
     timeout * 1000,
     async fn() {
-      @process.collect_output(cub_bin, ["run", "--workspace", workspace, task])
+      @platform.collect_output(cub_bin, ["run", "--workspace", workspace, task])
     },
   ) catch {
     _ => fail("agent.spawn: timeout after \{timeout}s")

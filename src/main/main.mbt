@@ -466,7 +466,7 @@ async fn process_documents(
     if is_text {
       // Fetch text content
       let headers : Map[String, String] = {}
-      let (resp, data) = @http.get(doc.url, headers~) catch {
+      let (resp, data) = @platform.http_get(doc.url, headers~) catch {
         _ => {
           parts.push("[Attachment: \{doc.filename} (fetch failed)]")
           continue
@@ -491,7 +491,7 @@ async fn process_documents(
     } else if doc.content_type == "application/pdf" ||
       has_suffix(doc.filename, ".pdf") {
       // Extract text from PDF using pdftotext via curl pipeline
-      let (exit_code, stdout_data, _stderr_data) = @process.collect_output(
+      let (exit_code, stdout_data, _stderr_data) = @platform.collect_output(
         "bash",
         ["-c", "curl -sL \"$1\" | pdftotext - -", "bash", doc.url],
       ) catch {

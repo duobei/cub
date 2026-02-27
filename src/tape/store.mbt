@@ -34,7 +34,7 @@ fn TapeFile::reset_state(self : TapeFile) -> Unit {
 ///|
 /// Reset the tape file (delete and reset state).
 pub async fn TapeFile::reset(self : TapeFile) -> Unit {
-  @fs.remove(self.path) catch {
+  @platform.remove(self.path) catch {
     _ => ()
   }
   self.reset_state()
@@ -43,7 +43,7 @@ pub async fn TapeFile::reset(self : TapeFile) -> Unit {
 ///|
 /// Read all entries from the JSONL file.
 pub async fn TapeFile::read(self : TapeFile) -> Array[TapeEntry] {
-  let content = @fs.read_file(self.path).text() catch {
+  let content = @platform.read_file_text(self.path) catch {
     _ => {
       self.reset_state()
       return []
@@ -128,7 +128,13 @@ pub async fn TapeFile::append_many(
     next += 1
   }
   let text = buf.to_string()
-  @fs.write_file(self.path, text, append=true, create=0o644, truncate=false) catch {
+  @platform.write_file(
+    self.path,
+    text,
+    append=true,
+    create=0o644,
+    truncate=false,
+  ) catch {
     _ => ()
   }
   self.read_offset += text.length()
@@ -176,7 +182,7 @@ pub async fn TapeFile::compact(self : TapeFile) -> Int {
     buf.write_char('\n')
     next_id += 1
   }
-  @fs.write_file(self.path, buf.to_string(), create=0o644) catch {
+  @platform.write_file(self.path, buf.to_string(), create=0o644) catch {
     _ => return 0
   }
   // Reset internal state so next read picks up the new file
@@ -187,20 +193,20 @@ pub async fn TapeFile::compact(self : TapeFile) -> Int {
 ///|
 /// Archive the tape file with a .bak suffix.
 pub async fn TapeFile::archive(self : TapeFile) -> String? {
-  let content = @fs.read_file(self.path).text() catch { _ => return None }
+  let content = @platform.read_file_text(self.path) catch { _ => return None }
   if content.is_empty() {
     return None
   }
   let archive_path = "\{self.path}.bak"
-  @fs.write_file(archive_path, content, create=0o644) catch {
+  @platform.write_file(archive_path, content, create=0o644) catch {
     _ => return None
   }
   // Verify archive was written before removing original
-  let verify = @fs.read_file(archive_path).text() catch { _ => return None }
+  let verify = @platform.read_file_text(archive_path) catch { _ => return None }
   if verify.length() != content.length() {
     return None
   }
-  @fs.remove(self.path) catch {
+  @platform.remove(self.path) catch {
     _ => ()
   }
   Some(archive_path)
@@ -265,7 +271,7 @@ pub async fn FileTapeStore::new(
 ) -> FileTapeStore {
   let workspace_hash = fnv1a_hash(workspace_path)
   let tape_root = "\{home}/tapes"
-  @fs.mkdir(tape_root, permission=0o755, recursive=true) catch {
+  @platform.mkdir(tape_root, permission=0o755, recursive=true) catch {
     _ => ()
   }
   let store : FileTapeStore = {
@@ -282,7 +288,7 @@ pub async fn FileTapeStore::new(
 /// Scan the tape directory for existing .jsonl files matching this workspace.
 /// Registers them in the in-memory map so they are discoverable.
 async fn FileTapeStore::scan_existing(self : FileTapeStore) -> Unit {
-  let entries = @fs.readdir(self.tape_root) catch { _ => return }
+  let entries = @platform.readdir(self.tape_root) catch { _ => return }
   let prefix = "\{self.workspace_hash}__"
   let suffix = ".jsonl"
   for entry in entries {

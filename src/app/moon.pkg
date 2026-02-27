@@ -1,7 +1,6 @@
 import {
   "moonbitlang/async" @async,
-  "moonbitlang/async/fs" @fs,
-  "moonbitlang/async/http" @http,
+  "duobei/cub/platform" @platform,
   "duobei/cub/config" @config,
   "duobei/cub/tape" @tape,
   "duobei/cub/llm" @llm,
@@ -11,7 +10,6 @@ import {
   "duobei/cub/mcp" @mcp,
   "duobei/cub/ext" @ext,
   "duobei/cub/genome" @genome,
-  "moonbitlang/async/process" @process,
   "duobei/cub/log" @log,
   "moonbitlang/core/json",
   "moonbitlang/core/encoding/utf8",

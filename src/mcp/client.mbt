@@ -22,27 +22,27 @@ pub async fn McpClient::is_alive(self : McpClient) -> Bool {
   }
   let pid_str = self.pid.to_string()
   let kill_args : Array[String] = ["-0", pid_str]
-  let rc = @process.run("kill", kill_args[:])
+  let rc = @platform.run("kill", kill_args[:])
   rc == 0
 }
 
 ///|
 /// Start the MCP server process and perform initialization handshake.
 pub async fn McpClient::start(self : McpClient) -> Bool {
-  let (stdin_input, writer) = @process.write_to_process() catch {
+  let (stdin_input, writer) = @platform.write_to_process() catch {
     _ => {
       @log.error("mcp", "failed to create stdin pipe")
       return false
     }
   }
-  let (reader, stdout_output) = @process.read_from_process() catch {
+  let (reader, stdout_output) = @platform.read_from_process() catch {
     _ => {
       writer.close()
       @log.error("mcp", "failed to create stdout pipe")
       return false
     }
   }
-  let pid = @process.spawn_orphan(
+  let pid = @platform.spawn_orphan(
     self.config.command,
     self.config.args[:],
     extra_env=self.config.env,
@@ -217,14 +217,14 @@ pub async fn McpClient::stop(self : McpClient) -> Unit {
   // Send SIGTERM
   let pid_str = self.pid.to_string()
   let term_args : Array[String] = ["-TERM", pid_str]
-  ignore(@process.run("kill", term_args[:]))
+  ignore(@platform.run("kill", term_args[:]))
   @async.sleep(200)
   // Check if still alive, force kill if needed
   let check_args : Array[String] = ["-0", pid_str]
-  let rc = @process.run("kill", check_args[:])
+  let rc = @platform.run("kill", check_args[:])
   if rc == 0 {
     let kill_args : Array[String] = ["-9", pid_str]
-    ignore(@process.run("kill", kill_args[:]))
+    ignore(@platform.run("kill", kill_args[:]))
   }
   @log.info("mcp", "stopped \{self.config.name}")
   self.pid = -1

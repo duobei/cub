@@ -42,7 +42,9 @@ fn register_fs_read(registry : ToolRegistry, ctx : ToolContext) -> Unit {
 ///|
 /// Read file content with optional offset and limit.
 async fn read_file_content(path : String, offset : Int, limit : Int?) -> String {
-  let content = @fs.read_file(path).text() catch { e => fail("fs.read: \{e}") }
+  let content = @platform.read_file_text(path) catch {
+    e => fail("fs.read: \{e}")
+  }
   let lines : Array[StringView] = []
   for line in content.split("\n") {
     lines.push(line)
@@ -109,11 +111,11 @@ async fn write_file_content(path : String, content : String) -> String {
   // Create parent directory
   let parent = get_parent_dir(path)
   if parent.length() > 0 {
-    @fs.mkdir(parent, permission=0o755, recursive=true) catch {
+    @platform.mkdir(parent, permission=0o755, recursive=true) catch {
       _ => ()
     }
   }
-  @fs.write_file(path, content, create=0o644) catch {
+  @platform.write_file(path, content, create=0o644) catch {
     e => fail("fs.write: \{e}")
   }
   "wrote: \{path}"
@@ -193,7 +195,9 @@ async fn edit_file_content(
   new_string : String,
   replace_all : Bool,
 ) -> String {
-  let content = @fs.read_file(path).text() catch { e => fail("fs.edit: \{e}") }
+  let content = @platform.read_file_text(path) catch {
+    e => fail("fs.edit: \{e}")
+  }
   if not(content.contains(old_string)) {
     fail("fs.edit: old_string not found in file")
   }
@@ -211,7 +215,7 @@ async fn edit_file_content(
     }
     before + new_string + after
   }
-  @fs.write_file(path, new_content, create=0o644) catch {
+  @platform.write_file(path, new_content, create=0o644) catch {
     e => fail("fs.edit: \{e}")
   }
   "edited: \{path}"
@@ -288,7 +292,7 @@ async fn list_directory(path : String, recursive : Bool) -> String {
     ("ls", ["-1ap", path])
   }
   let (exit_code, stdout_data, stderr_data) = @async.with_timeout(15000, async fn() {
-    @process.collect_output(cmd, cmd_args)
+    @platform.collect_output(cmd, cmd_args)
   }) catch {
     e => fail("fs.list: \{e}")
   }
@@ -361,7 +365,7 @@ fn register_fs_glob(registry : ToolRegistry, ctx : ToolContext) -> Unit {
 /// Find files matching a glob pattern.
 async fn glob_files(path : String, pattern : String) -> String {
   let (exit_code, stdout_data, _stderr_data) = @async.with_timeout(15000, async fn() {
-    @process.collect_output("find", [path, "-type", "f", "-name", pattern])
+    @platform.collect_output("find", [path, "-type", "f", "-name", pattern])
   }) catch {
     e => fail("fs.glob: \{e}")
   }
@@ -455,7 +459,7 @@ async fn grep_files(
   grep_args.push(pattern)
   grep_args.push(path)
   let (exit_code, stdout_data, stderr_data) = @async.with_timeout(15000, async fn() {
-    @process.collect_output("grep", grep_args)
+    @platform.collect_output("grep", grep_args)
   }) catch {
     e => fail("grep: \{e}")
   }

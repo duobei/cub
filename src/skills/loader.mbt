@@ -13,8 +13,7 @@ pub struct SkillMetadata {
 ///|
 /// Read a file via async fs.
 async fn read_file_async(path : String) -> String {
-  let data = @fs.read_file(path) catch { _ => return "" }
-  data.text() catch {
+  @platform.read_file_text(path) catch {
     _ => ""
   }
 }
@@ -22,7 +21,7 @@ async fn read_file_async(path : String) -> String {
 ///|
 /// List directory entries via async fs.
 async fn list_dir_async(path : String) -> Array[String] {
-  @fs.readdir(path) catch {
+  @platform.readdir(path) catch {
     _ => []
   }
 }

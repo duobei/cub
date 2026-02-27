@@ -63,7 +63,7 @@ async fn TelegramChannel::get_updates(self : TelegramChannel) -> Array[Json] {
   let url = "\{telegram_api_base}/bot\{self.token}/getUpdates?timeout=30&offset=\{self.last_update_id}"
   let headers : Map[String, String] = {}
   headers["Content-Type"] = "application/json"
-  let (response, response_data) = @http.get(url, headers~) catch {
+  let (response, response_data) = @platform.http_get(url, headers~) catch {
     e => {
       @log.error("telegram", "poll error: \{e}")
       @async.sleep(5000)
@@ -219,7 +219,7 @@ async fn TelegramChannel::get_file_url(
   let url = "\{telegram_api_base}/bot\{self.token}/getFile?file_id=\{file_id}"
   let headers : Map[String, String] = {}
   headers["Content-Type"] = "application/json"
-  let (response, response_data) = @http.get(url, headers~) catch {
+  let (response, response_data) = @platform.http_get(url, headers~) catch {
     e => {
       @log.error("telegram", "getFile error: \{e}")
       return ""
@@ -252,7 +252,7 @@ pub async fn TelegramChannel::send_typing(
   headers["Content-Type"] = "application/json"
   let body_str = Json::object(body).stringify()
   try {
-    let _ = @http.post(url, body_str, headers~)
+    let _ = @platform.http_post(url, body_str, headers~)
   } catch {
     e => @log.debug("telegram", "typing indicator error: \{e}")
   }
@@ -611,7 +611,7 @@ pub async fn TelegramChannel::send_message(
     let headers : Map[String, String] = {}
     headers["Content-Type"] = "application/json"
     let body_str = Json::object(body).stringify()
-    let (response, _) = @http.post(url, body_str, headers~) catch {
+    let (response, _) = @platform.http_post(url, body_str, headers~) catch {
       e => {
         @log.error("telegram", "send error: \{e}")
         return

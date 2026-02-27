@@ -259,7 +259,7 @@ pub async fn LLMClient::chat_streaming(
     headers[k] = v
   }
   // Use post_stream for streaming
-  let client = @http.post_stream(url, headers~) catch {
+  let client = @platform.http_post_stream(url, headers~) catch {
     e =>
       return {
         text: "",
@@ -621,7 +621,7 @@ pub async fn LLMClient::chat(
     headers[k] = v
   }
   // Make HTTP request
-  let (response, response_data) = @http.post(url, body_str, headers~) catch {
+  let (response, response_data) = @platform.http_post(url, body_str, headers~) catch {
     e =>
       return {
         text: "",

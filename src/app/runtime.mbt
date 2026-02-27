@@ -100,7 +100,10 @@ fn resolve_api_key(settings : @config.Settings) -> String {
 /// Detect if Ollama is running locally and return the first available model.
 async fn detect_ollama() -> String? {
   let headers : Map[String, String] = {}
-  let (resp, data) = @http.get("http://localhost:11434/api/tags", headers~) catch {
+  let (resp, data) = @platform.http_get(
+    "http://localhost:11434/api/tags",
+    headers~,
+  ) catch {
     _ => return None
   }
   if resp.code != 200 {
