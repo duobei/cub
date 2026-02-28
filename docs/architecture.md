@@ -25,17 +25,20 @@ src/
 ├── tape/       Append-only JSONL tape, anchor-aware context selection, timestamps in meta
 ├── tools/      Tool registry, progressive disclosure, builtin tools (bash, fs, grep, web, schedule, agent)
 ├── skills/     Three-level discovery, SKILL.md parsing, 5 builtin skills, async fs
-├── channels/   Discord (WebSocket, heartbeat, context quoting) + Telegram (HTTP long polling, markdown→HTML)
+├── channels/   Discord + Telegram + P2P (WebSocket, HMAC-SHA256, skill sync, connection dedup)
+├── crypto/     Pure MoonBit SHA-256 (FIPS 180-4) + HMAC-SHA256 (RFC 2104), zero C FFI
 ├── mcp/        MCP client + server (JSON-RPC 2.0 over stdio, async process pipes, tool discovery)
 ├── config/     .env loading via /proc/self/environ, settings (CUB_ prefix)
 ├── cli/        Interactive REPL with async stdin, history, session switching, tool confirmation
 ├── ext/        Extension discovery, WASM/script loader, hot-registration
+├── genome/     Genome manifest, migrate, export/import, cost tracking (cost.balance tool)
+├── platform/   I/O abstraction facade (storage, net, proc) — all modules use @platform
 └── log/        Structured logging via println, level from CUB_LOG_LEVEL
 ```
 
 ## Zero C FFI
 
-All I/O uses [moonbitlang/async](https://github.com/moonbitlang/async) — file system, HTTP, process spawning, stdio, and sockets. No C foreign function interface calls.
+All I/O uses [moonbitlang/async](https://github.com/moonbitlang/async) — file system, HTTP, process spawning, stdio, and sockets. No C foreign function interface calls. Cryptographic primitives (SHA-256, HMAC-SHA256) are also pure MoonBit.
 
 ## Data Flow
 
@@ -59,6 +62,8 @@ User Input
 | `ToolRegistry` | `tools` | Name→handler map with schema, confirmation flags, and progressive view |
 | `LLMClient` | `llm` | Provider-agnostic API client with retry, streaming, and token counting |
 | `ProgressiveToolView` | `tools` | Shows abbreviated tool results initially, full on demand |
+| `P2PChannel` | `channels` | WebSocket P2P transport with HMAC auth, dedup, and skill sync |
+| `Manifest` | `genome` | Identity, generation, lineage — portable knowledge representation |
 
 ## Async Patterns
 
@@ -201,6 +206,34 @@ Extensions are discovered at startup from four directories (workspace overrides 
 4. `~/.cub/plugins/` — global WASM
 
 Each is registered as `ext.{name}` in the tool registry, deduplicated by name (first wins).
+
+## P2P Communication
+
+Cub instances can form a peer-to-peer network for skill sharing and collaboration.
+
+### Transport
+
+- **WebSocket** — server listens on `CUB_P2P_PORT`, clients connect to `CUB_P2P_PEERS` addresses
+- **JSON envelope** — `{from, to, type, payload, ts, hmac}`, message types are free-form strings
+- **HMAC-SHA256** — optional message authentication via `CUB_P2P_SECRET`, pure MoonBit crypto
+- **Connection dedup** — deterministic rule: the node with the smaller lexicographic ID keeps its outbound connection
+- **Exponential backoff** — reconnect on disconnect (2s → 60s max)
+
+### Skill Sync
+
+Pull-based protocol driven by LLM decisions:
+
+```
+peer.list          → list connected peers (id, generation, addr)
+peer.skills        → request a peer's skill list (name, description, source)
+peer.pull_skill    → fetch skill body, save to genome/skills/{name}/SKILL.md
+```
+
+Request/response uses a pending requests map with polling-based async wait. Skill provider callbacks on P2PChannel avoid cross-package imports between `channels` and `skills`.
+
+### Platform Abstraction
+
+All I/O goes through `src/platform/` — a thin facade over `@fs`, `@http`, `@process`, `@websocket`. When WASM/JS targets become available, only `src/platform/` needs alternative implementations.
 
 ## Error Recovery
 

@@ -154,7 +154,7 @@
   <text x="115" y="528" text-anchor="middle" font-size="11" fill="white" font-weight="500">Telegram (HTTP Poll)</text>
 
   <rect x="46" y="542" width="138" height="26" rx="6" fill="#e07c3e"/>
-  <text x="115" y="560" text-anchor="middle" font-size="11" fill="white" font-weight="500">CLI (Interactive)</text>
+  <text x="115" y="560" text-anchor="middle" font-size="11" fill="white" font-weight="500">P2P (WS + HMAC)</text>
 
   <!-- Arrow: Channels → cub -->
   <line x1="115" y1="440" x2="115" y2="392" stroke="#e07c3e" stroke-width="2" marker-end="url(#arrowOrange)"/>
@@ -187,25 +187,25 @@
   <text x="104" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">genome/</text>
   <text x="104" y="693" text-anchor="middle" font-size="9" fill="#b8dce6">knowledge pack</text>
 
-  <!-- self.split -->
+  <!-- cluster.scale -->
   <rect x="170" y="660" width="108" height="40" rx="8" fill="#7b5ea7"/>
-  <text x="224" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">self.split(n)</text>
-  <text x="224" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">origin dies</text>
+  <text x="224" y="678" text-anchor="middle" font-size="10" fill="white" font-weight="600">cluster.scale(n)</text>
+  <text x="224" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">spawn instances</text>
 
-  <!-- self.merge -->
-  <rect x="290" y="660" width="108" height="40" rx="8" fill="#7b5ea7"/>
-  <text x="344" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">self.merge</text>
-  <text x="344" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">LLM fuse</text>
+  <!-- cluster.consolidate -->
+  <rect x="290" y="660" width="120" height="40" rx="8" fill="#7b5ea7"/>
+  <text x="350" y="678" text-anchor="middle" font-size="10" fill="white" font-weight="600">cluster.consolidate</text>
+  <text x="350" y="693" text-anchor="middle" font-size="9" fill="#d4c4ee">LLM fuse</text>
 
-  <!-- self.migrate -->
-  <rect x="410" y="660" width="108" height="40" rx="8" fill="#48a56a"/>
-  <text x="464" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">self.migrate</text>
-  <text x="464" y="693" text-anchor="middle" font-size="9" fill="#b8e6c8">cp genome/</text>
+  <!-- genome.migrate -->
+  <rect x="422" y="660" width="108" height="40" rx="8" fill="#48a56a"/>
+  <text x="476" y="678" text-anchor="middle" font-size="10" fill="white" font-weight="600">genome.migrate</text>
+  <text x="476" y="693" text-anchor="middle" font-size="9" fill="#b8e6c8">cp genome/</text>
 
   <!-- P2P transport -->
-  <rect x="530" y="660" width="108" height="40" rx="8" fill="#4a90d9"/>
-  <text x="584" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">P2P transport</text>
-  <text x="584" y="693" text-anchor="middle" font-size="9" fill="#c4d9f0">WS / WebRTC</text>
+  <rect x="542" y="660" width="108" height="40" rx="8" fill="#4a90d9"/>
+  <text x="596" y="678" text-anchor="middle" font-size="11" fill="white" font-weight="600">P2P transport</text>
+  <text x="596" y="693" text-anchor="middle" font-size="9" fill="#c4d9f0">WS + skill sync</text>
 
   <!-- cost.balance -->
   <rect x="650" y="660" width="108" height="40" rx="8" fill="#e07c3e"/>
