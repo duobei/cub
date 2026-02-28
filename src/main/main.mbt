@@ -104,6 +104,11 @@ fn main {
         } else {
           None
         }
+        // Wire P2P peer listing into runtime for peer.list tool
+        match p2p {
+          Some(ch) => runtime.set_p2p_peers_fn(fn() { ch.list_peers() })
+          None => ()
+        }
         if discord is None && telegram is None && not(settings.p2p_enabled) {
           println(
             "error: no channels enabled. Set CUB_DISCORD_ENABLED=true, CUB_TELEGRAM_ENABLED=true, or CUB_P2P_ENABLED=true",

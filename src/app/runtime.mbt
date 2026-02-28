@@ -38,6 +38,7 @@ pub struct AppRuntime {
   confirm_fn : (async (String, String) -> Bool)?
   on_chunk : ((String) -> Unit)?
   mcp_clients : Array[@mcp.McpClient]
+  mut p2p_peers_fn : (() -> Array[Json])?
 }
 
 ///|
@@ -47,6 +48,7 @@ pub async fn AppRuntime::new(
   workspace : String,
   confirm_fn? : (async (String, String) -> Bool)? = None,
   on_chunk? : ((String) -> Unit)? = None,
+  p2p_peers_fn? : (() -> Array[Json])? = None,
 ) -> AppRuntime {
   let home = settings.home.unwrap_or("\{workspace}/.cub")
   let store = @tape.FileTapeStore::new(home, workspace)
@@ -64,7 +66,17 @@ pub async fn AppRuntime::new(
     confirm_fn,
     on_chunk,
     mcp_clients,
+    p2p_peers_fn,
   }
+}
+
+///|
+/// Set the P2P peers function (called after P2P channel is created).
+pub fn AppRuntime::set_p2p_peers_fn(
+  self : AppRuntime,
+  f : () -> Array[Json],
+) -> Unit {
+  self.p2p_peers_fn = Some(f)
 }
 
 ///|
@@ -183,6 +195,7 @@ async fn AppRuntime::create_session(
     home,
     allowed_skills=self.settings.allowed_skills,
     llm=Some(llm),
+    p2p_peers_fn=self.p2p_peers_fn,
   )
   // Register MCP tools
   register_mcp_tools(registry, self.mcp_clients)

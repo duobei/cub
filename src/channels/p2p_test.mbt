@@ -210,3 +210,61 @@ async test "p2p send_to message delivery" {
     )
   })
 }
+
+///|
+/// Test: list_peers returns correct fields (id, addr, generation) for peer.list tool.
+async test "p2p list_peers returns structured data" {
+  let secret = "list-secret"
+  let peer_a = @channels.P2PChannel::new(
+    "aaa-peer",
+    3,
+    19880,
+    ["localhost:19881"],
+    secret=Some(secret),
+  )
+  let peer_b = @channels.P2PChannel::new(
+    "bbb-peer",
+    5,
+    19881,
+    [],
+    secret=Some(secret),
+  )
+  @async.with_task_group(fn(group) {
+    group.spawn_bg(
+      async fn() { peer_a.start(noop_p2p_handler) },
+      allow_failure=true,
+    )
+    group.spawn_bg(
+      async fn() { peer_b.start(noop_p2p_handler) },
+      allow_failure=true,
+    )
+    group.spawn_bg(
+      async fn() {
+        @async.sleep(2000)
+        let a_peers = peer_a.list_peers()
+        inspect(a_peers.length(), content="1")
+        let peer = a_peers[0]
+        // Verify id field
+        let id = match peer {
+          { "id": String(id), .. } => id
+          _ => ""
+        }
+        inspect(id, content="bbb-peer")
+        // Verify generation field
+        let gen = match peer {
+          { "generation": Number(g, ..), .. } => g.to_int()
+          _ => -1
+        }
+        inspect(gen, content="5")
+        // Verify addr field exists and is non-empty
+        let addr = match peer {
+          { "addr": String(a), .. } => a
+          _ => ""
+        }
+        inspect(addr.is_empty(), content="false")
+        group.return_immediately(())
+      },
+      allow_failure=true,
+    )
+  })
+}

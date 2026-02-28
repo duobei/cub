@@ -9,6 +9,7 @@ fn register_tape_tools(
   home : String,
   allowed_skills? : Array[String] = [],
   llm? : @llm.LLMClient? = None,
+  p2p_peers_fn? : (() -> Array[Json])? = None,
 ) -> Unit {
   // ,help
   registry.register("help", "Show available commands", handler=fn(_args) {
@@ -981,6 +982,36 @@ fn register_tape_tools(
       lines.join("\n")
     },
   )
+  // ,peer.list — list connected P2P peers
+  match p2p_peers_fn {
+    Some(list_fn) =>
+      registry.register("peer.list", "List connected P2P peers", handler=fn(
+        _args,
+      ) {
+        let peers = list_fn()
+        if peers.is_empty() {
+          "No peers connected."
+        } else {
+          let lines = peers.map(fn(p) {
+            let id = match p {
+              { "id": String(id), .. } => id
+              _ => "unknown"
+            }
+            let addr = match p {
+              { "addr": String(a), .. } => a
+              _ => ""
+            }
+            let gen = match p {
+              { "generation": Number(g, ..), .. } => g.to_int().to_string()
+              _ => "?"
+            }
+            "- \{id} (gen \{gen}) @ \{addr}"
+          })
+          "\{peers.length()} peer(s) connected:\n" + lines.join("\n")
+        }
+      })
+    None => ()
+  }
   // ,quit
   registry.register("quit", "Exit the session", handler=fn(_args) { "exit" })
 }
