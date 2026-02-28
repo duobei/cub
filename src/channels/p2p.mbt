@@ -18,6 +18,9 @@ pub struct P2PChannel {
   peer_addrs : Array[String]
   secret : String?
   peers : Map[String, P2PPeer]
+  pending_requests : Map[String, Ref[Json?]]
+  mut skill_list_fn : (async () -> Array[Json])?
+  mut skill_body_fn : (async (String) -> String?)?
 }
 
 ///|
@@ -29,7 +32,17 @@ pub fn P2PChannel::new(
   peer_addrs : Array[String],
   secret? : String? = None,
 ) -> P2PChannel {
-  { local_id, local_generation, port, peer_addrs, secret, peers: {} }
+  {
+    local_id,
+    local_generation,
+    port,
+    peer_addrs,
+    secret,
+    peers: {},
+    pending_requests: {},
+    skill_list_fn: None,
+    skill_body_fn: None,
+  }
 }
 
 ///|
@@ -189,6 +202,90 @@ async fn P2PChannel::handle_peer(
         }
       }
       "pong" => () // health check response, ignore
+      "skill_list_request" => {
+        let request_id = match json {
+          { "payload": { "request_id": String(id), .. }, .. } => id
+          _ => ""
+        }
+        let skills = match self.skill_list_fn {
+          Some(f) => f()
+          None => []
+        }
+        let resp_payload : Map[String, Json] = {}
+        resp_payload["request_id"] = request_id.to_json()
+        resp_payload["skills"] = skills.to_json()
+        let env = build_envelope(
+          self.local_id,
+          peer_id,
+          "skill_list_response",
+          Json::object(resp_payload),
+          secret=self.secret,
+        )
+        conn.send_text(env) catch {
+          _ => break
+        }
+      }
+      "skill_body_request" => {
+        let request_id = match json {
+          { "payload": { "request_id": String(id), .. }, .. } => id
+          _ => ""
+        }
+        let name = match json {
+          { "payload": { "name": String(n), .. }, .. } => n
+          _ => ""
+        }
+        let body : String? = match self.skill_body_fn {
+          Some(f) => f(name)
+          None => None
+        }
+        let resp_payload : Map[String, Json] = {}
+        resp_payload["request_id"] = request_id.to_json()
+        match body {
+          Some(b) => resp_payload["body"] = b.to_json()
+          None => resp_payload["body"] = Json::null()
+        }
+        let env = build_envelope(
+          self.local_id,
+          peer_id,
+          "skill_body_response",
+          Json::object(resp_payload),
+          secret=self.secret,
+        )
+        conn.send_text(env) catch {
+          _ => break
+        }
+      }
+      "skill_list_response" | "skill_body_response" => {
+        let request_id = match json {
+          { "payload": { "request_id": String(id), .. }, .. } => id
+          _ => ""
+        }
+        if request_id.length() > 0 {
+          match self.pending_requests.get(request_id) {
+            Some(slot) => {
+              let payload = match json {
+                { "payload": payload, .. } => payload
+                _ => Json::null()
+              }
+              // For skill_list_response, send the skills array
+              let data = if msg_type == "skill_list_response" {
+                match payload {
+                  { "skills": skills, .. } => skills
+                  _ => Json::null()
+                }
+              } else {
+                payload
+              }
+              slot.val = Some(data)
+            }
+            None =>
+              @log.debug(
+                "p2p",
+                "no pending request for \{request_id} (\{msg_type})",
+              )
+          }
+        }
+      }
       "message" | "query" => {
         let prompt = match json {
           { "payload": { "text": String(t), .. }, .. } => t
@@ -538,4 +635,96 @@ pub fn P2PChannel::list_peers(self : P2PChannel) -> Array[Json] {
     result.push(Json::object(obj))
   }
   result
+}
+
+///|
+/// Set skill list provider callback.
+pub fn P2PChannel::set_skill_list_fn(
+  self : P2PChannel,
+  f : async () -> Array[Json],
+) -> Unit {
+  self.skill_list_fn = Some(f)
+}
+
+///|
+/// Set skill body provider callback.
+pub fn P2PChannel::set_skill_body_fn(
+  self : P2PChannel,
+  f : async (String) -> String?,
+) -> Unit {
+  self.skill_body_fn = Some(f)
+}
+
+///|
+/// Generate a unique request ID.
+fn generate_request_id() -> String {
+  let ts = @async.now()
+  let r = ts % 1000000L
+  "req_\{ts}_\{r}"
+}
+
+///|
+/// Wait for a pending request to be fulfilled, polling with sleep.
+async fn wait_for_response(slot : Ref[Json?], timeout_ms : Int) -> Json? {
+  let poll_interval = 50
+  let mut elapsed = 0
+  while elapsed < timeout_ms {
+    match slot.val {
+      Some(_) => return slot.val
+      None => ()
+    }
+    @async.sleep(poll_interval)
+    elapsed += poll_interval
+  }
+  None
+}
+
+///|
+/// Request skill list from a peer. Returns array of skill metadata JSON.
+pub async fn P2PChannel::request_skill_list(
+  self : P2PChannel,
+  peer_id : String,
+) -> Array[Json] {
+  let req_id = generate_request_id()
+  let slot : Ref[Json?] = { val: None }
+  self.pending_requests[req_id] = slot
+  let payload : Map[String, Json] = {}
+  payload["request_id"] = req_id.to_json()
+  let sent = self.send_to(peer_id, "skill_list_request", Json::object(payload))
+  if not(sent) {
+    self.pending_requests.remove(req_id)
+    return []
+  }
+  let result = wait_for_response(slot, 10000)
+  self.pending_requests.remove(req_id)
+  match result {
+    Some(Array(items)) => items
+    _ => []
+  }
+}
+
+///|
+/// Request a specific skill body from a peer.
+pub async fn P2PChannel::request_skill_body(
+  self : P2PChannel,
+  peer_id : String,
+  name : String,
+) -> String? {
+  let req_id = generate_request_id()
+  let slot : Ref[Json?] = { val: None }
+  self.pending_requests[req_id] = slot
+  let payload : Map[String, Json] = {}
+  payload["request_id"] = req_id.to_json()
+  payload["name"] = name.to_json()
+  let sent = self.send_to(peer_id, "skill_body_request", Json::object(payload))
+  if not(sent) {
+    self.pending_requests.remove(req_id)
+    return None
+  }
+  let result = wait_for_response(slot, 10000)
+  self.pending_requests.remove(req_id)
+  match result {
+    Some({ "body": String(body), .. }) => Some(body)
+    _ => None
+  }
 }

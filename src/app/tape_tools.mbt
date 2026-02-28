@@ -10,6 +10,8 @@ fn register_tape_tools(
   allowed_skills? : Array[String] = [],
   llm? : @llm.LLMClient? = None,
   p2p_peers_fn? : (() -> Array[Json])? = None,
+  p2p_skill_list_fn? : (async (String) -> Array[Json])? = None,
+  p2p_pull_skill_fn? : (async (String, String) -> String?)? = None,
 ) -> Unit {
   // ,help
   registry.register("help", "Show available commands", handler=fn(_args) {
@@ -1010,6 +1012,95 @@ fn register_tape_tools(
           "\{peers.length()} peer(s) connected:\n" + lines.join("\n")
         }
       })
+    None => ()
+  }
+  // ,peer.skills — request skill list from a connected peer
+  match p2p_skill_list_fn {
+    Some(list_fn) => {
+      let ps_props : Map[String, Json] = Map::new()
+      ps_props["peer_id"] = @tools.string_prop("ID of the peer to query")
+      let ps_params = @tools.make_params(ps_props, ["peer_id"])
+      registry.register(
+        "peer.skills",
+        "Request skill list from a connected P2P peer",
+        parameters=ps_params,
+        handler=async fn(args) {
+          let peer_id = match args {
+            { "peer_id": String(id), .. } => id
+            _ => return "peer.skills: missing peer_id"
+          }
+          let skills = list_fn(peer_id)
+          if skills.is_empty() {
+            return "No skills found on peer \{peer_id} (or peer not connected)."
+          }
+          let lines = skills.map(fn(s) {
+            let name = match s {
+              { "name": String(n), .. } => n
+              _ => "unknown"
+            }
+            let desc = match s {
+              { "description": String(d), .. } => d
+              _ => ""
+            }
+            let source = match s {
+              { "source": String(src), .. } => src
+              _ => ""
+            }
+            if desc.length() > 0 {
+              "  \{name} — \{desc} [\{source}]"
+            } else {
+              "  \{name} [\{source}]"
+            }
+          })
+          "Skills on peer \{peer_id}:\n" + lines.join("\n")
+        },
+      )
+    }
+    None => ()
+  }
+  // ,peer.pull_skill — fetch and save a skill from a peer
+  match p2p_pull_skill_fn {
+    Some(pull_fn) => {
+      let pp_home = home
+      let pp_props : Map[String, Json] = Map::new()
+      pp_props["peer_id"] = @tools.string_prop("ID of the peer to pull from")
+      pp_props["name"] = @tools.string_prop("Skill name to pull")
+      let pp_params = @tools.make_params(pp_props, ["peer_id", "name"])
+      registry.register(
+        "peer.pull_skill",
+        "Fetch a skill from a P2P peer and save it locally",
+        parameters=pp_params,
+        handler=async fn(args) {
+          let peer_id = match args {
+            { "peer_id": String(id), .. } => id
+            _ => return "peer.pull_skill: missing peer_id"
+          }
+          let name = match args {
+            { "name": String(n), .. } => n
+            _ => return "peer.pull_skill: missing name"
+          }
+          match @tools.sanitize_name(name) {
+            None =>
+              return "peer.pull_skill: invalid skill name (must not contain / or ..)"
+            Some(_) => ()
+          }
+          let body = pull_fn(peer_id, name)
+          match body {
+            None =>
+              "peer.pull_skill: skill '\{name}' not found on peer \{peer_id}"
+            Some(content) => {
+              let skill_dir = "\{pp_home}/genome/skills/\{name}"
+              let skill_path = "\{skill_dir}/SKILL.md"
+              if write_file_sync(skill_path, content) {
+                "Pulled skill '\{name}' from peer \{peer_id} → \{skill_path}"
+              } else {
+                "peer.pull_skill: failed to write \{skill_path}"
+              }
+            }
+          }
+        },
+      )
+    }
     None => ()
   }
   // ,quit

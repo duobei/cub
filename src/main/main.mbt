@@ -106,7 +106,34 @@ fn main {
         }
         // Wire P2P peer listing into runtime for peer.list tool
         match p2p {
-          Some(ch) => runtime.set_p2p_peers_fn(fn() { ch.list_peers() })
+          Some(ch) => {
+            runtime.set_p2p_peers_fn(fn() { ch.list_peers() })
+            // Wire skill sync: provider callbacks + request functions
+            let skill_ws = workspace
+            let skill_home = "\{workspace}/.cub"
+            ch.set_skill_list_fn(async fn() {
+              let skills = @skills.discover_skills(
+                skill_ws,
+                cub_home=skill_home,
+              )
+              skills.map(fn(s) {
+                let obj : Map[String, Json] = {}
+                obj["name"] = s.name.to_json()
+                obj["description"] = s.description.to_json()
+                obj["source"] = s.source.to_json()
+                Json::object(obj)
+              })
+            })
+            ch.set_skill_body_fn(async fn(name) {
+              @skills.load_skill_body(name, skill_ws, cub_home=skill_home)
+            })
+            runtime.set_p2p_skill_list_fn(async fn(peer_id) {
+              ch.request_skill_list(peer_id)
+            })
+            runtime.set_p2p_pull_skill_fn(async fn(peer_id, name) {
+              ch.request_skill_body(peer_id, name)
+            })
+          }
           None => ()
         }
         if discord is None && telegram is None && not(settings.p2p_enabled) {

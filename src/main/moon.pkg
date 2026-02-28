@@ -10,6 +10,7 @@ import {
   "duobei/cub/genome" @genome,
   "duobei/cub/mcp" @mcp,
   "duobei/cub/platform" @platform,
+  "duobei/cub/skills" @skills,
   "moonbitlang/core/env",
 }
 

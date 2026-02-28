@@ -35,7 +35,7 @@ async test "p2p handshake with valid HMAC" {
     )
     group.spawn_bg(
       async fn() {
-        @async.sleep(2000)
+        @async.sleep(500)
         let a_peers = peer_a.list_peers()
         let b_peers = peer_b.list_peers()
         inspect(a_peers.length(), content="1")
@@ -85,7 +85,7 @@ async test "p2p handshake rejects wrong HMAC" {
     )
     group.spawn_bg(
       async fn() {
-        @async.sleep(3000)
+        @async.sleep(1000)
         let a_peers = peer_a.list_peers()
         inspect(a_peers.length(), content="0")
         group.return_immediately(())
@@ -124,7 +124,7 @@ async test "p2p connection dedup" {
     )
     group.spawn_bg(
       async fn() {
-        @async.sleep(3000)
+        @async.sleep(500)
         let a_peers = peer_a.list_peers()
         let b_peers = peer_b.list_peers()
         inspect(a_peers.length(), content="1")
@@ -156,7 +156,7 @@ async test "p2p handshake without secret" {
     )
     group.spawn_bg(
       async fn() {
-        @async.sleep(2000)
+        @async.sleep(500)
         let a_peers = peer_a.list_peers()
         inspect(a_peers.length(), content="1")
         group.return_immediately(())
@@ -197,13 +197,130 @@ async test "p2p send_to message delivery" {
     group.spawn_bg(async fn() { peer_b.start(handler_b) }, allow_failure=true)
     group.spawn_bg(
       async fn() {
-        @async.sleep(2000)
+        @async.sleep(500)
         let payload : Map[String, Json] = {}
         payload["text"] = "hello from aaa".to_json()
         let sent = peer_a.send_to("bbb-peer", "message", Json::object(payload))
         inspect(sent, content="true")
         @async.sleep(500)
         inspect(received.val, content="hello from aaa")
+        group.return_immediately(())
+      },
+      allow_failure=true,
+    )
+  })
+}
+
+///|
+/// Test: peer A provides skills, peer B requests skill list.
+async test "p2p skill list request/response" {
+  let secret = "skill-secret"
+  let peer_a = @channels.P2PChannel::new(
+    "aaa-peer",
+    0,
+    19870,
+    [],
+    secret=Some(secret),
+  )
+  let peer_b = @channels.P2PChannel::new(
+    "bbb-peer",
+    0,
+    19871,
+    ["localhost:19870"],
+    secret=Some(secret),
+  )
+  // Peer A has skills
+  peer_a.set_skill_list_fn(fn() {
+    let s1 : Map[String, Json] = {}
+    s1["name"] = "code-review".to_json()
+    s1["description"] = "Review code for quality".to_json()
+    s1["source"] = "workspace".to_json()
+    let s2 : Map[String, Json] = {}
+    s2["name"] = "deploy".to_json()
+    s2["description"] = "Deploy to production".to_json()
+    s2["source"] = "global".to_json()
+    [Json::object(s1), Json::object(s2)]
+  })
+  @async.with_task_group(fn(group) {
+    group.spawn_bg(
+      async fn() { peer_a.start(noop_p2p_handler) },
+      allow_failure=true,
+    )
+    group.spawn_bg(
+      async fn() { peer_b.start(noop_p2p_handler) },
+      allow_failure=true,
+    )
+    group.spawn_bg(
+      async fn() {
+        @async.sleep(500)
+        let skills = peer_b.request_skill_list("aaa-peer")
+        inspect(skills.length(), content="2")
+        let name0 = match skills[0] {
+          { "name": String(n), .. } => n
+          _ => ""
+        }
+        inspect(name0, content="code-review")
+        let name1 = match skills[1] {
+          { "name": String(n), .. } => n
+          _ => ""
+        }
+        inspect(name1, content="deploy")
+        group.return_immediately(())
+      },
+      allow_failure=true,
+    )
+  })
+}
+
+///|
+/// Test: peer B requests a specific skill body from peer A.
+async test "p2p skill body request/response" {
+  let secret = "body-secret"
+  let peer_a = @channels.P2PChannel::new(
+    "aaa-peer",
+    0,
+    19872,
+    [],
+    secret=Some(secret),
+  )
+  let peer_b = @channels.P2PChannel::new(
+    "bbb-peer",
+    0,
+    19873,
+    ["localhost:19872"],
+    secret=Some(secret),
+  )
+  peer_a.set_skill_list_fn(fn() { [] })
+  peer_a.set_skill_body_fn(fn(name) {
+    if name == "code-review" {
+      Some("---\nname: code-review\n---\n\nReview code carefully.")
+    } else {
+      None
+    }
+  })
+  @async.with_task_group(fn(group) {
+    group.spawn_bg(
+      async fn() { peer_a.start(noop_p2p_handler) },
+      allow_failure=true,
+    )
+    group.spawn_bg(
+      async fn() { peer_b.start(noop_p2p_handler) },
+      allow_failure=true,
+    )
+    group.spawn_bg(
+      async fn() {
+        @async.sleep(500)
+        // Request existing skill
+        let body = peer_b.request_skill_body("aaa-peer", "code-review")
+        inspect(body is Some(_), content="true")
+        let content = body.unwrap()
+        inspect(
+          content,
+          content="---\nname: code-review\n---\n\nReview code carefully.",
+        )
+        // Request non-existent skill
+        let missing = peer_b.request_skill_body("aaa-peer", "nonexistent")
+        inspect(missing is None, content="true")
         group.return_immediately(())
       },
       allow_failure=true,
@@ -240,7 +357,7 @@ async test "p2p list_peers returns structured data" {
     )
     group.spawn_bg(
       async fn() {
-        @async.sleep(2000)
+        @async.sleep(500)
         let a_peers = peer_a.list_peers()
         inspect(a_peers.length(), content="1")
         let peer = a_peers[0]

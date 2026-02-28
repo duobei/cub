@@ -39,6 +39,8 @@ pub struct AppRuntime {
   on_chunk : ((String) -> Unit)?
   mcp_clients : Array[@mcp.McpClient]
   mut p2p_peers_fn : (() -> Array[Json])?
+  mut p2p_skill_list_fn : (async (String) -> Array[Json])?
+  mut p2p_pull_skill_fn : (async (String, String) -> String?)?
 }
 
 ///|
@@ -67,6 +69,8 @@ pub async fn AppRuntime::new(
     on_chunk,
     mcp_clients,
     p2p_peers_fn,
+    p2p_skill_list_fn: None,
+    p2p_pull_skill_fn: None,
   }
 }
 
@@ -77,6 +81,24 @@ pub fn AppRuntime::set_p2p_peers_fn(
   f : () -> Array[Json],
 ) -> Unit {
   self.p2p_peers_fn = Some(f)
+}
+
+///|
+/// Set the P2P skill list request function.
+pub fn AppRuntime::set_p2p_skill_list_fn(
+  self : AppRuntime,
+  f : async (String) -> Array[Json],
+) -> Unit {
+  self.p2p_skill_list_fn = Some(f)
+}
+
+///|
+/// Set the P2P pull skill request function.
+pub fn AppRuntime::set_p2p_pull_skill_fn(
+  self : AppRuntime,
+  f : async (String, String) -> String?,
+) -> Unit {
+  self.p2p_pull_skill_fn = Some(f)
 }
 
 ///|
@@ -196,6 +218,8 @@ async fn AppRuntime::create_session(
     allowed_skills=self.settings.allowed_skills,
     llm=Some(llm),
     p2p_peers_fn=self.p2p_peers_fn,
+    p2p_skill_list_fn=self.p2p_skill_list_fn,
+    p2p_pull_skill_fn=self.p2p_pull_skill_fn,
   )
   // Register MCP tools
   register_mcp_tools(registry, self.mcp_clients)
