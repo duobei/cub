@@ -553,7 +553,15 @@ async fn P2PChannel::connect_to_peer(
       None => false
     }
     if should_skip {
-      @async.sleep(delay)
+      // Existing inbound connection is active; wait until it drops before
+      // retrying outbound. Without this, dedup creates an infinite reconnect
+      // loop: connect → dedup skip → reconnect → dedup skip → ...
+      for {
+        if not(self.peers.contains(peer_id)) {
+          break
+        }
+        @async.sleep(5000)
+      }
       continue
     }
     // Register peer
