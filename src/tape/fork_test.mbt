@@ -196,6 +196,43 @@ async test "ensure_bootstrap_anchor skips when anchor exists" {
 }
 
 ///|
+/// Test: handoff during fork does not compact (entries preserved).
+async test "handoff during fork preserves entries" {
+  let tmp = "/tmp/cub_fork_test_handoff_\{@async.now()}"
+  @platform.mkdir(tmp, permission=0o755, recursive=true)
+  let store = FileTapeStore::new(tmp, "/test/workspace_handoff")
+  let svc = TapeService::new("session", store)
+  // Add initial entries
+  svc.tape().append(TapeEntry::anchor("session/start"))
+  svc.tape().append(TapeEntry::message("user", "hello"))
+  svc.tape().append(TapeEntry::message("assistant", "hi"))
+  svc.tape().append(TapeEntry::message("user", "do something"))
+  let before_count = svc.read_entries().length()
+  inspect(before_count, content="4")
+  // Fork
+  svc.fork()
+  inspect(svc.fork_active, content="true")
+  // Add entries to fork
+  svc.tape().append(TapeEntry::message("assistant", "working on it"))
+  svc.tape().append(TapeEntry::message("user", "more context"))
+  // Handoff during fork — should NOT compact
+  let after = svc.tape().handoff("auto/context_overflow")
+  // All entries should be preserved: 4 original + 2 new + 1 anchor = 7
+  inspect(after.length(), content="7")
+  // Verify compact_enabled is false during fork
+  inspect(svc.tape().compact_enabled, content="false")
+  // Merge back
+  svc.merge()
+  // After merge, base tape should have all entries
+  let merged = svc.read_entries()
+  inspect(merged.length(), content="7")
+  // Cleanup
+  @platform.rmdir(tmp, recursive=true) catch {
+    _ => ()
+  }
+}
+
+///|
 /// Test: double fork is no-op.
 async test "TapeService double fork is no-op" {
   let tmp = "/tmp/cub_fork_test_double_\{@async.now()}"

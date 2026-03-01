@@ -25,8 +25,13 @@ pub fn TapeService::new(
 
 ///|
 /// Get the current tape.
+/// During fork, compact is disabled so handoff won't destroy the fork tape.
 pub fn TapeService::tape(self : TapeService) -> Tape {
-  Tape::new(self.current_tape_name, self.store)
+  Tape::new(
+    self.current_tape_name,
+    self.store,
+    compact_enabled=not(self.fork_active),
+  )
 }
 
 ///|
@@ -84,20 +89,13 @@ pub async fn TapeService::read_entries(self : TapeService) -> Array[TapeEntry] {
 }
 
 ///|
-/// Perform a handoff.
-/// During fork, skips compact — fork tapes are short-lived and compact would
-/// renumber IDs, breaking merge's count-based filtering.
+/// Perform a handoff. Delegates to Tape::handoff which respects compact_enabled.
 pub async fn TapeService::handoff(
   self : TapeService,
   name : String,
   state? : Map[String, Json]? = None,
 ) -> Array[TapeEntry] {
-  let tape = self.tape()
-  tape.append(TapeEntry::anchor(name, state~))
-  if not(self.fork_active) {
-    ignore(tape.compact())
-  }
-  tape.read_entries()
+  self.tape().handoff(name, state~)
 }
 
 ///|

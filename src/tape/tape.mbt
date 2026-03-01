@@ -3,12 +3,17 @@
 pub struct Tape {
   name : String
   store : FileTapeStore
+  compact_enabled : Bool
 }
 
 ///|
 /// Create a new Tape.
-pub fn Tape::new(name : String, store : FileTapeStore) -> Tape {
-  { name, store }
+pub fn Tape::new(
+  name : String,
+  store : FileTapeStore,
+  compact_enabled? : Bool = true,
+) -> Tape {
+  { name, store, compact_enabled }
 }
 
 ///|
@@ -39,8 +44,12 @@ pub async fn Tape::handoff(
 ) -> Array[TapeEntry] {
   let anchor = TapeEntry::anchor(name, state~)
   self.append(anchor)
-  // Compact: discard entries before the last anchor to keep tape size bounded
-  ignore(self.store.compact(self.name))
+  // Compact: discard entries before the last anchor to keep tape size bounded.
+  // Skipped when compact_enabled is false (e.g. during fork — compact would
+  // destroy the fork tape and break merge).
+  if self.compact_enabled {
+    ignore(self.store.compact(self.name))
+  }
   self.read_entries()
 }
 
