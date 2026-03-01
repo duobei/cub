@@ -194,3 +194,101 @@ test "summarize_messages_for_handoff: empty messages" {
   inspect(state.get("task"), content="None")
   inspect(state.get("summary"), content="None")
 }
+
+// --- merge_system_prompt ---
+
+///|
+fn make_msg(role : String, content : String) -> Json {
+  let m : Map[String, Json] = {}
+  m["role"] = role.to_json()
+  m["content"] = content.to_json()
+  Json::object(m)
+}
+
+///|
+fn count_system_msgs(msgs : Array[Json]) -> Int {
+  msgs
+  .iter()
+  .filter(fn(m) {
+    match m {
+      { "role": String("system"), .. } => true
+      _ => false
+    }
+  })
+  .count()
+}
+
+///|
+test "merge_system_prompt: merges with existing system message" {
+  let msgs = [make_msg("system", "handoff context"), make_msg("user", "hello")]
+  let result = @llm.merge_system_prompt(msgs, Some("You are cub."))
+  // Must produce exactly one system message
+  inspect(count_system_msgs(result), content="1")
+  inspect(result.length(), content="2")
+  match result[0] {
+    { "role": String("system"), "content": String(c), .. } => {
+      inspect(c.contains("You are cub."), content="true")
+      inspect(c.contains("handoff context"), content="true")
+    }
+    _ => fail("expected system message")
+  }
+}
+
+///|
+test "merge_system_prompt: prepends when no system message exists" {
+  let msgs = [make_msg("user", "hello")]
+  let result = @llm.merge_system_prompt(msgs, Some("You are cub."))
+  inspect(count_system_msgs(result), content="1")
+  inspect(result.length(), content="2")
+  match result[0] {
+    { "role": String("system"), "content": String(c), .. } =>
+      inspect(c, content="You are cub.")
+    _ => fail("expected system message")
+  }
+}
+
+///|
+test "merge_system_prompt: no-op when system_prompt is None" {
+  let msgs = [make_msg("system", "existing"), make_msg("user", "hello")]
+  let result = @llm.merge_system_prompt(msgs, None)
+  inspect(count_system_msgs(result), content="1")
+  inspect(result.length(), content="2")
+}
+
+///|
+test "merge_system_prompt: no-op when system_prompt is empty" {
+  let msgs = [make_msg("system", "existing"), make_msg("user", "hello")]
+  let result = @llm.merge_system_prompt(msgs, Some(""))
+  inspect(count_system_msgs(result), content="1")
+  inspect(result.length(), content="2")
+}
+
+///|
+test "merge_system_prompt: handoff context from select_messages gets merged" {
+  // Simulate the exact scenario: select_messages produces system messages
+  // (handoff_context + session_hint), then build_request_body adds system_prompt.
+  // All must be merged into a single system message.
+  let state : Map[String, Json] = {}
+  state["summary"] = "did stuff".to_json()
+  state["task"] = "do more".to_json()
+  let entries = [
+    @tape.TapeEntry::anchor("auto/context_overflow", state=Some(state)),
+    @tape.TapeEntry::message("user", "continue"),
+  ]
+  let messages = @tape.select_messages(entries)
+  // select_messages produces 2 system messages (handoff_context + session_hint)
+  // plus 1 user message — this is the root cause of MiniMax 2013 errors.
+  inspect(count_system_msgs(messages), content="2")
+  // merge_system_prompt must consolidate all system messages + system_prompt into one
+  let result = @llm.merge_system_prompt(messages, Some("You are cub."))
+  inspect(count_system_msgs(result), content="1")
+  inspect(result.length(), content="2") // 1 system + 1 user
+  match result[0] {
+    { "role": String("system"), "content": String(c), .. } => {
+      inspect(c.contains("You are cub."), content="true")
+      inspect(c.contains("handoff_context"), content="true")
+      inspect(c.contains("session_hint"), content="true")
+    }
+    _ => fail("expected merged system message")
+  }
+}
