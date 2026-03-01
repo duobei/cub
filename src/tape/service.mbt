@@ -1,10 +1,11 @@
 ///|
-/// High-level tape service (no fork/merge — handoff + anchors only).
+/// High-level tape service with fork/merge for atomic writes.
 pub struct TapeService {
   store : FileTapeStore
-  current_tape_name : String
+  mut current_tape_name : String
   base_tape_name : String
   done_requested : Bool
+  mut fork_active : Bool
 }
 
 ///|
@@ -18,6 +19,7 @@ pub fn TapeService::new(
     current_tape_name: tape_name,
     base_tape_name: tape_name,
     done_requested: false,
+    fork_active: false,
   }
 }
 
@@ -25,6 +27,41 @@ pub fn TapeService::new(
 /// Get the current tape.
 pub fn TapeService::tape(self : TapeService) -> Tape {
   Tape::new(self.current_tape_name, self.store)
+}
+
+///|
+/// Fork the tape for atomic writes. All subsequent writes go to the fork.
+pub async fn TapeService::fork(self : TapeService) -> Unit {
+  if self.fork_active {
+    return
+  }
+  let fork_name = self.store.fork(self.base_tape_name)
+  self.current_tape_name = fork_name
+  self.fork_active = true
+}
+
+///|
+/// Merge the fork back into the base tape. New entries are appended atomically.
+pub async fn TapeService::merge(self : TapeService) -> Unit {
+  if not(self.fork_active) {
+    return
+  }
+  let fork_name = self.current_tape_name
+  self.store.merge(fork_name, self.base_tape_name)
+  self.current_tape_name = self.base_tape_name
+  self.fork_active = false
+}
+
+///|
+/// Discard the fork. The base tape remains unchanged.
+pub async fn TapeService::discard_fork(self : TapeService) -> Unit {
+  if not(self.fork_active) {
+    return
+  }
+  let fork_name = self.current_tape_name
+  self.store.delete_tape(fork_name)
+  self.current_tape_name = self.base_tape_name
+  self.fork_active = false
 }
 
 ///|

@@ -6,12 +6,13 @@ pub struct TapeFile {
   path : String
   mut read_entries : Array[TapeEntry]
   mut read_offset : Int
+  mut fork_start_id : Int
 }
 
 ///|
 /// Create a new TapeFile.
 pub fn TapeFile::new(path : String) -> TapeFile {
-  { path, read_entries: [], read_offset: 0 }
+  { path, read_entries: [], read_offset: 0, fork_start_id: 0 }
 }
 
 ///|
@@ -304,6 +305,10 @@ async fn FileTapeStore::scan_existing(self : FileTapeStore) -> Unit {
       _ => continue
     }
     let name = url_decode(encoded)
+    // Skip fork residuals (fork tape names contain "__fork__")
+    if name.contains("__fork__") {
+      continue
+    }
     if not(self.tape_files.contains(name)) {
       let path = "\{self.tape_root}/\{entry}"
       self.tape_files[name] = TapeFile::new(path)
@@ -403,6 +408,83 @@ pub async fn FileTapeStore::archive(
 /// Compact a tape (discard entries before last anchor).
 pub async fn FileTapeStore::compact(self : FileTapeStore, name : String) -> Int {
   self.tape_file(name).compact()
+}
+
+///|
+/// Fork a tape: copy existing entries to a new fork tape.
+/// Returns the fork tape name. The fork tape records fork_start_id so merge
+/// knows which entries are new.
+pub async fn FileTapeStore::fork(
+  self : FileTapeStore,
+  source_name : String,
+) -> String {
+  let source = self.tape_file(source_name)
+  let entries = source.read()
+  let next_id = source.next_id()
+  // Generate 8-char hex suffix from timestamp
+  let ts = @async.now()
+  let suffix = fnv1a_hash(ts.to_string())[:8].to_string() catch {
+    _ => "00000000"
+  }
+  let fork_name = "\{source_name}__fork__\{suffix}"
+  let fork_tf = self.tape_file(fork_name)
+  fork_tf.fork_start_id = next_id
+  // Copy existing entries to fork file
+  if entries.length() > 0 {
+    let buf = StringBuilder::new()
+    for entry in entries {
+      buf.write_string(entry.to_json().stringify())
+      buf.write_char('\n')
+    }
+    @platform.write_file(fork_tf.path, buf.to_string(), create=0o644) catch {
+      _ => ()
+    }
+    fork_tf.read_entries = entries.copy()
+    fork_tf.read_offset = buf.to_string().length()
+  }
+  fork_name
+}
+
+///|
+/// Merge a fork tape back into the target tape.
+/// Only entries with id >= fork_start_id are appended to the target.
+/// The fork file is deleted after merge.
+pub async fn FileTapeStore::merge(
+  self : FileTapeStore,
+  fork_name : String,
+  target_name : String,
+) -> Unit {
+  let fork_tf = self.tape_file(fork_name)
+  let fork_entries = fork_tf.read()
+  let start_id = fork_tf.fork_start_id
+  // Collect new entries (added during the fork)
+  let new_entries : Array[TapeEntry] = fork_entries.filter(fn(e) {
+    e.id >= start_id
+  })
+  // Append new entries to target tape
+  if new_entries.length() > 0 {
+    let target = self.tape_file(target_name)
+    target.append_many(new_entries)
+  }
+  // Delete the fork tape
+  self.delete_tape(fork_name)
+}
+
+///|
+/// Delete a tape file and remove from in-memory registry.
+pub async fn FileTapeStore::delete_tape(
+  self : FileTapeStore,
+  name : String,
+) -> Unit {
+  match self.tape_files.get(name) {
+    Some(tf) => {
+      @platform.remove(tf.path) catch {
+        _ => ()
+      }
+      self.tape_files.remove(name)
+    }
+    None => ()
+  }
 }
 
 ///|

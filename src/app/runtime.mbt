@@ -12,13 +12,17 @@ pub struct SessionRuntime {
 }
 
 ///|
-/// Handle input for a session.
+/// Handle input for a session. Uses fork/merge for atomic tape writes —
+/// if the process crashes mid-execution, the main tape is untouched.
 pub async fn SessionRuntime::handle_input(
   self : SessionRuntime,
   text : String,
   image_urls? : Array[String] = [],
 ) -> @core.LoopResult {
-  self.agent_loop.handle_input(text, image_urls~)
+  self.tape.fork()
+  let result = self.agent_loop.handle_input(text, image_urls~)
+  self.tape.merge()
+  result
 }
 
 ///|
