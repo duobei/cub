@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" font-family="monospace" font-size="13">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#555"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#34a853"/>
+    </marker>
+    <marker id="arr-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#ea4335"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#222">Fork/Merge Flow (Atomic Tape Writes)</text>
+
+  <!-- Step 1: handle_input -->
+  <rect x="270" y="50" width="260" height="40" rx="6" fill="#e8f0fe" stroke="#4285f4" stroke-width="1.5"/>
+  <text x="400" y="75" text-anchor="middle" fill="#1a73e8" font-weight="bold">handle_input(text)</text>
+
+  <line x1="400" y1="90" x2="400" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 2: fork -->
+  <rect x="270" y="120" width="260" height="60" rx="6" fill="#fff3e0" stroke="#f9ab00" stroke-width="1.5"/>
+  <text x="400" y="143" text-anchor="middle" fill="#e37400" font-weight="bold">tape.fork()</text>
+  <text x="400" y="163" text-anchor="middle" font-size="11" fill="#666">Copy main tape to fork file</text>
+  <text x="400" y="175" text-anchor="middle" font-size="11" fill="#666">Record fork_start_id = next_id</text>
+
+  <line x1="400" y1="180" x2="400" y2="210" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Step 3: agent_loop -->
+  <rect x="250" y="210" width="300" height="60" rx="6" fill="#f3e5f5" stroke="#9c27b0" stroke-width="1.5"/>
+  <text x="400" y="233" text-anchor="middle" fill="#7b1fa2" font-weight="bold">agent_loop.handle_input()</text>
+  <text x="400" y="253" text-anchor="middle" font-size="11" fill="#666">All writes go to fork tape</text>
+  <text x="400" y="265" text-anchor="middle" font-size="11" fill="#666">(messages, tool_calls, events, anchors)</text>
+
+  <!-- Branch point -->
+  <line x1="400" y1="270" x2="400" y2="310" stroke="#555" stroke-width="1.5"/>
+
+  <!-- Diamond -->
+  <polygon points="400,310 440,340 400,370 360,340" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="400" y="344" text-anchor="middle" font-size="11" fill="#555">result?</text>
+
+  <!-- Success branch (left) -->
+  <line x1="360" y1="340" x2="200" y2="340" stroke="#34a853" stroke-width="2"/>
+  <line x1="200" y1="340" x2="200" y2="400" stroke="#34a853" stroke-width="2" marker-end="url(#arr-green)"/>
+  <text x="280" y="332" font-size="12" fill="#34a853" font-weight="bold">normal return</text>
+
+  <!-- Merge box -->
+  <rect x="70" y="400" width="260" height="80" rx="6" fill="#e6f4ea" stroke="#34a853" stroke-width="1.5"/>
+  <text x="200" y="425" text-anchor="middle" fill="#1e8e3e" font-weight="bold">tape.merge()</text>
+  <text x="200" y="445" text-anchor="middle" font-size="11" fill="#555">Read fork entries where id &gt;= fork_start_id</text>
+  <text x="200" y="461" text-anchor="middle" font-size="11" fill="#555">Append new entries to main tape</text>
+  <text x="200" y="477" text-anchor="middle" font-size="11" fill="#555">Delete fork file</text>
+
+  <!-- Crash branch (right) -->
+  <line x1="440" y1="340" x2="600" y2="340" stroke="#ea4335" stroke-width="2"/>
+  <line x1="600" y1="340" x2="600" y2="400" stroke="#ea4335" stroke-width="2" marker-end="url(#arr-red)"/>
+  <text x="520" y="332" font-size="12" fill="#ea4335" font-weight="bold">process crash</text>
+
+  <!-- Discard box -->
+  <rect x="470" y="400" width="260" height="80" rx="6" fill="#fce8e6" stroke="#ea4335" stroke-width="1.5"/>
+  <text x="600" y="425" text-anchor="middle" fill="#c5221f" font-weight="bold">Fork abandoned</text>
+  <text x="600" y="445" text-anchor="middle" font-size="11" fill="#555">Main tape untouched</text>
+  <text x="600" y="461" text-anchor="middle" font-size="11" fill="#555">Fork file stays on disk</text>
+  <text x="600" y="477" text-anchor="middle" font-size="11" fill="#555">scan_existing() skips on restart</text>
+
+  <!-- Result arrows -->
+  <line x1="200" y1="480" x2="200" y2="530" stroke="#34a853" stroke-width="1.5" marker-end="url(#arr-green)"/>
+  <rect x="70" y="530" width="260" height="36" rx="6" fill="#e6f4ea" stroke="#34a853"/>
+  <text x="200" y="553" text-anchor="middle" fill="#1e8e3e">Main tape: consistent + complete</text>
+
+  <line x1="600" y1="480" x2="600" y2="530" stroke="#ea4335" stroke-width="1.5" marker-end="url(#arr-red)"/>
+  <rect x="470" y="530" width="260" height="36" rx="6" fill="#fce8e6" stroke="#ea4335"/>
+  <text x="600" y="553" text-anchor="middle" fill="#c5221f">Main tape: unchanged (safe)</text>
+
+  <!-- Context selection flow -->
+  <rect x="100" y="590" width="600" height="100" rx="8" fill="#f8f9fa" stroke="#aaa" stroke-width="1" stroke-dasharray="4"/>
+  <text x="400" y="612" text-anchor="middle" font-weight="bold" fill="#333">Context Selection (select_messages)</text>
+  <text x="400" y="636" text-anchor="middle" font-size="11" fill="#555">Find last anchor  -&gt;  Collect entries after anchor  -&gt;  Validate tool_calls</text>
+  <text x="400" y="656" text-anchor="middle" font-size="11" fill="#555">-&gt;  Drop orphan tool_results  -&gt;  Inject handoff_context  -&gt;  Budget trim</text>
+  <text x="400" y="676" text-anchor="middle" font-size="11" fill="#555">Thin-session hint: if &lt;= 2 user msgs, inject tape.search(all_tapes=true) suggestion</text>
+</svg>

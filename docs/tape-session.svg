@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="monospace" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#555"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="450" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#222">Tape &amp; Session Data Structure</text>
+
+  <!-- AppRuntime box -->
+  <rect x="30" y="50" width="840" height="340" rx="8" fill="#f8f9fa" stroke="#aaa" stroke-width="1.5"/>
+  <text x="50" y="72" font-weight="bold" fill="#333">AppRuntime</text>
+  <text x="50" y="90" font-size="11" fill="#666">sessions : Map[String, SessionRuntime]</text>
+  <text x="50" y="104" font-size="11" fill="#666">store : FileTapeStore (shared)</text>
+
+  <!-- SessionRuntime A -->
+  <rect x="60" y="120" width="370" height="130" rx="6" fill="#e8f0fe" stroke="#4285f4" stroke-width="1.2"/>
+  <text x="80" y="142" font-weight="bold" fill="#1a73e8">SessionRuntime "telegram:-522789"</text>
+  <text x="80" y="160" font-size="11" fill="#555">agent_loop, model_runner, tool_view</text>
+
+  <!-- TapeService inside A -->
+  <rect x="80" y="170" width="330" height="65" rx="4" fill="#fff" stroke="#4285f4" stroke-width="1"/>
+  <text x="100" y="190" font-size="12" fill="#1a73e8">TapeService</text>
+  <text x="100" y="206" font-size="11" fill="#555">base_tape_name: "cub:telegram%3A-522789"</text>
+  <text x="100" y="222" font-size="11" fill="#555">fork_active: false</text>
+
+  <!-- SessionRuntime B -->
+  <rect x="470" y="120" width="370" height="130" rx="6" fill="#fef7e0" stroke="#f9ab00" stroke-width="1.2"/>
+  <text x="490" y="142" font-weight="bold" fill="#e37400">SessionRuntime "cli:default"</text>
+  <text x="490" y="160" font-size="11" fill="#555">agent_loop, model_runner, tool_view</text>
+
+  <!-- TapeService inside B -->
+  <rect x="490" y="170" width="330" height="65" rx="4" fill="#fff" stroke="#f9ab00" stroke-width="1"/>
+  <text x="510" y="190" font-size="12" fill="#e37400">TapeService</text>
+  <text x="510" y="206" font-size="11" fill="#555">base_tape_name: "cub:cli%3Adefault"</text>
+  <text x="510" y="222" font-size="11" fill="#555">fork_active: true  (during handle_input)</text>
+
+  <!-- FileTapeStore -->
+  <rect x="60" y="270" width="780" height="100" rx="6" fill="#f0f4f0" stroke="#34a853" stroke-width="1.2"/>
+  <text x="80" y="292" font-weight="bold" fill="#1e8e3e">FileTapeStore</text>
+  <text x="80" y="310" font-size="11" fill="#555">tape_root: ".cub/tapes/"   workspace_hash: "e341d29d3de6d917"</text>
+
+  <!-- TapeFile entries inside store -->
+  <rect x="80" y="320" width="220" height="36" rx="3" fill="#fff" stroke="#34a853"/>
+  <text x="90" y="342" font-size="11" fill="#333">TapeFile "cub:telegram:-522789"</text>
+
+  <rect x="320" y="320" width="220" height="36" rx="3" fill="#fff" stroke="#34a853"/>
+  <text x="330" y="342" font-size="11" fill="#333">TapeFile "cub:cli:default"</text>
+
+  <rect x="560" y="320" width="260" height="36" rx="3" fill="#fff3e0" stroke="#f9ab00"/>
+  <text x="570" y="342" font-size="11" fill="#e37400">TapeFile "cub:cli:default__fork__a1b2"</text>
+
+  <!-- Arrows from SessionRuntime to TapeService (implicit) -->
+  <!-- Arrows from TapeFiles to disk -->
+  <line x1="190" y1="356" x2="190" y2="410" stroke="#555" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="430" y1="356" x2="430" y2="410" stroke="#555" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="690" y1="356" x2="690" y2="410" stroke="#555" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Disk files -->
+  <rect x="30" y="410" width="840" height="90" rx="8" fill="#fafafa" stroke="#ccc" stroke-width="1" stroke-dasharray="4"/>
+  <text x="50" y="432" font-weight="bold" fill="#666">Disk: .cub/tapes/</text>
+
+  <text x="80" y="458" font-size="11" fill="#333">e341d29d__cub%3Atelegram%3A-522789.jsonl</text>
+  <text x="80" y="478" font-size="11" fill="#333">e341d29d__cub%3Acli%3Adefault.jsonl</text>
+  <text x="500" y="478" font-size="11" fill="#e37400">e341d29d__cub%3Acli%3Adefault__fork__a1b2.jsonl</text>
+
+  <!-- TapeEntry structure -->
+  <rect x="30" y="520" width="840" height="90" rx="8" fill="#f3e5f5" stroke="#9c27b0" stroke-width="1.2"/>
+  <text x="50" y="542" font-weight="bold" fill="#7b1fa2">TapeEntry (JSONL line)</text>
+  <text x="50" y="562" font-size="12" fill="#333">{"id": 5, "kind": "message", "payload": {"role":"user","content":"hello"}, "meta": {"ts":1709...}}</text>
+  <text x="50" y="582" font-size="11" fill="#666">Kinds: message | tool_call | tool_result | anchor | event</text>
+  <text x="50" y="600" font-size="11" fill="#666">Anchors carry state: {name, state: {summary, task, context, next_steps, owner}}</text>
+</svg>

@@ -235,6 +235,22 @@ Request/response uses a pending requests map with polling-based async wait. Skil
 
 All I/O goes through `src/platform/` — a thin facade over `@fs`, `@http`, `@process`, `@websocket`. When WASM/JS targets become available, only `src/platform/` needs alternative implementations.
 
+## Tape & Session
+
+![Data Structure](tape-session.svg)
+
+**Session mapping.** Each channel message arrives with a session ID (e.g., `telegram:-5227896628`). `AppRuntime` maps this to a `SessionRuntime`, which holds its own `TapeService`, `AgentLoop`, `ModelRunner`, and `ToolRegistry`. The `TapeService` delegates to the shared `FileTapeStore`, which maps tape names to `TapeFile` objects backed by JSONL files on disk.
+
+**File naming.** Tape files are named `{fnv1a(workspace)}__{url_encode(tape_name)}.jsonl`. For example, session `telegram:-5227896628` with workspace hash `e341d29d` becomes `e341d29d__cub%3Atelegram%3A-5227896628.jsonl`.
+
+**Fork/merge for atomicity.** When `handle_input` is called, the tape forks: the main tape is copied to a temporary fork file, and all writes during `agent_loop` go to the fork. On normal completion, new entries (those with `id >= fork_start_id`) are appended back to the main tape and the fork is deleted. If the process crashes mid-execution, the main tape is untouched — the fork file remains on disk but is skipped by `scan_existing` on restart.
+
+![Fork/Merge Flow](fork-merge.svg)
+
+**TapeEntry kinds.** Each JSONL line is a `TapeEntry` with `{id, kind, payload, meta}`. Five kinds exist: `message` (user/assistant/system), `tool_call`, `tool_result`, `anchor` (handoff/session boundary with state), and `event` (loop results, metrics).
+
+**Context selection.** `select_messages` finds the last anchor, collects entries after it, validates tool calls (dropping orphans with invalid arguments and their corresponding results), injects anchor state as a handoff context system message, and applies budget trimming. Thin sessions (≤2 user messages) get a hint suggesting `tape.search(all_tapes=true)` to recover cross-session context.
+
 ## Error Recovery
 
 - **Consecutive tool failures** — counter tracks failures; ≥3 warns the model, ≥5 aborts the loop
