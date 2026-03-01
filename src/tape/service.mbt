@@ -85,12 +85,19 @@ pub async fn TapeService::read_entries(self : TapeService) -> Array[TapeEntry] {
 
 ///|
 /// Perform a handoff.
+/// During fork, skips compact — fork tapes are short-lived and compact would
+/// renumber IDs, breaking merge's count-based filtering.
 pub async fn TapeService::handoff(
   self : TapeService,
   name : String,
   state? : Map[String, Json]? = None,
 ) -> Array[TapeEntry] {
-  self.tape().handoff(name, state~)
+  let tape = self.tape()
+  tape.append(TapeEntry::anchor(name, state~))
+  if not(self.fork_active) {
+    ignore(tape.compact())
+  }
+  tape.read_entries()
 }
 
 ///|
