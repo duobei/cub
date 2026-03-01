@@ -6,13 +6,13 @@ pub struct TapeFile {
   path : String
   mut read_entries : Array[TapeEntry]
   mut read_offset : Int
-  mut fork_start_id : Int
+  mut fork_entry_count : Int
 }
 
 ///|
 /// Create a new TapeFile.
 pub fn TapeFile::new(path : String) -> TapeFile {
-  { path, read_entries: [], read_offset: 0, fork_start_id: 0 }
+  { path, read_entries: [], read_offset: 0, fork_entry_count: 0 }
 }
 
 ///|
@@ -420,7 +420,6 @@ pub async fn FileTapeStore::fork(
 ) -> String {
   let source = self.tape_file(source_name)
   let entries = source.read()
-  let next_id = source.next_id()
   // Generate 8-char hex suffix from timestamp
   let ts = @async.now()
   let suffix = fnv1a_hash(ts.to_string())[:8].to_string() catch {
@@ -428,7 +427,7 @@ pub async fn FileTapeStore::fork(
   }
   let fork_name = "\{source_name}__fork__\{suffix}"
   let fork_tf = self.tape_file(fork_name)
-  fork_tf.fork_start_id = next_id
+  fork_tf.fork_entry_count = entries.length()
   // Copy existing entries to fork file
   if entries.length() > 0 {
     let buf = StringBuilder::new()
@@ -456,11 +455,12 @@ pub async fn FileTapeStore::merge(
 ) -> Unit {
   let fork_tf = self.tape_file(fork_name)
   let fork_entries = fork_tf.read()
-  let start_id = fork_tf.fork_start_id
-  // Collect new entries (added during the fork)
-  let new_entries : Array[TapeEntry] = fork_entries.filter(fn(e) {
-    e.id >= start_id
-  })
+  let start = fork_tf.fork_entry_count
+  // Collect new entries (added during the fork, after the copied portion)
+  let new_entries : Array[TapeEntry] = []
+  for i in start..<fork_entries.length() {
+    new_entries.push(fork_entries[i])
+  }
   // Append new entries to target tape
   if new_entries.length() > 0 {
     let target = self.tape_file(target_name)

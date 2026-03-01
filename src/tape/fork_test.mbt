@@ -161,6 +161,41 @@ async test "TapeService discard_fork restores state" {
 }
 
 ///|
+/// Test: ensure_bootstrap_anchor does not write duplicate anchor on restart.
+async test "ensure_bootstrap_anchor skips when anchor exists" {
+  let tmp = "/tmp/cub_fork_test_anchor_\{@async.now()}"
+  @platform.mkdir(tmp, permission=0o755, recursive=true)
+  // First store: write anchor + message
+  let store1 = FileTapeStore::new(tmp, "/test/ws_anchor")
+  let svc1 = TapeService::new("main", store1)
+  svc1.ensure_bootstrap_anchor()
+  svc1.tape().append(TapeEntry::message("user", "hello"))
+  let entries1 = svc1.read_entries()
+  inspect(entries1.length(), content="2")
+  let anchor_count1 = entries1
+    .iter()
+    .filter(fn(e) { e.kind == "anchor" })
+    .count()
+  inspect(anchor_count1, content="1")
+  // Second store: simulate restart — new store reads same directory
+  let store2 = FileTapeStore::new(tmp, "/test/ws_anchor")
+  let svc2 = TapeService::new("main", store2)
+  svc2.ensure_bootstrap_anchor()
+  let entries2 = svc2.read_entries()
+  // Should still have only 1 anchor + 1 message
+  let anchor_count2 = entries2
+    .iter()
+    .filter(fn(e) { e.kind == "anchor" })
+    .count()
+  inspect(anchor_count2, content="1")
+  inspect(entries2.length(), content="2")
+  // Cleanup
+  @platform.rmdir(tmp, recursive=true) catch {
+    _ => ()
+  }
+}
+
+///|
 /// Test: double fork is no-op.
 async test "TapeService double fork is no-op" {
   let tmp = "/tmp/cub_fork_test_double_\{@async.now()}"

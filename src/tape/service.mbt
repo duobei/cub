@@ -66,13 +66,14 @@ pub async fn TapeService::discard_fork(self : TapeService) -> Unit {
 
 ///|
 /// Ensure a bootstrap anchor exists.
+/// Uses direct append instead of handoff to avoid compact truncating old data.
 pub async fn TapeService::ensure_bootstrap_anchor(self : TapeService) -> Unit {
   let entries = self.read_entries()
   let has_anchor = entries.iter().any(fn(e) { e.kind == "anchor" })
   if not(has_anchor) {
     let state : Map[String, Json] = {}
     state["owner"] = "human".to_json()
-    ignore(self.handoff("session/start", state=Some(state)))
+    self.tape().append(TapeEntry::anchor("session/start", state=Some(state)))
   }
 }
 
