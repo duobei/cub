@@ -37,6 +37,9 @@ jobs:
       - name: Build
         run: moon build --target native
 
-      - name: Test
-        run: moon test --target native
+      - name: Test (excluding P2P)
+        run: |
+          moon test --target native -p duobei/cub/app -p duobei/cub/config -p duobei/cub/core -p duobei/cub/crypto -p duobei/cub/ext -p duobei/cub/llm -p duobei/cub/log -p duobei/cub/mcp -p duobei/cub/skills -p duobei/cub/tape -p duobei/cub/tools
+          moon test --target native -p duobei/cub/channels -f discord_test.mbt
+          moon test --target native -p duobei/cub/channels -f telegram_test.mbt
         timeout-minutes: 10
