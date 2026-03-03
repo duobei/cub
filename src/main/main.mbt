@@ -163,6 +163,53 @@ fn main {
               )
             None => ()
           }
+          // Background: check scheduled tasks every 30s
+          outer_group.spawn_bg(
+            async fn() {
+              // Wait 10s after startup before first check
+              @async.sleep(10000)
+              while true {
+                let due = runtime.check_due_schedules()
+                for pair in due {
+                  let (sid, msg) = pair
+                  @log.info("schedule", "executing due task [\{sid}]: \{msg}")
+                  let result = runtime.get_session(sid).handle_input(msg)
+                  let output_parts : Array[String] = []
+                  if result.immediate_output.length() > 0 {
+                    output_parts.push(result.immediate_output)
+                  }
+                  if result.assistant_output.length() > 0 {
+                    output_parts.push(result.assistant_output)
+                  }
+                  match result.error {
+                    Some(e) => output_parts.push("Error: \{e}")
+                    None => ()
+                  }
+                  if output_parts.length() > 0 {
+                    let response = output_parts.join("\n\n")
+                    // Route response to the originating channel
+                    let channel_id = extract_channel_id(sid)
+                    if channel_id.length() > 0 && sid.has_prefix("telegram:") {
+                      match telegram {
+                        Some(tg) => tg.send_message(channel_id, response)
+                        None => ()
+                      }
+                    } else if channel_id.length() > 0 &&
+                      sid.has_prefix("discord:") {
+                      match discord {
+                        Some(dc) => dc.send_message(channel_id, response)
+                        None => ()
+                      }
+                    } else {
+                      @log.info("schedule", "result: \{response}")
+                    }
+                  }
+                }
+                @async.sleep(30000)
+              }
+            },
+            allow_failure=true,
+          )
           // Process a single message (extracted for queue drain reuse)
           async fn process_message(msg : @channels.ChannelMessage) -> Unit {
             // Check rate limit

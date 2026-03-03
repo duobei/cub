@@ -12,12 +12,12 @@ async fn read_startup_md(workspace : String) -> String {
 }
 
 ///|
-/// Check and execute due scheduled tasks. Returns messages for due tasks.
+/// Check and execute due scheduled tasks. Returns (session_id, message) pairs.
 /// For interval triggers, checks if enough time has elapsed since created_at_ms.
 /// For date triggers, checks if the date has passed.
 pub async fn AppRuntime::check_due_schedules(
   self : AppRuntime,
-) -> Array[String] {
+) -> Array[(String, String)] {
   let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
   let path = "\{home}/schedules.json"
   let content = read_file_sync(path)
@@ -30,7 +30,7 @@ pub async fn AppRuntime::check_due_schedules(
     _ => return []
   }
   let now_ms = @async.now()
-  let due_messages : Array[String] = []
+  let due_messages : Array[(String, String)] = []
   let remaining : Array[Json] = []
   let mut changed = false
   for s in schedules {
@@ -56,6 +56,10 @@ pub async fn AppRuntime::check_due_schedules(
         continue
       }
     }
+    let sched_session_id = match s {
+      { "session_id": String(sid), .. } => sid
+      _ => "schedule"
+    }
     let created_at_ms = match s {
       { "created_at_ms": Number(n, ..), .. } => n.to_int64()
       _ => 0L
@@ -72,7 +76,7 @@ pub async fn AppRuntime::check_due_schedules(
       if interval_secs > 0 {
         let interval_ms = interval_secs.to_int64() * 1000L
         if now_ms - created_at_ms >= interval_ms {
-          due_messages.push(message)
+          due_messages.push((sched_session_id, message))
           changed = true
           // Update created_at_ms for next interval
           let updated : Map[String, Json] = Map::new()
@@ -98,7 +102,51 @@ pub async fn AppRuntime::check_due_schedules(
       }
       continue
     }
-    // For cron and date triggers: keep for now (date not yet fully implemented)
+    // Check cron triggers
+    if trigger.has_prefix("cron:") {
+      let cron_str = trigger[5:].to_string() catch {
+        _ => {
+          remaining.push(s)
+          continue
+        }
+      }
+      let cron_expr = @tools.parse_cron(cron_str)
+      match cron_expr {
+        Some(expr) => {
+          let dt = @tools.unix_ms_to_datetime(now_ms)
+          if @tools.cron_matches(expr, dt) {
+            // Only fire if >60s since last fire to prevent double-firing
+            if now_ms - created_at_ms > 60000L {
+              due_messages.push((sched_session_id, message))
+              changed = true
+              // Update created_at_ms to prevent re-firing this minute
+              let updated : Map[String, Json] = Map::new()
+              match s {
+                { "id": String(id), .. } => updated["id"] = id.to_json()
+                _ => ()
+              }
+              updated["message"] = message.to_json()
+              updated["trigger"] = trigger.to_json()
+              match s {
+                { "session_id": String(sid), .. } =>
+                  updated["session_id"] = sid.to_json()
+                _ => ()
+              }
+              updated["created_at_ms"] = now_ms.to_json()
+              updated["enabled"] = true.to_json()
+              remaining.push(Json::object(updated))
+            } else {
+              remaining.push(s)
+            }
+          } else {
+            remaining.push(s)
+          }
+        }
+        None => remaining.push(s) // invalid cron expression, keep but skip
+      }
+      continue
+    }
+    // For date triggers: keep for now (not yet fully implemented)
     remaining.push(s)
   }
   // Write back if changed

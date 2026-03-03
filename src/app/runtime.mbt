@@ -340,9 +340,10 @@ pub async fn AppRuntime::handle_input(
 ) -> @core.LoopResult {
   // Check due schedules before handling input
   let due = self.check_due_schedules()
-  for msg in due {
-    @log.info("schedule", "executing due task: \{msg}")
-    let result = self.get_session("schedule").handle_input(msg)
+  for pair in due {
+    let (sid, msg) = pair
+    @log.info("schedule", "executing due task [\{sid}]: \{msg}")
+    let result = self.get_session(sid).handle_input(msg)
     match result.error {
       Some(e) => @log.warn("schedule", "task failed: \{e}")
       None => ()

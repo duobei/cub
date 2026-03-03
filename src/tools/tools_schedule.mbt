@@ -170,6 +170,181 @@ pub fn parse_interval_seconds(s : String) -> Int {
 }
 
 ///|
+/// Timezone offset in seconds (CST = UTC+8).
+let tz_offset_seconds : Int64 = 8L * 3600L
+
+///|
+/// Date-time components extracted from a Unix timestamp.
+struct DateTime {
+  month : Int // 1-12
+  day : Int // 1-31
+  hour : Int // 0-23
+  minute : Int // 0-59
+  weekday : Int // 0=Sunday, 1=Monday, ..., 6=Saturday
+}
+
+///|
+/// Convert Unix milliseconds to local DateTime (CST).
+pub fn unix_ms_to_datetime(ms : Int64) -> DateTime {
+  let total_secs = ms / 1000L + tz_offset_seconds
+  let days_since_epoch = (total_secs / 86400L).to_int()
+  let day_secs = (total_secs % 86400L).to_int()
+  let hour = day_secs / 3600
+  let minute = day_secs % 3600 / 60
+  // Weekday: Jan 1, 1970 was Thursday (4)
+  let weekday = (days_since_epoch + 4) % 7
+  // Calculate year/month/day from days since epoch
+  let mut remaining = days_since_epoch
+  let mut year = 1970
+  for {
+    let days_in_year = if is_leap_year(year) { 366 } else { 365 }
+    if remaining < days_in_year {
+      break
+    }
+    remaining -= days_in_year
+    year += 1
+  }
+  let month_days = if is_leap_year(year) {
+    [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  } else {
+    [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  }
+  let mut month = 1
+  for m in 0..<12 {
+    if remaining < month_days[m] {
+      month = m + 1
+      break
+    }
+    remaining -= month_days[m]
+  }
+  let day = remaining + 1
+  { month, day, hour, minute, weekday }
+}
+
+///|
+fn is_leap_year(year : Int) -> Bool {
+  (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+///|
+/// A parsed cron field: set of allowed values.
+priv struct CronField {
+  values : Array[Int] // empty = wildcard (match any)
+}
+
+///|
+/// Parse a single cron field (e.g. "*", "*/5", "1,15", "1-5", "3").
+fn parse_cron_field(s : String, min : Int, max : Int) -> CronField? {
+  if s == "*" {
+    return Some({ values: [] }) // wildcard
+  }
+  if s.has_prefix("*/") {
+    let step_str = s[2:].to_string() catch { _ => return None }
+    let step = @strconv.parse_int(step_str) catch { _ => return None }
+    if step <= 0 {
+      return None
+    }
+    let values : Array[Int] = []
+    let mut v = min
+    while v <= max {
+      values.push(v)
+      v += step
+    }
+    return Some({ values, })
+  }
+  // Handle comma-separated values (each may be a range)
+  let values : Array[Int] = []
+  for part_iter in s.split(",") {
+    let part = part_iter.to_string()
+    if part.contains("-") {
+      // Range: "1-5"
+      let mut lo_str = ""
+      let mut hi_str = ""
+      let mut in_hi = false
+      for ch in part {
+        if ch == '-' && not(in_hi) {
+          in_hi = true
+        } else if in_hi {
+          hi_str = hi_str + ch.to_string()
+        } else {
+          lo_str = lo_str + ch.to_string()
+        }
+      }
+      let lo = @strconv.parse_int(lo_str) catch { _ => return None }
+      let hi = @strconv.parse_int(hi_str) catch { _ => return None }
+      if lo < min || hi > max || lo > hi {
+        return None
+      }
+      for v in lo..<=hi {
+        values.push(v)
+      }
+    } else {
+      // Single value
+      let v = @strconv.parse_int(part) catch { _ => return None }
+      if v < min || v > max {
+        return None
+      }
+      values.push(v)
+    }
+  }
+  Some({ values, })
+}
+
+///|
+/// Check if a value matches a cron field.
+fn cron_field_matches(field : CronField, value : Int) -> Bool {
+  if field.values.is_empty() {
+    return true // wildcard
+  }
+  field.values.contains(value)
+}
+
+///|
+/// Parsed 5-field cron expression.
+struct CronExpr {
+  minute : CronField
+  hour : CronField
+  day : CronField
+  month : CronField
+  weekday : CronField
+}
+
+///|
+/// Parse a 5-field cron expression string.
+pub fn parse_cron(expr : String) -> CronExpr? {
+  let parts : Array[String] = []
+  for p in expr.split(" ") {
+    let s = p.to_string().trim().to_string()
+    if not(s.is_empty()) {
+      parts.push(s)
+    }
+  }
+  if parts.length() != 5 {
+    return None
+  }
+  let minute = parse_cron_field(parts[0], 0, 59)
+  let hour = parse_cron_field(parts[1], 0, 23)
+  let day = parse_cron_field(parts[2], 1, 31)
+  let month = parse_cron_field(parts[3], 1, 12)
+  let weekday = parse_cron_field(parts[4], 0, 6)
+  match (minute, hour, day, month, weekday) {
+    (Some(m), Some(h), Some(d), Some(mo), Some(w)) =>
+      Some({ minute: m, hour: h, day: d, month: mo, weekday: w })
+    _ => None
+  }
+}
+
+///|
+/// Check if a DateTime matches a cron expression.
+pub fn cron_matches(expr : CronExpr, dt : DateTime) -> Bool {
+  cron_field_matches(expr.minute, dt.minute) &&
+  cron_field_matches(expr.hour, dt.hour) &&
+  cron_field_matches(expr.day, dt.day) &&
+  cron_field_matches(expr.month, dt.month) &&
+  cron_field_matches(expr.weekday, dt.weekday)
+}
+
+///|
 /// Register schedule.remove tool.
 fn register_schedule_remove(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   let workspace = ctx.workspace
