@@ -504,6 +504,7 @@ pub async fn FileTapeStore::search_all(
   self : FileTapeStore,
   query : String,
   limit? : Int = 20,
+  kind? : String = "",
 ) -> Array[(String, TapeEntry)] {
   let normalized = ascii_to_lower(query)
   if normalized.is_empty() {
@@ -517,9 +518,14 @@ pub async fn FileTapeStore::search_all(
     let entries = tf.read()
     let mut i = entries.length() - 1
     while i >= 0 && results.length() < limit {
-      let payload_text = ascii_to_lower(entries[i].payload.stringify())
+      let entry = entries[i]
+      if kind.length() > 0 && entry.kind != kind {
+        i -= 1
+        continue
+      }
+      let payload_text = ascii_to_lower(entry.payload.stringify())
       if payload_text.contains(normalized) {
-        results.push((name, entries[i]))
+        results.push((name, entry))
       }
       i -= 1
     }

@@ -254,7 +254,7 @@ fn register_tape_tools(
         _ => false
       }
       if all_tapes {
-        let results = tape.search_all(query, limit~)
+        let results = tape.search_all(query, limit~, kind~)
         if results.is_empty() {
           return "no results"
         }

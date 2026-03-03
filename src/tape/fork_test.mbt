@@ -233,6 +233,65 @@ async test "handoff during fork preserves entries" {
 }
 
 ///|
+/// Test: search_all with kind filter returns only matching kinds.
+async test "search_all kind filter" {
+  let tmp = "/tmp/cub_search_kind_\{@async.now()}"
+  @platform.mkdir(tmp, permission=0o755, recursive=true)
+  let store = FileTapeStore::new(tmp, "/test/ws_search_kind")
+  // Write entries of different kinds
+  store.append("tape1", TapeEntry::anchor("session/start"))
+  store.append("tape1", TapeEntry::message("user", "hello world"))
+  store.append("tape1", TapeEntry::message("assistant", "hello back"))
+  let data : Map[String, Json] = {}
+  data["info"] = "hello event".to_json()
+  store.append("tape1", TapeEntry::event("test.hello", data=Json::object(data)))
+  // Search without kind filter — should find all entries containing "hello"
+  let all_results = store.search_all("hello", limit=20)
+  inspect(all_results.length(), content="3")
+  // Search with kind=message — should find only message entries
+  let msg_results = store.search_all("hello", limit=20, kind="message")
+  inspect(msg_results.length(), content="2")
+  for pair in msg_results {
+    inspect(pair.1.kind, content="message")
+  }
+  // Search with kind=event — should find only event entries
+  let evt_results = store.search_all("hello", limit=20, kind="event")
+  inspect(evt_results.length(), content="1")
+  inspect(evt_results[0].1.kind, content="event")
+  // Search with kind=anchor — no anchors contain "hello"
+  let anchor_results = store.search_all("hello", limit=20, kind="anchor")
+  inspect(anchor_results.length(), content="0")
+  // Cleanup
+  @platform.rmdir(tmp, recursive=true) catch {
+    _ => ()
+  }
+}
+
+///|
+/// Test: TapeService search_all passes kind through.
+async test "TapeService search_all kind passthrough" {
+  let tmp = "/tmp/cub_svc_search_kind_\{@async.now()}"
+  @platform.mkdir(tmp, permission=0o755, recursive=true)
+  let store = FileTapeStore::new(tmp, "/test/ws_svc_kind")
+  let svc = TapeService::new("main", store)
+  svc.tape().append(TapeEntry::message("user", "test query"))
+  let data : Map[String, Json] = {}
+  data["note"] = "test query event".to_json()
+  svc.tape().append(TapeEntry::event("log", data=Json::object(data)))
+  // Without kind filter
+  let all = svc.search_all("test query")
+  inspect(all.length(), content="2")
+  // With kind=message
+  let msgs = svc.search_all("test query", kind="message")
+  inspect(msgs.length(), content="1")
+  inspect(msgs[0].1.kind, content="message")
+  // Cleanup
+  @platform.rmdir(tmp, recursive=true) catch {
+    _ => ()
+  }
+}
+
+///|
 /// Test: double fork is no-op.
 async test "TapeService double fork is no-op" {
   let tmp = "/tmp/cub_fork_test_double_\{@async.now()}"

@@ -365,8 +365,9 @@ pub async fn TapeService::search_all(
   self : TapeService,
   query : String,
   limit? : Int = 20,
+  kind? : String = "",
 ) -> Array[(String, TapeEntry)] {
-  self.store.search_all(query, limit~)
+  self.store.search_all(query, limit~, kind~)
 }
 
 ///|
