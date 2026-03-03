@@ -60,8 +60,10 @@ pub async fn AppRuntime::check_due_schedules(
       { "session_id": String(sid), .. } => sid
       _ => "schedule"
     }
-    let created_at_ms = match s {
+    let created_at_ms : Int64 = match s {
       { "created_at_ms": Number(n, ..), .. } => n.to_int64()
+      { "created_at_ms": String(str), .. } =>
+        parse_int64_simple(str)
       _ => 0L
     }
     // Check interval triggers
@@ -155,4 +157,19 @@ pub async fn AppRuntime::check_due_schedules(
     ignore(write_file_sync(path, json_str))
   }
   due_messages
+}
+
+///|
+/// Parse a simple non-negative integer string to Int64.
+fn parse_int64_simple(s : String) -> Int64 {
+  let mut result = 0L
+  for ch in s {
+    let code = ch.to_int()
+    if code >= 48 && code <= 57 {
+      result = result * 10L + (code - 48).to_int64()
+    } else {
+      return 0L
+    }
+  }
+  result
 }
