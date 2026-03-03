@@ -18,7 +18,7 @@ async fn read_startup_md(workspace : String) -> String {
 pub async fn AppRuntime::check_due_schedules(
   self : AppRuntime,
 ) -> Array[(String, String)] {
-  let home = self.settings.home.unwrap_or("\{self.workspace}/.cub")
+  let home = self.settings.resolve_home()
   let path = "\{home}/schedules.json"
   let content = read_file_sync(path)
   if content.trim().to_string().is_empty() {
