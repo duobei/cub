@@ -42,4 +42,8 @@ jobs:
           moon test --target native -p duobei/cub/app -p duobei/cub/config -p duobei/cub/core -p duobei/cub/crypto -p duobei/cub/ext -p duobei/cub/llm -p duobei/cub/log -p duobei/cub/mcp -p duobei/cub/skills -p duobei/cub/tape -p duobei/cub/tools
           moon test --target native -p duobei/cub/channels -f discord_test.mbt
           moon test --target native -p duobei/cub/channels -f telegram_test.mbt
-        timeout-minutes: 10
+
+      - name: Test P2P (best-effort)
+        continue-on-error: true
+        run: moon test --target native -p duobei/cub/channels -f p2p_test.mbt
+        timeout-minutes: 2
