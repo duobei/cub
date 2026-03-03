@@ -41,6 +41,7 @@ pub async fn AgentLoop::handle_input(
       exit_requested: true,
       steps: 0,
       error: None,
+      usage: None,
     }
   }
   if not(route.enter_model) {
@@ -50,6 +51,7 @@ pub async fn AgentLoop::handle_input(
       exit_requested: false,
       steps: 0,
       error: None,
+      usage: None,
     }
   }
   // Enter model loop
@@ -76,5 +78,6 @@ pub async fn AgentLoop::handle_input(
     exit_requested: model_result.exit_requested,
     steps: model_result.steps,
     error: model_result.error,
+    usage: model_result.usage,
   }
 }

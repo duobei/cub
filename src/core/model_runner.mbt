@@ -94,6 +94,8 @@ pub async fn ModelRunner::run(
   let visible_parts : Array[String] = []
   let mut error : String? = None
   let mut exit_requested = false
+  let mut total_prompt_tokens = 0
+  let mut total_completion_tokens = 0
   let mut consecutive_tool_failures = 0
   while step < self.max_steps && not(exit_requested) {
     step += 1
@@ -109,6 +111,14 @@ pub async fn ModelRunner::run(
       []
     }
     let chat_result = self.chat(current_prompt, image_urls=step_images)
+    // Accumulate token usage
+    match chat_result.usage {
+      Some(u) => {
+        total_prompt_tokens += u.prompt_tokens
+        total_completion_tokens += u.completion_tokens
+      }
+      None => ()
+    }
     // Handle error — on API 400, try handoff to truncate bad history and retry once
     if chat_result.error is Some(err) {
       if is_api_bad_request(err) && step == 1 {
@@ -245,12 +255,23 @@ pub async fn ModelRunner::run(
   }
   // Join visible parts
   let visible_text = join_visible_parts(visible_parts)
+  let total = total_prompt_tokens + total_completion_tokens
+  let usage : @llm.TokenUsage? = if total > 0 {
+    Some({
+      prompt_tokens: total_prompt_tokens,
+      completion_tokens: total_completion_tokens,
+      total_tokens: total,
+    })
+  } else {
+    None
+  }
   {
     visible_text,
     exit_requested,
     steps: step,
     error,
     command_followups: followups,
+    usage,
   }
 }
 
@@ -370,6 +391,7 @@ async fn ModelRunner::chat(
             ),
             followup_prompt: None,
             has_tool_errors: false,
+            usage: None,
           }
       }
       return ChatResult::from_tool_auto(retry_result)
@@ -411,6 +433,7 @@ priv struct ChatResult {
   error : String?
   followup_prompt : String?
   has_tool_errors : Bool
+  usage : @llm.TokenUsage?
 }
 
 ///|
@@ -423,6 +446,7 @@ fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
         error: None,
         followup_prompt: None,
         has_tool_errors: false,
+        usage: output.usage,
       }
     @llm.ToolAutoKind::Tools =>
       {
@@ -430,6 +454,7 @@ fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
         error: None,
         followup_prompt: Some(tool_continue_prompt),
         has_tool_errors: output.has_tool_errors,
+        usage: output.usage,
       }
     @llm.ToolAutoKind::Error => {
       let err_msg = output.error.unwrap_or("unknown error")
@@ -438,6 +463,7 @@ fn ChatResult::from_tool_auto(output : @llm.ToolAutoResult) -> ChatResult {
         error: Some(err_msg),
         followup_prompt: None,
         has_tool_errors: false,
+        usage: output.usage,
       }
     }
   }

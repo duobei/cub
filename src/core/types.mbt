@@ -50,6 +50,7 @@ pub struct ModelTurnResult {
   steps : Int
   error : String?
   command_followups : Int
+  usage : @llm.TokenUsage?
 } derive(Show)
 
 ///|
@@ -60,4 +61,5 @@ pub struct LoopResult {
   exit_requested : Bool
   steps : Int
   error : String?
+  usage : @llm.TokenUsage?
 } derive(Show)

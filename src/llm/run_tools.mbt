@@ -107,6 +107,7 @@ pub async fn LLMClient::run_tools(
       tool_results: [],
       error: Some(err),
       has_tool_errors: false,
+      usage: response.usage,
     }
   }
   // If no tool calls, return text
@@ -120,6 +121,7 @@ pub async fn LLMClient::run_tools(
       tool_results: [],
       error: None,
       has_tool_errors: false,
+      usage: response.usage,
     }
   }
   // Record assistant tool calls
@@ -252,5 +254,6 @@ pub async fn LLMClient::run_tools(
     tool_results: result_jsons,
     error: None,
     has_tool_errors: any_tool_error,
+    usage: response.usage,
   }
 }

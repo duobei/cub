@@ -44,7 +44,7 @@ pub fn ToolCallInfo::to_json(self : ToolCallInfo) -> Json {
 
 ///|
 /// Token usage from an API call.
-pub struct TokenUsage {
+pub(all) struct TokenUsage {
   prompt_tokens : Int
   completion_tokens : Int
   total_tokens : Int
@@ -77,4 +77,5 @@ pub struct ToolAutoResult {
   tool_results : Array[Json]
   error : String?
   has_tool_errors : Bool
+  usage : TokenUsage?
 } derive(Show)
