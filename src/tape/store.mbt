@@ -505,7 +505,7 @@ pub async fn FileTapeStore::search_all(
   query : String,
   limit? : Int = 20,
 ) -> Array[(String, TapeEntry)] {
-  let normalized = query.to_lower()
+  let normalized = ascii_to_lower(query)
   if normalized.is_empty() {
     return []
   }
@@ -517,7 +517,7 @@ pub async fn FileTapeStore::search_all(
     let entries = tf.read()
     let mut i = entries.length() - 1
     while i >= 0 && results.length() < limit {
-      let payload_text = entries[i].payload.stringify().to_lower()
+      let payload_text = ascii_to_lower(entries[i].payload.stringify())
       if payload_text.contains(normalized) {
         results.push((name, entries[i]))
       }
@@ -525,4 +525,20 @@ pub async fn FileTapeStore::search_all(
     }
   }
   results
+}
+
+///|
+/// ASCII-safe lowercase: only converts A-Z to a-z, leaves all other chars
+/// (including non-ASCII like CJK) unchanged. MoonBit's String::to_lower panics
+/// on non-ASCII characters.
+fn ascii_to_lower(s : String) -> String {
+  let buf = StringBuilder::new()
+  for ch in s {
+    if ch >= 'A' && ch <= 'Z' {
+      buf.write_char((ch.to_int() + 32).unsafe_to_char())
+    } else {
+      buf.write_char(ch)
+    }
+  }
+  buf.to_string()
 }

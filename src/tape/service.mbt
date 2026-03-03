@@ -331,7 +331,7 @@ pub async fn TapeService::search(
   kind? : String = "",
   offset? : Int = 0,
 ) -> Array[TapeEntry] {
-  let normalized = query.to_lower()
+  let normalized = ascii_to_lower(query)
   if normalized.is_empty() {
     return []
   }
@@ -346,7 +346,7 @@ pub async fn TapeService::search(
       i -= 1
       continue
     }
-    let payload_text = entry.payload.stringify().to_lower()
+    let payload_text = ascii_to_lower(entry.payload.stringify())
     if payload_text.contains(normalized) {
       if skipped < offset {
         skipped += 1
