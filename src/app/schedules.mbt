@@ -62,8 +62,7 @@ pub async fn AppRuntime::check_due_schedules(
     }
     let created_at_ms : Int64 = match s {
       { "created_at_ms": Number(n, ..), .. } => n.to_int64()
-      { "created_at_ms": String(str), .. } =>
-        parse_int64_simple(str)
+      { "created_at_ms": String(str), .. } => parse_int64_simple(str)
       _ => 0L
     }
     // Check interval triggers
