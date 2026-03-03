@@ -152,6 +152,10 @@ fn register_fs_edit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
   bool_prop["description"] = "Replace all occurrences (default: false)".to_json()
   bool_prop["default"] = false.to_json()
   props["replace_all"] = Json::object(bool_prop)
+  let start_line_prop : Map[String, Json] = Map::new()
+  start_line_prop["type"] = "integer".to_json()
+  start_line_prop["description"] = "1-indexed line number to start searching from (optional, default: search entire file)".to_json()
+  props["start_line"] = Json::object(start_line_prop)
   let params = make_params(props, ["path", "old_string", "new_string"])
   registry.register(
     "fs.edit",
@@ -182,38 +186,92 @@ fn register_fs_edit(registry : ToolRegistry, ctx : ToolContext) -> Unit {
         { "replace_all": True, .. } => true
         _ => false
       }
-      edit_file_content(path, old_string, new_string, replace_all)
+      let start_line = match args {
+        { "start_line": Number(n, ..), .. } => n.to_int()
+        _ => 0
+      }
+      edit_file_content(path, old_string, new_string, replace_all, start_line)
     },
   )
 }
 
 ///|
 /// Edit a file by finding and replacing text.
+/// When start_line > 0 (1-indexed), only search/replace from that line onward.
 async fn edit_file_content(
   path : String,
   old_string : String,
   new_string : String,
   replace_all : Bool,
+  start_line : Int,
 ) -> String {
   let content = @platform.read_file_text(path) catch {
     e => fail("fs.edit: \{e}")
   }
-  if not(content.contains(old_string)) {
-    fail("fs.edit: old_string not found in file")
-  }
-  let new_content = if replace_all {
-    content.replace(old=old_string, new=new_string)
+  let new_content = if start_line > 0 {
+    // Split into lines, search only from start_line onward
+    let lines : Array[String] = []
+    for line in content.split("\n") {
+      lines.push(line.to_string())
+    }
+    if start_line > lines.length() {
+      fail(
+        "fs.edit: start_line \{start_line} exceeds file length (\{lines.length()} lines)",
+      )
+    }
+    // Join lines before the start_line
+    let before_parts : Array[String] = []
+    for i in 0..<(start_line - 1) {
+      before_parts.push(lines[i])
+    }
+    let after_parts : Array[String] = []
+    for i in (start_line - 1)..<lines.length() {
+      after_parts.push(lines[i])
+    }
+    let search_region = after_parts.join("\n")
+    if not(search_region.contains(old_string)) {
+      fail(
+        "fs.edit: old_string not found in file from line \{start_line} onward",
+      )
+    }
+    let replaced = if replace_all {
+      search_region.replace(old=old_string, new=new_string)
+    } else {
+      let idx = find_substring_in(search_region, old_string)
+      if idx < 0 {
+        fail(
+          "fs.edit: old_string not found in file from line \{start_line} onward",
+        )
+      }
+      let b = search_region[:idx].to_string() catch { _ => "" }
+      let a = search_region[idx + old_string.length():].to_string() catch {
+        _ => ""
+      }
+      b + new_string + a
+    }
+    if before_parts.is_empty() {
+      replaced
+    } else {
+      before_parts.join("\n") + "\n" + replaced
+    }
   } else {
-    // Replace first occurrence only
-    let idx = find_substring_in(content, old_string)
-    if idx < 0 {
+    if not(content.contains(old_string)) {
       fail("fs.edit: old_string not found in file")
     }
-    let before = content[:idx].to_string() catch { _ => "" }
-    let after = content[idx + old_string.length():].to_string() catch {
-      _ => ""
+    if replace_all {
+      content.replace(old=old_string, new=new_string)
+    } else {
+      // Replace first occurrence only
+      let idx = find_substring_in(content, old_string)
+      if idx < 0 {
+        fail("fs.edit: old_string not found in file")
+      }
+      let before = content[:idx].to_string() catch { _ => "" }
+      let after = content[idx + old_string.length():].to_string() catch {
+        _ => ""
+      }
+      before + new_string + after
     }
-    before + new_string + after
   }
   @platform.write_file(path, new_content, create=0o644) catch {
     e => fail("fs.edit: \{e}")
