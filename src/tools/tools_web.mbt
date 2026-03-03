@@ -47,6 +47,7 @@ fn normalize_url(raw : String) -> String raise {
 async fn fetch_url(raw_url : String) -> String {
   let url = normalize_url(raw_url)
   let headers : Map[String, String] = {}
+  headers["Accept"] = "text/markdown, text/plain;q=0.9, */*;q=0.8"
   let (resp, data) = @platform.http_get(url, headers~) catch {
     e => fail("web.fetch: failed to fetch URL: \{e}")
   }
