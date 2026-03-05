@@ -184,20 +184,11 @@ pub async fn TapeFile::compact(
       _ => return 0
     }
   }
-  // Rewrite current file with kept entries (re-numbered from 1)
+  // Rewrite current file with kept entries (preserving original IDs)
   let buf = StringBuilder::new()
-  let mut next_id = 1
   for i in last_anchor_idx..<entries.length() {
-    let entry = entries[i]
-    let renumbered : TapeEntry = {
-      id: next_id,
-      kind: entry.kind,
-      payload: entry.payload,
-      meta: entry.meta,
-    }
-    buf.write_string(renumbered.to_json().stringify())
+    buf.write_string(entries[i].to_json().stringify())
     buf.write_char('\n')
-    next_id += 1
   }
   @platform.write_file(self.path, buf.to_string(), create=0o644) catch {
     _ => return 0

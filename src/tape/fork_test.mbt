@@ -338,6 +338,10 @@ async test "compact creates archive file" {
   let current = tf.read()
   inspect(current.length(), content="3")
   inspect(current[0].kind, content="anchor")
+  // Verify original IDs are preserved (not renumbered)
+  inspect(current[0].id, content="4")
+  inspect(current[1].id, content="5")
+  inspect(current[2].id, content="6")
   // Cleanup
   @platform.rmdir(tmp, recursive=true) catch {
     _ => ()
