@@ -24,6 +24,8 @@ pub struct TapeInfo {
   anchors : Int
   last_anchor : String?
   entries_since_last_anchor : Int
+  last_usage_prompt : Int
+  last_usage_completion : Int
 } derive(Show)
 
 ///|

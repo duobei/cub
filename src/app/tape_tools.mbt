@@ -87,6 +87,12 @@ fn register_tape_tools(
     buf
     ..write_string("\nentries_since_last_anchor: ")
     .write_string(info.entries_since_last_anchor.to_string())
+    if info.last_usage_prompt > 0 || info.last_usage_completion > 0 {
+      let total = info.last_usage_prompt + info.last_usage_completion
+      buf.write_string(
+        "\nlast_usage: \{info.last_usage_prompt}p + \{info.last_usage_completion}c = \{total} tokens",
+      )
+    }
     buf.to_string()
   })
   // ,handoff

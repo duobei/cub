@@ -6,6 +6,8 @@ pub struct TapeService {
   base_tape_name : String
   done_requested : Bool
   mut fork_active : Bool
+  mut last_usage_prompt : Int
+  mut last_usage_completion : Int
 }
 
 ///|
@@ -20,6 +22,8 @@ pub fn TapeService::new(
     base_tape_name: tape_name,
     done_requested: false,
     fork_active: false,
+    last_usage_prompt: 0,
+    last_usage_completion: 0,
   }
 }
 
@@ -109,6 +113,17 @@ pub async fn TapeService::append_event(
 }
 
 ///|
+/// Record last token usage for display in tape info.
+pub fn TapeService::record_last_usage(
+  self : TapeService,
+  prompt_tokens : Int,
+  completion_tokens : Int,
+) -> Unit {
+  self.last_usage_prompt = prompt_tokens
+  self.last_usage_completion = completion_tokens
+}
+
+///|
 /// Append a system message.
 pub async fn TapeService::append_system(
   self : TapeService,
@@ -154,6 +169,8 @@ pub async fn TapeService::info(self : TapeService) -> TapeInfo {
     anchors: anchors.length(),
     last_anchor,
     entries_since_last_anchor: entries_since,
+    last_usage_prompt: self.last_usage_prompt,
+    last_usage_completion: self.last_usage_completion,
   }
 }
 

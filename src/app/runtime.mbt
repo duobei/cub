@@ -22,6 +22,10 @@ pub async fn SessionRuntime::handle_input(
   self.tape.fork()
   let result = self.agent_loop.handle_input(text, image_urls~)
   self.tape.merge()
+  match result.usage {
+    Some(u) => self.tape.record_last_usage(u.prompt_tokens, u.completion_tokens)
+    None => ()
+  }
   result
 }
 
