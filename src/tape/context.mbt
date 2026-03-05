@@ -137,6 +137,13 @@ pub fn extract_anchor_context(payload : Json) -> String {
         Some(String(t)) => parts.push("Current task: \{t}")
         _ => ()
       }
+      match (state.get("source_from_id"), state.get("source_to_id")) {
+        (Some(Number(from, ..)), Some(Number(to, ..))) =>
+          parts.push(
+            "Source: entries #\{from.to_int()}-#\{to.to_int()} (use tape.read_range to review)",
+          )
+        _ => ()
+      }
     }
     _ => ()
   }

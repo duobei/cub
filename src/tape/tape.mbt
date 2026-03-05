@@ -42,7 +42,19 @@ pub async fn Tape::handoff(
   name : String,
   state? : Map[String, Json]? = None,
 ) -> Array[TapeEntry] {
-  let anchor = TapeEntry::anchor(name, state~)
+  // Record source entry range in state for citation
+  let final_state = match state {
+    Some(s) => {
+      let entries = self.read_entries()
+      if entries.length() > 0 {
+        s["source_from_id"] = entries[0].id.to_json()
+        s["source_to_id"] = entries[entries.length() - 1].id.to_json()
+      }
+      Some(s)
+    }
+    None => None
+  }
+  let anchor = TapeEntry::anchor(name, state=final_state)
   self.append(anchor)
   // Compact: discard entries before the last anchor to keep tape size bounded.
   // Skipped when compact_enabled is false (e.g. during fork — compact would
