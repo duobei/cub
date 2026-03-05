@@ -162,7 +162,7 @@ pub async fn TapeService::info(self : TapeService) -> TapeInfo {
 /// Preserves a summary of the last few messages so the next session has context.
 pub async fn TapeService::reset(
   self : TapeService,
-  archive? : Bool = false,
+  archive? : Bool = true,
 ) -> String {
   // Extract recent context before reset
   let recent_summary = extract_recent_summary(self.read_entries())

@@ -345,8 +345,8 @@ fn register_tape_tools(
   // ,tape.reset
   registry.register("tape.reset", "Reset the tape", handler=async fn(args) {
     let archive = match args {
-      { "archive": String(a), .. } => a == "true"
-      _ => false
+      { "archive": String(a), .. } => a != "false"
+      _ => true
     }
     tape.reset(archive~)
   })
