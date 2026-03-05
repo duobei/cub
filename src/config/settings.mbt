@@ -134,7 +134,7 @@ pub fn Settings::default() -> Settings {
     home: None,
     workspace_path: None,
     tape_name: "cub",
-    max_steps: 100,
+    max_steps: 512,
     proactive_response: false,
     rate_limit_per_minute: 10,
     telegram_enabled: false,

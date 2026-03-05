@@ -143,7 +143,7 @@ test "get_env_list missing key returns empty" {
 test "Settings default values" {
   let s = Settings::default()
   inspect(s.max_tokens, content="1024")
-  inspect(s.max_steps, content="100")
+  inspect(s.max_steps, content="512")
   inspect(s.proactive_response, content="false")
   inspect(s.telegram_enabled, content="false")
   inspect(s.discord_enabled, content="false")
