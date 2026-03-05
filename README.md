@@ -8,7 +8,7 @@ Where Bub pioneered the tape-first, anchor-driven agent architecture in Python, 
 
 ## Design
 
-Inherited from Bub's philosophy:
+Built on [tape.systems](https://tape.systems/) principles:
 
 1. **Append-only tape** — all context is a linear, inspectable log. No hidden state.
 2. **Anchor & handoff** — explicit stage transitions instead of implicit branching.
