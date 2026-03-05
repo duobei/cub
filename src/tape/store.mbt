@@ -55,7 +55,8 @@ pub async fn TapeFile::read(self : TapeFile) -> Array[TapeEntry] {
     return []
   }
   // Only parse new content past read_offset
-  let lines = content.split("\n")
+  // Collect into Array — split() returns Iter, which would be consumed by first loop
+  let lines = content.split("\n").collect()
   let mut line_offset = 0
   let mut char_offset = 0
   for line in lines {
@@ -142,9 +143,13 @@ pub async fn TapeFile::append_many(
 }
 
 ///|
-/// Compact the tape file: keep only the last anchor and entries after it.
-/// Returns the number of entries removed, or 0 if no compaction needed.
-pub async fn TapeFile::compact(self : TapeFile) -> Int {
+/// Compact the tape file: archive entries before last anchor, keep anchor onward.
+/// `archive_path` is where pre-anchor entries are preserved (empty = discard).
+/// Returns the number of entries archived.
+pub async fn TapeFile::compact(
+  self : TapeFile,
+  archive_path? : String = "",
+) -> Int {
   let entries = self.read()
   if entries.length() <= 1 {
     return 0
@@ -160,19 +165,30 @@ pub async fn TapeFile::compact(self : TapeFile) -> Int {
   if last_anchor_idx <= 0 {
     return 0
   }
-  // Keep entries from last anchor onward
-  let kept : Array[TapeEntry] = []
-  for i in last_anchor_idx..<entries.length() {
-    kept.push(entries[i])
+  // Split: archived (before anchor) and kept (anchor onward)
+  let archived : Array[TapeEntry] = []
+  for i in 0..<last_anchor_idx {
+    archived.push(entries[i])
   }
-  let removed = entries.length() - kept.length()
-  if removed == 0 {
+  if archived.is_empty() {
     return 0
   }
-  // Rewrite the file with kept entries (re-numbered from 1)
+  // Write archived entries to archive file (preserves history)
+  if archive_path.length() > 0 {
+    let buf = StringBuilder::new()
+    for entry in archived {
+      buf.write_string(entry.to_json().stringify())
+      buf.write_char('\n')
+    }
+    @platform.write_file(archive_path, buf.to_string(), create=0o644) catch {
+      _ => return 0
+    }
+  }
+  // Rewrite current file with kept entries (re-numbered from 1)
   let buf = StringBuilder::new()
   let mut next_id = 1
-  for entry in kept {
+  for i in last_anchor_idx..<entries.length() {
+    let entry = entries[i]
     let renumbered : TapeEntry = {
       id: next_id,
       kind: entry.kind,
@@ -188,7 +204,7 @@ pub async fn TapeFile::compact(self : TapeFile) -> Int {
   }
   // Reset internal state so next read picks up the new file
   self.reset_state()
-  removed
+  archived.length()
 }
 
 ///|
@@ -296,8 +312,8 @@ async fn FileTapeStore::scan_existing(self : FileTapeStore) -> Unit {
     if not(entry.has_prefix(prefix)) || not(entry.has_suffix(suffix)) {
       continue
     }
-    // Skip .bak archives
-    if entry.has_suffix(".jsonl.bak") {
+    // Skip .bak archives and compact archives
+    if entry.has_suffix(".jsonl.bak") || entry.contains("__archive__") {
       continue
     }
     // Extract encoded tape name: {hash}__{encoded}.jsonl
@@ -405,9 +421,12 @@ pub async fn FileTapeStore::archive(
 }
 
 ///|
-/// Compact a tape (discard entries before last anchor).
+/// Compact a tape: archive entries before last anchor, keep anchor onward.
 pub async fn FileTapeStore::compact(self : FileTapeStore, name : String) -> Int {
-  self.tape_file(name).compact()
+  let encoded = url_encode(name)
+  let ts = @async.now()
+  let archive_path = "\{self.tape_root}/\{self.workspace_hash}__\{encoded}__archive__\{ts}.jsonl"
+  self.tape_file(name).compact(archive_path~)
 }
 
 ///|
@@ -498,7 +517,7 @@ pub fn FileTapeStore::list_tapes(self : FileTapeStore) -> Array[String] {
 }
 
 ///|
-/// Search across all known tapes by substring match.
+/// Search across all known tapes and archives by substring match.
 /// Returns (tape_name, entry) pairs, most recent first.
 pub async fn FileTapeStore::search_all(
   self : FileTapeStore,
@@ -511,26 +530,108 @@ pub async fn FileTapeStore::search_all(
     return []
   }
   let results : Array[(String, TapeEntry)] = []
+  // Search active tapes first
   for name, tf in self.tape_files {
     if results.length() >= limit {
       break
     }
-    let entries = tf.read()
-    let mut i = entries.length() - 1
-    while i >= 0 && results.length() < limit {
-      let entry = entries[i]
-      if kind.length() > 0 && entry.kind != kind {
-        i -= 1
-        continue
+    search_entries(tf.read(), name, normalized, kind, limit, results)
+  }
+  // Search archive files if still under limit
+  if results.length() < limit {
+    let archive_files = self.list_archive_files()
+    for pair in archive_files {
+      if results.length() >= limit {
+        break
       }
-      let payload_text = ascii_to_lower(entry.payload.stringify())
-      if payload_text.contains(normalized) {
-        results.push((name, entry))
-      }
-      i -= 1
+      let (tape_name, archive_path) = pair
+      let tf = TapeFile::new(archive_path)
+      search_entries(
+        tf.read(),
+        "\{tape_name} (archived)",
+        normalized,
+        kind,
+        limit,
+        results,
+      )
     }
   }
   results
+}
+
+///|
+/// Search entries in reverse order, appending matches to results.
+fn search_entries(
+  entries : Array[TapeEntry],
+  tape_name : String,
+  normalized_query : String,
+  kind : String,
+  limit : Int,
+  results : Array[(String, TapeEntry)],
+) -> Unit {
+  let mut i = entries.length() - 1
+  while i >= 0 && results.length() < limit {
+    let entry = entries[i]
+    if kind.length() > 0 && entry.kind != kind {
+      i -= 1
+      continue
+    }
+    let payload_text = ascii_to_lower(entry.payload.stringify())
+    if payload_text.contains(normalized_query) {
+      results.push((tape_name, entry))
+    }
+    i -= 1
+  }
+}
+
+///|
+/// List archive files for this workspace. Returns (tape_name, archive_path) pairs.
+async fn FileTapeStore::list_archive_files(
+  self : FileTapeStore,
+) -> Array[(String, String)] {
+  let result : Array[(String, String)] = []
+  let dir_entries = @platform.readdir(self.tape_root) catch {
+    _ => return result
+  }
+  let prefix = "\{self.workspace_hash}__"
+  let suffix = ".jsonl"
+  for entry in dir_entries {
+    if not(entry.has_prefix(prefix)) ||
+      not(entry.has_suffix(suffix)) ||
+      not(entry.contains("__archive__")) {
+      continue
+    }
+    // Extract tape name: {hash}__{encoded}__archive__{ts}.jsonl
+    // Find __archive__ position to get the encoded tape name
+    let encoded = entry[prefix.length():].to_string() catch { _ => continue }
+    let archive_marker = "__archive__"
+    let marker_pos = find_substring(encoded, archive_marker)
+    if marker_pos < 0 {
+      continue
+    }
+    let tape_encoded = encoded[:marker_pos].to_string() catch { _ => continue }
+    let tape_name = url_decode(tape_encoded)
+    result.push((tape_name, "\{self.tape_root}/\{entry}"))
+  }
+  result
+}
+
+///|
+/// Find the position of a substring, or -1 if not found.
+fn find_substring(haystack : String, needle : String) -> Int {
+  if needle.length() > haystack.length() {
+    return -1
+  }
+  let max_pos = haystack.length() - needle.length()
+  for i in 0..<=max_pos {
+    let slice = haystack[i:i + needle.length()].to_string() catch {
+      _ => continue
+    }
+    if slice == needle {
+      return i
+    }
+  }
+  -1
 }
 
 ///|

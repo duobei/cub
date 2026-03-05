@@ -309,3 +309,65 @@ async test "TapeService double fork is no-op" {
     _ => ()
   }
 }
+
+///|
+/// Test: compact creates archive file with pre-anchor entries.
+async test "compact creates archive file" {
+  let tmp = "/tmp/cub_archive_\{@async.now()}"
+  @platform.mkdir(tmp, permission=0o755, recursive=true)
+  let tape_path = "\{tmp}/tape.jsonl"
+  let archive_path = "\{tmp}/tape_archive.jsonl"
+  let tf = TapeFile::new(tape_path)
+  // Write 3 messages + 1 anchor + 2 messages
+  tf.append(TapeEntry::message("user", "msg one"))
+  tf.append(TapeEntry::message("assistant", "reply one"))
+  tf.append(TapeEntry::message("user", "msg two"))
+  tf.append(TapeEntry::anchor("handoff/1"))
+  tf.append(TapeEntry::message("user", "msg three"))
+  tf.append(TapeEntry::message("assistant", "reply three"))
+  inspect(tf.read().length(), content="6")
+  // Compact with archive
+  let archived = tf.compact(archive_path~)
+  inspect(archived, content="3")
+  // Verify archive file has 3 entries
+  let archive_tf = TapeFile::new(archive_path)
+  let archive_entries = archive_tf.read()
+  inspect(archive_entries.length(), content="3")
+  inspect(archive_entries[0].kind, content="message")
+  // Verify current tape has 3 entries (anchor + 2)
+  let current = tf.read()
+  inspect(current.length(), content="3")
+  inspect(current[0].kind, content="anchor")
+  // Cleanup
+  @platform.rmdir(tmp, recursive=true) catch {
+    _ => ()
+  }
+}
+
+///|
+/// Test: search_all finds entries in archive files.
+async test "search_all includes archives" {
+  let tmp = "/tmp/cub_search_archive_\{@async.now()}"
+  @platform.mkdir(tmp, permission=0o755, recursive=true)
+  let store = FileTapeStore::new(tmp, "/test/ws_search_archive")
+  // Write entries with unique content
+  store.append("main", TapeEntry::message("user", "unique_archived_content"))
+  store.append("main", TapeEntry::message("assistant", "some reply"))
+  store.append("main", TapeEntry::anchor("handoff/1"))
+  store.append("main", TapeEntry::message("user", "after anchor msg"))
+  // Compact — archives first 2 entries
+  let removed = store.compact("main")
+  inspect(removed, content="2")
+  // Search for archived content — should find it in archive
+  let results = store.search_all("unique_archived_content")
+  inspect(results.length(), content="1")
+  inspect(results[0].0.contains("archived"), content="true")
+  // Search for current content — should find in active tape
+  let results2 = store.search_all("after anchor msg")
+  inspect(results2.length(), content="1")
+  inspect(results2[0].0.contains("archived"), content="false")
+  // Cleanup
+  @platform.rmdir(tmp, recursive=true) catch {
+    _ => ()
+  }
+}
