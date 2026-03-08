@@ -21,8 +21,43 @@ pub struct CommandExecutionResult {
 
 ///|
 /// Format as XML command block.
+/// Output is escaped to prevent prompt injection via tool results.
 pub fn CommandExecutionResult::block(self : CommandExecutionResult) -> String {
-  "<command name=\"\{self.name}\" status=\"\{self.status}\" elapsed_ms=\"\{self.elapsed_ms}\">\n\{self.output}\n</command>"
+  let safe_name = escape_xml_attr(self.name)
+  let safe_status = escape_xml_attr(self.status)
+  let safe_output = escape_xml_body(self.output)
+  "<command name=\"\{safe_name}\" status=\"\{safe_status}\" elapsed_ms=\"\{self.elapsed_ms}\">\n\{safe_output}\n</command>"
+}
+
+///|
+/// Escape a string for use in XML attribute values.
+fn escape_xml_attr(s : String) -> String {
+  let buf = StringBuilder::new()
+  for ch in s {
+    match ch {
+      '<' => buf.write_string("&lt;")
+      '>' => buf.write_string("&gt;")
+      '&' => buf.write_string("&amp;")
+      '"' => buf.write_string("&quot;")
+      _ => buf.write_char(ch)
+    }
+  }
+  buf.to_string()
+}
+
+///|
+/// Escape a string for use in XML body text.
+fn escape_xml_body(s : String) -> String {
+  let buf = StringBuilder::new()
+  for ch in s {
+    match ch {
+      '<' => buf.write_string("&lt;")
+      '>' => buf.write_string("&gt;")
+      '&' => buf.write_string("&amp;")
+      _ => buf.write_char(ch)
+    }
+  }
+  buf.to_string()
 }
 
 ///|
